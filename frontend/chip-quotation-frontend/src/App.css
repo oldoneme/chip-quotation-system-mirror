@@ -1,0 +1,420 @@
+/* 全局样式 */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f0f2f5;
+}
+
+/* 页面容器 */
+.quote-type-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  min-height: 100vh;
+  background-color: white;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+/* 页面标题区域 */
+.page-header {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 20px 0;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.main-title {
+  font-size: 2.5rem;
+  color: #1890ff;
+  margin-bottom: 10px;
+}
+
+.sub-title {
+  font-size: 1.2rem;
+  color: #888;
+}
+
+/* 报价类型卡片区域 */
+.quote-type-cards {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.quote-type-card {
+  flex: 1;
+  min-width: 300px;
+  max-width: 400px;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  text-align: center;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.quote-type-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.card-title {
+  font-size: 1.8rem;
+  margin-bottom: 20px;
+  color: #1890ff;
+}
+
+.text {
+  font-size: 1rem;
+  color: #555;
+  margin-bottom: 25px;
+  line-height: 1.6;
+}
+
+/* 按钮样式 */
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.nav-button {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.primary {
+  background-color: #1890ff;
+  color: white;
+}
+
+.primary:hover {
+  background-color: #40a9ff;
+}
+
+.secondary {
+  background-color: #fafafa;
+  color: #1890ff;
+  border: 1px solid #d9d9d9;
+}
+
+.secondary:hover {
+  background-color: #f0f0f0;
+  border-color: #40a9ff;
+}
+
+/* 卡片样式 */
+.card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* 表单样式 */
+.form-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.form-title {
+  text-align: center;
+  margin-bottom: 30px;
+  color: #1890ff;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* 步骤指示器 */
+.steps-container {
+  max-width: 1000px;
+  margin: 0 auto 30px;
+  padding: 0 20px;
+}
+
+/* 结果页面 */
+.result-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.result-title {
+  text-align: center;
+  color: #1890ff;
+  margin-bottom: 30px;
+}
+
+.result-item {
+  padding: 15px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.result-item:last-child {
+  border-bottom: none;
+}
+
+.result-label {
+  font-weight: 500;
+  color: #555;
+}
+
+.result-value {
+  font-size: 1.2rem;
+  color: #1890ff;
+  font-weight: bold;
+}
+
+.total-amount {
+  text-align: center;
+  font-size: 2rem;
+  color: #1890ff;
+  margin: 30px 0;
+  font-weight: bold;
+}
+
+/* 页脚 */
+.page-footer {
+  text-align: center;
+  padding: 20px;
+  border-top: 1px solid #e8e8e8;
+  color: #888;
+}
+
+.footer-text {
+  margin-bottom: 10px;
+}
+
+.footer-links a {
+  color: #1890ff;
+  text-decoration: none;
+  margin: 0 10px;
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .quote-type-cards {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .quote-type-card {
+    width: 90%;
+    max-width: none;
+  }
+  
+  .main-title {
+    font-size: 2rem;
+  }
+  
+  .sub-title {
+    font-size: 1rem;
+  }
+}
+
+/* 测试机配置数据管理页面样式 */
+.hierarchical-database-management {
+  padding: 20px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.hierarchical-database-management h1 {
+  color: #1890ff;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+/* Tab导航栏样式 */
+.ant-tabs-nav {
+  margin-bottom: 0 !important;
+}
+
+.ant-tabs-tab {
+  font-size: 1rem;
+  padding: 12px 24px !important;
+}
+
+.ant-tabs-tab-active {
+  font-weight: bold;
+}
+
+/* 供应商列表样式 */
+.supplier-list-item {
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.supplier-list-item:hover {
+  background-color: #f0f0f0;
+}
+
+.supplier-list-item.selected {
+  background-color: #e6f7ff;
+  border: 1px solid #1890ff;
+}
+
+/* 机器列表样式 */
+.machine-list-item {
+  cursor: pointer;
+  padding: 16px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  margin-bottom: 12px;
+  transition: all 0.2s;
+}
+
+.machine-list-item:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.machine-list-item.selected {
+  background-color: #e6f7ff;
+  border-color: #1890ff;
+}
+
+.machine-name {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #1890ff;
+}
+
+.machine-description {
+  color: #666;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.machine-rate {
+  font-weight: bold;
+  color: #52c41a;
+}
+
+/* 板卡配置表格样式 */
+.card-config-table {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.card-config-table th,
+.card-config-table td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.card-config-table th {
+  background-color: #fafafa;
+  font-weight: bold;
+}
+
+.unit-price {
+  font-weight: bold;
+  color: #1890ff;
+}
+
+/* 添加类型按钮样式 */
+.add-type-button {
+  background-color: #1890ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.add-type-button:hover {
+  background-color: #40a9ff;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .hierarchical-database-management .ant-row {
+    flex-direction: column;
+  }
+  
+  .hierarchical-database-management .ant-col {
+    width: 100%;
+    margin-bottom: 20px;
+  }
+}
+
+/* 技术参数等宽字体 */
+.tech-param {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* 深蓝色主色调 */
+.primary-blue {
+  color: #1890ff;
+}
+
+/* 浅灰色辅助色 */
+.light-gray {
+  color: #888;
+}
+
+/* 平滑过渡动画 */
+.smooth-transition {
+  transition: all 0.3s ease;
+}
+
+/* 操作按钮间距 */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* 下拉菜单操作项 */
+.ant-dropdown-menu-item {
+  padding: 5px 12px;
+}
+
+.ant-dropdown-menu-item-icon {
+  min-width: 12px;
+}

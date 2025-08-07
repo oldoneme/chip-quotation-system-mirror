@@ -1,0 +1,28 @@
+# Node.js dependencies
+node_modules/
+
+# Python bytecode
+*.pyc
+__pycache__/
+
+# Environment variables
+.env
+
+# IDE files
+.vscode/
+.idea/
+
+# OS generated files
+Thumbs.db
+.DS_Store
+
+# Build outputs
+frontend/chip-quotation-frontend/build/
+dist/
+
+# Log files
+*.log
+
+# SQLite database (if using in development)
+*.db
+*.sqlite
