@@ -46,22 +46,25 @@ try:
             machine = crud.create_machine(db, machine_data)
             created_machines.append(machine)
         
-        # Create sample configurations
+        # Create sample configurations for each machine
         configurations_data = [
             schemas.ConfigurationCreate(
                 name='Basic',
                 description='Standard configuration',
-                additional_rate=0.0
+                additional_rate=0.0,
+                machine_id=created_machines[0].id
             ),
             schemas.ConfigurationCreate(
                 name='Enhanced',
                 description='Enhanced configuration with additional features',
-                additional_rate=50.0
+                additional_rate=50.0,
+                machine_id=created_machines[0].id
             ),
             schemas.ConfigurationCreate(
                 name='Premium',
                 description='Premium configuration with all features',
-                additional_rate=100.0
+                additional_rate=100.0,
+                machine_id=created_machines[1].id
             )
         ]
         
@@ -70,51 +73,58 @@ try:
             config = crud.create_configuration(db, config_data)
             created_configurations.append(config)
         
-        # Create sample card types
-        card_types_data = [
-            schemas.CardTypeCreate(
-                name='Digital Card',
-                description='Digital signal testing card',
-                hourly_rate=20.0
+        # Create sample card configs
+        card_configs_data = [
+            schemas.CardConfigCreate(
+                part_number='DIG-001',
+                board_name='Digital Card',
+                unit_price=20.0,
+                machine_id=created_machines[0].id
             ),
-            schemas.CardTypeCreate(
-                name='Analog Card',
-                description='Analog signal testing card',
-                hourly_rate=30.0
+            schemas.CardConfigCreate(
+                part_number='ANA-001',
+                board_name='Analog Card',
+                unit_price=30.0,
+                machine_id=created_machines[1].id
             ),
-            schemas.CardTypeCreate(
-                name='RF Card',
-                description='Radio frequency testing card',
-                hourly_rate=50.0
+            schemas.CardConfigCreate(
+                part_number='RF-001',
+                board_name='RF Card',
+                unit_price=50.0,
+                machine_id=created_machines[2].id
             ),
-            schemas.CardTypeCreate(
-                name='Mixed Signal Card',
-                description='Mixed signal testing card',
-                hourly_rate=40.0
+            schemas.CardConfigCreate(
+                part_number='MIX-001',
+                board_name='Mixed Signal Card',
+                unit_price=40.0,
+                machine_id=created_machines[0].id
             )
         ]
         
-        created_card_types = []
-        for card_data in card_types_data:
-            card_type = crud.create_card_type(db, card_data)
-            created_card_types.append(card_type)
+        created_card_configs = []
+        for card_data in card_configs_data:
+            card_config = crud.create_card_config(db, card_data)
+            created_card_configs.append(card_config)
         
         # Create sample auxiliary equipment
         equipment_data = [
             schemas.AuxiliaryEquipmentCreate(
                 name='Temperature Chamber',
                 description='Environmental temperature testing chamber',
-                hourly_rate=30.0
+                hourly_rate=30.0,
+                type='chamber'
             ),
             schemas.AuxiliaryEquipmentCreate(
                 name='Handler',
                 description='Device handling equipment',
-                hourly_rate=25.0
+                hourly_rate=25.0,
+                type='handler'
             ),
             schemas.AuxiliaryEquipmentCreate(
                 name='Prober',
                 description='Wafer probing equipment',
-                hourly_rate=40.0
+                hourly_rate=40.0,
+                type='prober'
             )
         ]
         
@@ -123,29 +133,8 @@ try:
             equipment = crud.create_auxiliary_equipment(db, equip_data)
             created_equipment.append(equipment)
         
-        # Create sample personnel
-        personnel_data = [
-            schemas.PersonnelCreate(
-                name='Test Engineer',
-                role='Engineer',
-                hourly_rate=80.0
-            ),
-            schemas.PersonnelCreate(
-                name='Senior Test Engineer',
-                role='Senior Engineer',
-                hourly_rate=120.0
-            ),
-            schemas.PersonnelCreate(
-                name='Test Technician',
-                role='Technician',
-                hourly_rate=50.0
-            )
-        ]
-        
-        created_personnel = []
-        for person_data in personnel_data:
-            personnel = crud.create_personnel(db, person_data)
-            created_personnel.append(personnel)
+        # Personnel model has been removed - using standard values instead
+        print("Personnel data will be handled using standard values in quotation logic")
         
         db.close()
         print('Database initialized with sample data.')
