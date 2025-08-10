@@ -1,14 +1,14 @@
 import api from './api';
 
-// 获取所有板卡类型列表
+// 获取所有板卡配置列表
 export const getCardTypes = async () => {
   try {
-    console.log('Fetching card types from API...');
-    const response = await api.get('/card-types/');
-    console.log('Card types fetched successfully:', response.data);
+    console.log('Fetching card configs from API...');
+    const response = await api.get('/card-configs/');
+    console.log('Card configs fetched successfully:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error fetching card types:', error);
+    console.error('Error fetching card configs:', error);
     // 提供更具体的错误信息
     if (error.response) {
       console.error('Response data:', error.response.data);
@@ -22,46 +22,46 @@ export const getCardTypes = async () => {
   }
 };
 
-// 根据ID获取特定板卡类型
+// 根据ID获取特定板卡配置
 export const getCardTypeById = async (id) => {
   try {
-    const response = await api.get(`/card-types/${id}`);
+    const response = await api.get(`/card-configs/${id}`);
     return response.data;
   } catch (error) {
-    console.error(`Error fetching card type with id ${id}:`, error);
+    console.error(`Error fetching card config with id ${id}:`, error);
     throw error;
   }
 };
 
-// 创建新板卡类型
+// 创建新板卡配置
 export const createCardType = async (cardTypeData) => {
   try {
-    const response = await api.post('/card-types/', cardTypeData);
+    const response = await api.post('/card-configs/', cardTypeData);
     return response.data;
   } catch (error) {
-    console.error('Error creating card type:', error);
+    console.error('Error creating card config:', error);
     throw error;
   }
 };
 
-// 更新板卡类型信息
+// 更新板卡配置信息
 export const updateCardType = async (id, cardTypeData) => {
   try {
-    const response = await api.put(`/card-types/${id}`, cardTypeData);
+    const response = await api.put(`/card-configs/${id}`, cardTypeData);
     return response.data;
   } catch (error) {
-    console.error(`Error updating card type with id ${id}:`, error);
+    console.error(`Error updating card config with id ${id}:`, error);
     throw error;
   }
 };
 
-// 删除板卡类型
+// 删除板卡配置
 export const deleteCardType = async (id) => {
   try {
-    const response = await api.delete(`/card-types/${id}`);
+    const response = await api.delete(`/card-configs/${id}`);
     return response.data;
   } catch (error) {
-    console.error(`Error deleting card type with id ${id}:`, error);
+    console.error(`Error deleting card config with id ${id}:`, error);
     throw error;
   }
 };

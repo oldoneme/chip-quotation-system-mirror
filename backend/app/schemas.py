@@ -1,11 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import List, Optional
 
 # Forward declarations to resolve circular references
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from . import Machine
-    from . import Personnel
 
 # Machine Type schemas
 class MachineTypeBase(BaseModel):
@@ -53,6 +52,30 @@ class MachineBase(BaseModel):
     exchange_rate: Optional[float] = 1.0
     currency: Optional[str] = "RMB"  # 币种: RMB 或 USD
     supplier_id: Optional[int] = None
+
+    @validator('discount_rate')
+    def validate_discount_rate(cls, v):
+        if v is not None and (v <= 0 or v > 2.0):
+            raise ValueError('Discount rate must be between 0 and 2.0')
+        return v
+    
+    @validator('exchange_rate')
+    def validate_exchange_rate(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('Exchange rate must be positive')
+        return v
+    
+    @validator('currency')
+    def validate_currency(cls, v):
+        if v not in ["RMB", "USD"]:
+            raise ValueError('Currency must be either RMB or USD')
+        return v
+    
+    @validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Machine name cannot be empty')
+        return v.strip()
 
 class MachineCreate(MachineBase):
     pass
@@ -104,6 +127,24 @@ class CardConfigBase(BaseModel):
     currency: Optional[str] = "RMB"
     exchange_rate: Optional[float] = 1.0
     machine_id: int
+
+    @validator('unit_price')
+    def validate_unit_price(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('Unit price must be non-negative')
+        return v
+    
+    @validator('exchange_rate')
+    def validate_exchange_rate(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('Exchange rate must be positive')
+        return v
+    
+    @validator('currency')
+    def validate_currency(cls, v):
+        if v not in ["RMB", "USD"]:
+            raise ValueError('Currency must be either RMB or USD')
+        return v
 
 class CardConfigCreate(CardConfigBase):
     pass

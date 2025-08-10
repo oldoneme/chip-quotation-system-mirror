@@ -3,12 +3,12 @@ import api from './api';
 // 获取所有板卡列表
 export const getCards = async () => {
   try {
-    console.log('Fetching cards from API...');
-    const response = await api.get('/cards/');
-    console.log('Cards fetched successfully:', response.data);
+    console.log('Fetching card configs from API...');
+    const response = await api.get('/card-configs/');
+    console.log('Card configs fetched successfully:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error fetching cards:', error);
+    console.error('Error fetching card configs:', error);
     // 提供更具体的错误信息
     if (error.response) {
       console.error('Response data:', error.response.data);
@@ -22,46 +22,46 @@ export const getCards = async () => {
   }
 };
 
-// 根据ID获取特定板卡
+// 根据ID获取特定板卡配置
 export const getCardById = async (id) => {
   try {
-    const response = await api.get(`/cards/${id}`);
+    const response = await api.get(`/card-configs/${id}`);
     return response.data;
   } catch (error) {
-    console.error(`Error fetching card with id ${id}:`, error);
+    console.error(`Error fetching card config with id ${id}:`, error);
     throw error;
   }
 };
 
-// 创建新板卡
+// 创建新板卡配置
 export const createCard = async (cardData) => {
   try {
-    const response = await api.post('/cards/', cardData);
+    const response = await api.post('/card-configs/', cardData);
     return response.data;
   } catch (error) {
-    console.error('Error creating card:', error);
+    console.error('Error creating card config:', error);
     throw error;
   }
 };
 
-// 更新板卡信息
+// 更新板卡配置信息
 export const updateCard = async (id, cardData) => {
   try {
-    const response = await api.put(`/cards/${id}`, cardData);
+    const response = await api.put(`/card-configs/${id}`, cardData);
     return response.data;
   } catch (error) {
-    console.error(`Error updating card with id ${id}:`, error);
+    console.error(`Error updating card config with id ${id}:`, error);
     throw error;
   }
 };
 
-// 删除板卡
+// 删除板卡配置
 export const deleteCard = async (id) => {
   try {
-    const response = await api.delete(`/cards/${id}`);
+    const response = await api.delete(`/card-configs/${id}`);
     return response.data;
   } catch (error) {
-    console.error(`Error deleting card with id ${id}:`, error);
+    console.error(`Error deleting card config with id ${id}:`, error);
     throw error;
   }
 };
