@@ -276,7 +276,7 @@ const EngineeringQuote = () => {
     if (!testMachine || testMachineCards.length === 0) return 0;
     
     return testMachineCards.reduce((total, card) => {
-      return total + (card.unit_price * testMachine.exchange_rate * testMachine.discount_rate * (card.quantity || 1));
+      return total + ((card.unit_price / 10000) * testMachine.exchange_rate * testMachine.discount_rate * (card.quantity || 1));
     }, 0);
   };
   
@@ -285,7 +285,7 @@ const EngineeringQuote = () => {
     if (!handler || handlerCards.length === 0) return 0;
     
     return handlerCards.reduce((total, card) => {
-      return total + (card.unit_price * handler.exchange_rate * handler.discount_rate * (card.quantity || 1));
+      return total + ((card.unit_price / 10000) * handler.exchange_rate * handler.discount_rate * (card.quantity || 1));
     }, 0);
   };
   
@@ -294,7 +294,7 @@ const EngineeringQuote = () => {
     if (!prober || proberCards.length === 0) return 0;
     
     return proberCards.reduce((total, card) => {
-      return total + (card.unit_price * prober.exchange_rate * prober.discount_rate * (card.quantity || 1));
+      return total + ((card.unit_price / 10000) * prober.exchange_rate * prober.discount_rate * (card.quantity || 1));
     }, 0);
   };
   
@@ -313,7 +313,7 @@ const EngineeringQuote = () => {
         // 查找该机器的板卡
         const machineCards = cardTypes.filter(card => card.machine_id === device.id);
         return total + machineCards.reduce((sum, card) => {
-          return sum + (card.unit_price * device.exchange_rate * device.discount_rate * (card.quantity || 1));
+          return sum + ((card.unit_price / 10000) * device.exchange_rate * device.discount_rate * (card.quantity || 1));
         }, 0);
       } else {
         // 如果是原来的辅助设备类型，使用小时费率

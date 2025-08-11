@@ -59,7 +59,7 @@ const QuoteResult = () => {
     const cards = quoteData[`${equipmentType}Cards`];
     
     const baseCost = cards.reduce((total, card) => {
-      return total + (card.unit_price * equipment.exchange_rate * equipment.discount_rate * (card.quantity || 1));
+      return total + ((card.unit_price / 10000) * equipment.exchange_rate * equipment.discount_rate * (card.quantity || 1));
     }, 0);
     
     return baseCost * (quoteData.engineeringRate || 1.2);
@@ -102,7 +102,7 @@ const QuoteResult = () => {
         // 查找该机器的板卡
         const machineCards = quoteData.cardTypes.filter(card => card.machine_id === device.id);
         return total + machineCards.reduce((sum, card) => {
-          return sum + (card.unit_price * device.exchange_rate * device.discount_rate * (card.quantity || 1));
+          return sum + ((card.unit_price / 10000) * device.exchange_rate * device.discount_rate * (card.quantity || 1));
         }, 0);
       } else {
         // 如果是原来的辅助设备类型，使用小时费率
@@ -120,7 +120,7 @@ const QuoteResult = () => {
       // 查找该机器的板卡
       const machineCards = quoteData.cardTypes.filter(card => card.machine_id === device.id);
       return machineCards.reduce((sum, card) => {
-        return sum + (card.unit_price * device.exchange_rate * device.discount_rate * (card.quantity || 1));
+        return sum + ((card.unit_price / 10000) * device.exchange_rate * device.discount_rate * (card.quantity || 1));
       }, 0);
     } else {
       // 如果是原来的辅助设备类型，使用小时费率

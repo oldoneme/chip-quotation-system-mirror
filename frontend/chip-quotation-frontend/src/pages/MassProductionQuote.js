@@ -400,28 +400,28 @@ const MassProductionQuote = () => {
       // 计算测试机板卡费用
       if (data.testMachine && data.testMachineCards.length > 0) {
         total += data.testMachineCards.reduce((sum, card) => {
-          return sum + (card.unit_price * data.testMachine.exchange_rate * data.testMachine.discount_rate * card.quantity);
+          return sum + ((card.unit_price / 10000) * data.testMachine.exchange_rate * data.testMachine.discount_rate * card.quantity);
         }, 0);
       }
       
       // 计算分选机板卡费用
       if (data.handler && data.handlerCards.length > 0) {
         total += data.handlerCards.reduce((sum, card) => {
-          return sum + (card.unit_price * data.handler.exchange_rate * data.handler.discount_rate * card.quantity);
+          return sum + ((card.unit_price / 10000) * data.handler.exchange_rate * data.handler.discount_rate * card.quantity);
         }, 0);
       }
     } else if (type === 'cp') {
       // 计算测试机板卡费用
       if (data.testMachine && data.testMachineCards.length > 0) {
         total += data.testMachineCards.reduce((sum, card) => {
-          return sum + (card.unit_price * data.testMachine.exchange_rate * data.testMachine.discount_rate * card.quantity);
+          return sum + ((card.unit_price / 10000) * data.testMachine.exchange_rate * data.testMachine.discount_rate * card.quantity);
         }, 0);
       }
       
       // 计算探针台板卡费用
       if (data.prober && data.proberCards.length > 0) {
         total += data.proberCards.reduce((sum, card) => {
-          return sum + (card.unit_price * data.prober.exchange_rate * data.prober.discount_rate * card.quantity);
+          return sum + ((card.unit_price / 10000) * data.prober.exchange_rate * data.prober.discount_rate * card.quantity);
         }, 0);
       }
     }
