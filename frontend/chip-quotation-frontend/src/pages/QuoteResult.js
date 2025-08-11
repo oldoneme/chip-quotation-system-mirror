@@ -98,11 +98,14 @@ const QuoteResult = () => {
     
     return quoteData.selectedAuxDevices.reduce((total, device) => {
       // 如果是机器类型的辅助设备，计算板卡费用
-      if (device.machine_type) {
+      if (device.supplier || device.machine_type) {
         // 查找该机器的板卡
         const machineCards = quoteData.cardTypes.filter(card => card.machine_id === device.id);
+        console.log(`报价结果-计算设备 ${device.name} 的费用，板卡数量: ${machineCards.length}`, machineCards);
         return total + machineCards.reduce((sum, card) => {
-          return sum + ((card.unit_price / 10000) * device.exchange_rate * device.discount_rate * (card.quantity || 1));
+          const cardCost = ((card.unit_price / 10000) * device.exchange_rate * device.discount_rate * (card.quantity || 1));
+          console.log(`板卡 ${card.board_name} 费用: ${cardCost}`);
+          return sum + cardCost;
         }, 0);
       } else {
         // 如果是原来的辅助设备类型，使用小时费率
@@ -116,7 +119,7 @@ const QuoteResult = () => {
     if (!quoteData || !quoteData.cardTypes) return 0;
     
     // 如果是机器类型的辅助设备，计算板卡费用
-    if (device.machine_type) {
+    if (device.supplier || device.machine_type) {
       // 查找该机器的板卡
       const machineCards = quoteData.cardTypes.filter(card => card.machine_id === device.id);
       return machineCards.reduce((sum, card) => {
@@ -212,7 +215,7 @@ const QuoteResult = () => {
                     {quoteData.selectedAuxDevices.map((device, index) => (
                       <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, paddingLeft: 20 }}>
                         <span>{device.name}</span>
-                        <span>¥{formatNumber(device.hourly_rate || 0)}/小时</span>
+                        <span>¥{formatNumber(calculateSingleAuxDeviceCost(device))}/小时</span>
                       </div>
                     ))}
                   </div>

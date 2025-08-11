@@ -92,27 +92,37 @@ const MassProductionQuote = () => {
         fetchData();
       }
     } else {
-      // 检查是否有保存的状态
-      const savedState = sessionStorage.getItem('massProductionQuoteState');
-      if (savedState) {
-        const parsedState = JSON.parse(savedState);
-        // 恢复状态
-        setCurrentStep(parsedState.currentStep || 0);
-        setSelectedTypes(parsedState.selectedTypes || ['ft', 'cp']);
-        setFtData(parsedState.ftData || { 
-          testMachine: null, 
-          handler: null, 
-          testMachineCards: [], 
-          handlerCards: [] 
-        });
-        setCpData(parsedState.cpData || { 
-          testMachine: null, 
-          prober: null, 
-          testMachineCards: [], 
-          proberCards: [] 
-        });
-        setSelectedAuxDevices(parsedState.selectedAuxDevices || []);
-        setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
+      // 检查是否从结果页或其他页面返回
+      const isFromResultPage = location.state?.fromResultPage;
+      
+      if (isFromResultPage) {
+        // 只有从结果页返回时才恢复状态
+        const savedState = sessionStorage.getItem('massProductionQuoteState');
+        if (savedState) {
+          const parsedState = JSON.parse(savedState);
+          // 恢复状态
+          setCurrentStep(parsedState.currentStep || 0);
+          setSelectedTypes(parsedState.selectedTypes || ['ft', 'cp']);
+          setFtData(parsedState.ftData || { 
+            testMachine: null, 
+            handler: null, 
+            testMachineCards: [], 
+            handlerCards: [] 
+          });
+          setCpData(parsedState.cpData || { 
+            testMachine: null, 
+            prober: null, 
+            testMachineCards: [], 
+            proberCards: [] 
+          });
+          setSelectedAuxDevices(parsedState.selectedAuxDevices || []);
+          setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
+          console.log('从 sessionStorage 恢复状态:', parsedState);
+        }
+      } else {
+        // 正常进入页面时清空所有状态，开始全新流程
+        sessionStorage.removeItem('massProductionQuoteState');
+        console.log('开始全新报价流程，已清空之前的状态');
       }
       
       // 正常初始化
@@ -135,7 +145,8 @@ const MassProductionQuote = () => {
       setCardTypes(cardTypesResponse);
       setAuxDevices({
         handlers: auxDevicesResponse.filter(device => device.type === 'handler'),
-        probers: auxDevicesResponse.filter(device => device.type === 'prober')
+        probers: auxDevicesResponse.filter(device => device.type === 'prober'),
+        others: auxDevicesResponse.filter(device => !device.type || (device.type !== 'handler' && device.type !== 'prober'))
       });
       
       // 从机器中筛选出不同类型的机器
@@ -201,25 +212,30 @@ const MassProductionQuote = () => {
         setMachines(testMachines);      // 测试机
         setHandlers(handlerMachines);   // 分选机
         setProbers(proberMachines);     // 探针台
+        
+        // 筛选辅助设备（机器类型不属于测试机、分选机、探针台的机器）
+        const auxMachines = machinesResponse.filter(machine => {
+          const machineTypeName = getMachineTypeName(machine);
+          const isAuxMachine = machineTypeName !== '测试机' && 
+                              machineTypeName !== '分选机' && 
+                              machineTypeName !== '探针台';
+          console.log(`机器 ${machine.name} (ID: ${machine.id}) 类型: "${machineTypeName}", 是否为辅助设备: ${isAuxMachine}`);
+          return isAuxMachine;
+        });
+        
+        console.log('筛选出的机器类型辅助设备:', auxMachines.map(m => `${m.name} (类型: ${getMachineTypeName(m)})`));
+        
+        // 更新辅助设备，包含机器类型的辅助设备
+        setAuxDevices(prevState => {
+          const newOthers = [...prevState.others, ...auxMachines];
+          console.log('更新后的others辅助设备:', newOthers.map(d => d.name));
+          return {
+            ...prevState,
+            others: newOthers
+          };
+        });
       }
       
-      // 辅助设备应该是除了测试机、分选机、探针台之外的其他机器类型
-      const auxMachines = machinesResponse.filter(machine => {
-        const machineTypeName = getMachineTypeName(machine);
-        const isAuxMachine = machineTypeName !== '测试机' && 
-                            machineTypeName !== '分选机' && 
-                            machineTypeName !== '探针台';
-        return isAuxMachine;
-      });
-      
-      setAuxDevices({
-        handlers: auxMachines.filter(machine => getMachineTypeName(machine) === '分选机'),
-        probers: auxMachines.filter(machine => getMachineTypeName(machine) === '探针台'),
-        others: auxMachines.filter(machine => {
-          const machineTypeName = getMachineTypeName(machine);
-          return machineTypeName !== '分选机' && machineTypeName !== '探针台';
-        })
-      });
       
       console.log('数据加载完成');
     } catch (error) {
@@ -435,7 +451,19 @@ const MassProductionQuote = () => {
   // 计算辅助设备费用
   const calculateAuxDeviceFee = () => {
     return selectedAuxDevices.reduce((total, device) => {
-      return total + (device.hourly_rate || 0);
+      // 如果是机器类型的辅助设备（有supplier信息），计算板卡费用
+      if (device.supplier || device.machine_type) {
+        const machineCards = cardTypes.filter(card => card.machine_id === device.id);
+        console.log(`量产报价-计算设备 ${device.name} 的总费用，板卡数量: ${machineCards.length}`, machineCards);
+        return total + machineCards.reduce((sum, card) => {
+          const cardFee = ((card.unit_price / 10000) * (device.exchange_rate || 1) * (device.discount_rate || 1));
+          console.log(`板卡 ${card.board_name} 费用: ${cardFee}`);
+          return sum + cardFee;
+        }, 0);
+      } else {
+        // 如果是原来的辅助设备类型，使用小时费率
+        return total + (device.hourly_rate || 0);
+      }
     }, 0);
   };
   
@@ -545,14 +573,32 @@ const MassProductionQuote = () => {
     }
   ];
   
+  // 计算单个辅助设备的小时费率
+  const calculateAuxDeviceHourlyRate = (device) => {
+    if (device.supplier || device.machine_type) {
+      // 如果是机器类型的辅助设备，计算板卡费用
+      const machineCards = cardTypes.filter(card => card.machine_id === device.id);
+      const totalRate = machineCards.reduce((sum, card) => {
+        const cardRate = ((card.unit_price / 10000) * (device.exchange_rate || 1) * (device.discount_rate || 1));
+        return sum + cardRate;
+      }, 0);
+      return totalRate;
+    } else {
+      // 如果是原来的辅助设备类型，使用小时费率
+      return device.hourly_rate || 0;
+    }
+  };
+
   // 辅助设备表格列定义
   const auxDeviceColumns = [
     { title: '设备名称', dataIndex: 'name' },
     { title: '描述', dataIndex: 'description' },
     { 
-      title: '小时费率', 
-      dataIndex: 'hourly_rate',
-      render: (value) => `¥${formatNumber(value || 0)}/小时`
+      title: '小时费率',
+      render: (_, record) => {
+        const rate = calculateAuxDeviceHourlyRate(record);
+        return `¥${formatNumber(rate)}/小时`;
+      }
     }
   ];
 
@@ -843,7 +889,7 @@ const MassProductionQuote = () => {
                   {selectedAuxDevices.map((device, index) => (
                     <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, paddingLeft: 20 }}>
                       <span>{device.name}</span>
-                      <span>¥{formatNumber(device.hourly_rate || 0)}/小时</span>
+                      <span>¥{formatNumber(calculateAuxDeviceHourlyRate(device))}/小时</span>
                     </div>
                   ))}
                 </div>

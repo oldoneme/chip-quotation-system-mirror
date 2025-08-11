@@ -30,8 +30,17 @@ def update_machine_type(db: Session, machine_type_id: int, machine_type: schemas
     return db_machine_type
 
 def delete_machine_type(db: Session, machine_type_id: int):
+    """级联删除机器类型及其所有关联数据"""
     db_machine_type = db.query(models.MachineType).filter(models.MachineType.id == machine_type_id).first()
     if db_machine_type:
+        # 1. 获取该机器类型下的所有供应商
+        suppliers = db.query(models.Supplier).filter(models.Supplier.machine_type_id == machine_type_id).all()
+        
+        for supplier in suppliers:
+            # 2. 对每个供应商执行级联删除
+            delete_supplier(db, supplier.id)
+        
+        # 3. 删除机器类型本身
         db.delete(db_machine_type)
         db.commit()
     return db_machine_type
@@ -64,8 +73,17 @@ def update_supplier(db: Session, supplier_id: int, supplier: schemas.SupplierUpd
     return db_supplier
 
 def delete_supplier(db: Session, supplier_id: int):
+    """级联删除供应商及其所有关联数据"""
     db_supplier = db.query(models.Supplier).filter(models.Supplier.id == supplier_id).first()
     if db_supplier:
+        # 1. 获取该供应商下的所有机器
+        machines = db.query(models.Machine).filter(models.Machine.supplier_id == supplier_id).all()
+        
+        for machine in machines:
+            # 2. 对每台机器执行级联删除
+            delete_machine(db, machine.id)
+        
+        # 3. 删除供应商本身
         db.delete(db_supplier)
         db.commit()
     return db_supplier
@@ -95,10 +113,16 @@ def update_machine(db: Session, machine_id: int, machine: schemas.MachineUpdate)
     return db_machine
 
 def delete_machine(db: Session, machine_id: int):
+    """级联删除机器及其所有关联数据"""
     db_machine = db.query(models.Machine).filter(models.Machine.id == machine_id).first()
     if db_machine:
-        # 在删除前获取相关信息，避免懒加载错误
+        # 1. 删除该机器下的所有板卡配置
+        db.query(models.CardConfig).filter(models.CardConfig.machine_id == machine_id).delete()
+        
+        # 2. 在删除前获取相关信息，避免懒加载错误
         machine_data = schemas.Machine.from_orm(db_machine)
+        
+        # 3. 删除机器本身
         db.delete(db_machine)
         db.commit()
         return machine_data

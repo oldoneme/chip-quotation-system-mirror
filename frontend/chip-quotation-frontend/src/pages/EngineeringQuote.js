@@ -162,23 +162,33 @@ const EngineeringQuote = () => {
       }
     };
 
-    // 检查是否从结果页返回
-    const storedQuoteData = sessionStorage.getItem('quoteData');
-    if (storedQuoteData) {
-      const parsedData = JSON.parse(storedQuoteData);
-      // 恢复状态
-      setTestMachine(parsedData.testMachine);
-      setHandler(parsedData.handler);
-      setProber(parsedData.prober);
-      setTestMachineCards(parsedData.testMachineCards || []);
-      setHandlerCards(parsedData.handlerCards || []);
-      setProberCards(parsedData.proberCards || []);
-      setSelectedPersonnel(parsedData.selectedPersonnel || []);
-      setSelectedAuxDevices(parsedData.selectedAuxDevices || []);
-      setEngineeringRate(parsedData.engineeringRate || 1.2);
-      setPersistedCardQuantities(parsedData.persistedCardQuantities || {});
-      // 设置当前步骤
-      setCurrentStep(parsedData.currentStep || 0);
+    // 检查是否从结果页或其他页面返回
+    const isFromResultPage = location.state?.fromResultPage;
+    
+    if (isFromResultPage) {
+      // 只有从结果页返回时才恢复状态
+      const storedQuoteData = sessionStorage.getItem('quoteData');
+      if (storedQuoteData) {
+        const parsedData = JSON.parse(storedQuoteData);
+        // 恢复状态
+        setTestMachine(parsedData.testMachine);
+        setHandler(parsedData.handler);
+        setProber(parsedData.prober);
+        setTestMachineCards(parsedData.testMachineCards || []);
+        setHandlerCards(parsedData.handlerCards || []);
+        setProberCards(parsedData.proberCards || []);
+        setSelectedPersonnel(parsedData.selectedPersonnel || []);
+        setSelectedAuxDevices(parsedData.selectedAuxDevices || []);
+        setEngineeringRate(parsedData.engineeringRate || 1.2);
+        setPersistedCardQuantities(parsedData.persistedCardQuantities || {});
+        // 设置当前步骤
+        setCurrentStep(parsedData.currentStep || 0);
+        console.log('从 sessionStorage 恢复状态:', parsedData);
+      }
+    } else {
+      // 正常进入页面时清空所有状态，开始全新流程
+      sessionStorage.removeItem('quoteData');
+      console.log('开始全新报价流程，已清空之前的状态');
     }
 
     fetchData();
@@ -308,12 +318,15 @@ const EngineeringQuote = () => {
   // 计算辅助设备费用
   const calculateAuxDeviceFee = () => {
     return selectedAuxDevices.reduce((total, device) => {
-      // 如果是机器类型的辅助设备，计算板卡费用
-      if (device.machine_type) {
+      // 如果是机器类型的辅助设备（有supplier信息），计算板卡费用
+      if (device.supplier || device.machine_type) {
         // 查找该机器的板卡
         const machineCards = cardTypes.filter(card => card.machine_id === device.id);
+        console.log(`计算设备 ${device.name} 的费用，板卡数量: ${machineCards.length}`, machineCards);
         return total + machineCards.reduce((sum, card) => {
-          return sum + ((card.unit_price / 10000) * device.exchange_rate * device.discount_rate * (card.quantity || 1));
+          const cardFee = ((card.unit_price / 10000) * device.exchange_rate * device.discount_rate * (card.quantity || 1));
+          console.log(`板卡 ${card.board_name} 费用: ${cardFee}`);
+          return sum + cardFee;
         }, 0);
       } else {
         // 如果是原来的辅助设备类型，使用小时费率
@@ -424,6 +437,21 @@ const EngineeringQuote = () => {
     }
   ];
   
+  // 计算单个辅助设备的小时费率
+  const calculateAuxDeviceHourlyRate = (device) => {
+    if (device.machine_type || device.supplier) {
+      // 如果是机器类型的辅助设备，计算板卡费用
+      const machineCards = cardTypes.filter(card => card.machine_id === device.id);
+      const totalRate = machineCards.reduce((sum, card) => {
+        return sum + ((card.unit_price / 10000) * device.exchange_rate * device.discount_rate);
+      }, 0);
+      return totalRate;
+    } else {
+      // 如果是原来的辅助设备类型，使用小时费率
+      return device.hourly_rate || 0;
+    }
+  };
+
   // 辅助设备表格列定义
   const auxMachineColumns = [
     { title: '设备名称', dataIndex: 'name' },
@@ -446,8 +474,10 @@ const EngineeringQuote = () => {
     },
     {
       title: '小时费率',
-      dataIndex: 'hourly_rate',
-      render: (value) => value ? `¥${formatNumber(value)}/小时` : 'N/A'
+      render: (_, record) => {
+        const rate = calculateAuxDeviceHourlyRate(record);
+        return rate > 0 ? `¥${formatNumber(rate)}/小时` : 'N/A';
+      }
     }
   ];
 
