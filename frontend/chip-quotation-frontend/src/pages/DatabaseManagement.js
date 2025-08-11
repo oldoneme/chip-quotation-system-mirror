@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Form, Input, InputNumber, Button, Modal, Popconfirm, message, Card, Tabs, Tree } from 'antd';
+import { Table, Form, Input, InputNumber, Button, Modal, message, Card, Tabs, Tree } from 'antd';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { EmptyState, LoadingSpinner } from '../components/CommonComponents';
 import { 
   getMachines, 
   createMachine, 
@@ -164,13 +166,28 @@ const DatabaseManagement = () => {
   };
 
   const handleDeleteMachine = async (id) => {
-    try {
-      await deleteMachine(id);
-      message.success('删除成功');
-      fetchData();
-    } catch (error) {
-      message.error('删除失败: ' + error.message);
-    }
+    console.log('handleDeleteMachine called with id:', id);
+    
+    ConfirmDialog.showDeleteConfirm({
+      title: '确认删除测试机',
+      content: '您确定要删除这台测试机吗？删除后将同时删除相关的配置和板卡数据，此操作不可恢复。',
+      onOk: async () => {
+        console.log('确认删除，开始执行删除操作...');
+        try {
+          console.log('调用 deleteMachine API...');
+          const result = await deleteMachine(id);
+          console.log('删除API响应:', result);
+          message.success('删除成功');
+          fetchData();
+        } catch (error) {
+          console.error('删除失败:', error);
+          message.error('删除失败: ' + error.message);
+        }
+      },
+      onCancel: () => {
+        console.log('用户取消删除操作');
+      }
+    });
   };
 
   const handleSaveMachine = async () => {
@@ -204,13 +221,19 @@ const DatabaseManagement = () => {
   };
 
   const handleDeleteConfig = async (id) => {
-    try {
-      await deleteConfiguration(id);
-      message.success('删除成功');
-      fetchData();
-    } catch (error) {
-      message.error('删除失败: ' + error.message);
-    }
+    ConfirmDialog.showDeleteConfirm({
+      title: '确认删除配置',
+      content: '您确定要删除这个配置吗？此操作不可恢复。',
+      onOk: async () => {
+        try {
+          await deleteConfiguration(id);
+          message.success('删除成功');
+          fetchData();
+        } catch (error) {
+          message.error('删除失败: ' + error.message);
+        }
+      }
+    });
   };
 
   const handleSaveConfig = async () => {
@@ -244,13 +267,19 @@ const DatabaseManagement = () => {
   };
 
   const handleDeleteCardType = async (id) => {
-    try {
-      await deleteCardType(id);
-      message.success('删除成功');
-      fetchData();
-    } catch (error) {
-      message.error('删除失败: ' + error.message);
-    }
+    ConfirmDialog.showDeleteConfirm({
+      title: '确认删除板卡类型',
+      content: '您确定要删除这个板卡类型吗？此操作不可恢复。',
+      onOk: async () => {
+        try {
+          await deleteCardType(id);
+          message.success('删除成功');
+          fetchData();
+        } catch (error) {
+          message.error('删除失败: ' + error.message);
+        }
+      }
+    });
   };
 
   const handleSaveCardType = async () => {
@@ -284,13 +313,19 @@ const DatabaseManagement = () => {
   };
 
   const handleDeleteCard = async (id) => {
-    try {
-      await deleteCard(id);
-      message.success('删除成功');
-      fetchData();
-    } catch (error) {
-      message.error('删除失败: ' + error.message);
-    }
+    ConfirmDialog.showDeleteConfirm({
+      title: '确认删除板卡',
+      content: '您确定要删除这个板卡吗？此操作不可恢复。',
+      onOk: async () => {
+        try {
+          await deleteCard(id);
+          message.success('删除成功');
+          fetchData();
+        } catch (error) {
+          message.error('删除失败: ' + error.message);
+        }
+      }
+    });
   };
 
   const handleSaveCard = async () => {
@@ -324,13 +359,19 @@ const DatabaseManagement = () => {
   };
 
   const handleDeleteAuxEquipment = async (id) => {
-    try {
-      await deleteAuxiliaryEquipment(id);
-      message.success('删除成功');
-      fetchData();
-    } catch (error) {
-      message.error('删除失败: ' + error.message);
-    }
+    ConfirmDialog.showDeleteConfirm({
+      title: '确认删除辅助设备',
+      content: '您确定要删除这个辅助设备吗？此操作不可恢复。',
+      onOk: async () => {
+        try {
+          await deleteAuxiliaryEquipment(id);
+          message.success('删除成功');
+          fetchData();
+        } catch (error) {
+          message.error('删除失败: ' + error.message);
+        }
+      }
+    });
   };
 
   const handleSaveAuxEquipment = async () => {
@@ -384,14 +425,7 @@ const DatabaseManagement = () => {
       render: (text, record) => (
         <span>
           <Button type="link" onClick={() => handleEditMachine(record)}>编辑</Button>
-          <Popconfirm
-            title="确定要删除这个机器吗?"
-            onConfirm={() => handleDeleteMachine(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger>删除</Button>
-          </Popconfirm>
+          <Button type="link" danger onClick={() => handleDeleteMachine(record.id)}>删除</Button>
         </span>
       ),
     },
@@ -431,14 +465,7 @@ const DatabaseManagement = () => {
       render: (text, record) => (
         <span>
           <Button type="link" onClick={() => handleEditConfig(record)}>编辑</Button>
-          <Popconfirm
-            title="确定要删除这个配置吗?"
-            onConfirm={() => handleDeleteConfig(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger>删除</Button>
-          </Popconfirm>
+          <Button type="link" danger onClick={() => handleDeleteConfig(record.id)}>删除</Button>
         </span>
       ),
     },
@@ -473,14 +500,7 @@ const DatabaseManagement = () => {
       render: (text, record) => (
         <span>
           <Button type="link" onClick={() => handleEditCardType(record)}>编辑</Button>
-          <Popconfirm
-            title="确定要删除这个卡类型吗?"
-            onConfirm={() => handleDeleteCardType(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger>删除</Button>
-          </Popconfirm>
+          <Button type="link" danger onClick={() => handleDeleteCardType(record.id)}>删除</Button>
         </span>
       ),
     },
@@ -515,14 +535,7 @@ const DatabaseManagement = () => {
       render: (text, record) => (
         <span>
           <Button type="link" onClick={() => handleEditCard(record)}>编辑</Button>
-          <Popconfirm
-            title="确定要删除这个板卡吗?"
-            onConfirm={() => handleDeleteCard(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger>删除</Button>
-          </Popconfirm>
+          <Button type="link" danger onClick={() => handleDeleteCard(record.id)}>删除</Button>
         </span>
       ),
     },
@@ -557,14 +570,7 @@ const DatabaseManagement = () => {
       render: (text, record) => (
         <span>
           <Button type="link" onClick={() => handleEditAuxEquipment(record)}>编辑</Button>
-          <Popconfirm
-            title="确定要删除这个辅助设备吗?"
-            onConfirm={() => handleDeleteAuxEquipment(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger>删除</Button>
-          </Popconfirm>
+          <Button type="link" danger onClick={() => handleDeleteAuxEquipment(record.id)}>删除</Button>
         </span>
       ),
     },
@@ -646,12 +652,18 @@ const DatabaseManagement = () => {
               添加辅助设备
             </Button>
           </div>
-          <Table 
-            dataSource={auxEquipments} 
-            columns={auxEquipmentColumns} 
-            rowKey="id"
-            pagination={{ pageSize: 10 }}
-          />
+          {auxEquipments.length > 0 ? (
+            <Table 
+              dataSource={auxEquipments} 
+              columns={auxEquipmentColumns} 
+              rowKey="id"
+              pagination={{ pageSize: 10 }}
+            />
+          ) : (
+            <EmptyState 
+              description="暂无辅助设备数据，点击上方按钮添加"
+            />
+          )}
         </TabPane>
       </Tabs>
       

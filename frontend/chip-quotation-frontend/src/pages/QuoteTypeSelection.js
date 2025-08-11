@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import '../App.css';
 
 const QuoteTypeSelection = () => {
@@ -37,12 +38,9 @@ const QuoteTypeSelection = () => {
           <p className="text">
             包含测试设备的小时费率报价，适用于研发阶段小批量测试
           </p>
-          <button 
-            className="btn nav-button primary" 
-            onClick={handleEngineeringQuote}
-          >
+          <PrimaryButton onClick={handleEngineeringQuote}>
             开始报价
-          </button>
+          </PrimaryButton>
         </div>
 
         {/* 量产报价卡片 */}
@@ -51,30 +49,23 @@ const QuoteTypeSelection = () => {
           <p className="text">
             仅包含测试设备的小时费率报价，适用于量产阶段大批量测试
           </p>
-          <button 
-            className="btn nav-button primary" 
-            onClick={handleMassProductionQuote}
-          >
+          <PrimaryButton onClick={handleMassProductionQuote}>
             开始报价
-          </button>
+          </PrimaryButton>
         </div>
       </div>
 
       {/* 管理功能按钮区域 */}
       <div style={{ textAlign: 'center', marginTop: '20px' }}>
-        <button 
-          className="btn nav-button secondary" 
+        <SecondaryButton 
           onClick={handleApiTest}
           style={{ marginRight: '10px' }}
         >
           API测试
-        </button>
-        <button 
-          className="btn nav-button secondary" 
-          onClick={handleDatabaseManagement}
-        >
+        </SecondaryButton>
+        <SecondaryButton onClick={handleDatabaseManagement}>
           数据库管理
-        </button>
+        </SecondaryButton>
       </div>
 
       {/* 页脚信息区域 */}

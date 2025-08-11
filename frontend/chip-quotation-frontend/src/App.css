@@ -251,6 +251,47 @@ body {
   .sub-title {
     font-size: 1rem;
   }
+  
+  /* 移动端导航优化 */
+  .ant-menu-horizontal {
+    display: none;
+  }
+  
+  /* 移动端表格优化 */
+  .ant-table {
+    font-size: 12px;
+  }
+  
+  .ant-table-thead > tr > th {
+    padding: 8px 4px;
+  }
+  
+  .ant-table-tbody > tr > td {
+    padding: 8px 4px;
+  }
+  
+  /* 移动端卡片优化 */
+  .ant-card-body {
+    padding: 16px;
+  }
+  
+  /* 移动端按钮优化 */
+  .ant-btn {
+    font-size: 12px;
+    height: 28px;
+    padding: 0 8px;
+  }
+}
+
+/* 平板设备响应式 */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .quote-type-container {
+    padding: 16px;
+  }
+  
+  .ant-table {
+    font-size: 13px;
+  }
 }
 
 /* 测试机配置数据管理页面样式 */

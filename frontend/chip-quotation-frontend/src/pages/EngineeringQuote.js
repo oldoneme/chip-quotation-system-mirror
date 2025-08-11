@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Select, Table, Tabs, Spin, Alert, InputNumber, Form, Button, Card, Checkbox, Divider } from 'antd';
+import StepIndicator from '../components/StepIndicator';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
 import {
   getMachines
 } from '../services/machines';
@@ -155,8 +158,19 @@ const EngineeringQuote = () => {
         const probers = auxEquipmentData.filter(item => item.name.includes('探针台') || item.name.includes('Prober'));
         setAuxDevices({ handlers, probers });
       } catch (err) {
-        setError('获取数据失败，请检查后端服务是否正常运行');
-        console.error('Error fetching data:', err);
+        console.error('详细错误信息:', err);
+        console.error('错误响应:', err.response);
+        console.error('错误请求:', err.request);
+        console.error('错误消息:', err.message);
+        
+        let errorMessage = '获取数据失败，请检查后端服务是否正常运行';
+        if (err.response) {
+          errorMessage = `服务器错误 (${err.response.status}): ${err.response.data?.detail || err.response.statusText}`;
+        } else if (err.request) {
+          errorMessage = '网络连接失败，无法连接到服务器。请检查：\n1. 后端服务是否运行在 http://localhost:8000\n2. 网络连接是否正常\n3. 防火墙设置是否允许连接';
+        }
+        
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -265,20 +279,24 @@ const EngineeringQuote = () => {
   };
 
   const resetQuote = () => {
-    setTestMachine(null);
-    setHandler(null);
-    setProber(null);
-    setTestMachineCards([]);
-    setHandlerCards([]);
-    setProberCards([]);
-    setSelectedPersonnel([]);
-    setSelectedAuxDevices([]);
-    setEngineeringRate(1.2);
-    setPersistedCardQuantities({});
-    setCurrentStep(0);
-    
-    // 清除sessionStorage中的状态
-    sessionStorage.removeItem('quoteData');
+    ConfirmDialog.showResetConfirm({
+      onOk: () => {
+        setTestMachine(null);
+        setHandler(null);
+        setProber(null);
+        setTestMachineCards([]);
+        setHandlerCards([]);
+        setProberCards([]);
+        setSelectedPersonnel([]);
+        setSelectedAuxDevices([]);
+        setEngineeringRate(1.2);
+        setPersistedCardQuantities({});
+        setCurrentStep(0);
+        
+        // 清除sessionStorage中的状态
+        sessionStorage.removeItem('quoteData');
+      }
+    });
   };
 
   // 计算测试机费用
@@ -524,18 +542,25 @@ const EngineeringQuote = () => {
         {testMachine && (
           <div style={{ marginBottom: 15 }}>
             <h4>选择测试机板卡</h4>
-            <Table 
-              dataSource={cardTypes.filter(card => card.machine_id === testMachine.id)}
-              rowKey="id"
-              rowSelection={{
-                type: 'checkbox',
-                onChange: (selectedRowKeys, selectedRows) => 
-                  handleCardSelection('testMachine', selectedRowKeys, selectedRows),
-                selectedRowKeys: testMachineCards.map(card => card.id)
-              }}
-              columns={cardColumns('testMachine')}
-              pagination={false}
-            />
+            {cardTypes.filter(card => card.machine_id === testMachine.id).length > 0 ? (
+              <Table 
+                dataSource={cardTypes.filter(card => card.machine_id === testMachine.id)}
+                rowKey="id"
+                rowSelection={{
+                  type: 'checkbox',
+                  onChange: (selectedRowKeys, selectedRows) => 
+                    handleCardSelection('testMachine', selectedRowKeys, selectedRows),
+                  selectedRowKeys: testMachineCards.map(card => card.id)
+                }}
+                columns={cardColumns('testMachine')}
+                pagination={false}
+              />
+            ) : (
+              <EmptyState 
+                description="该测试机暂无板卡配置"
+                imageStyle={{ height: 40 }}
+              />
+            )}
           </div>
         )}
 
@@ -672,18 +697,27 @@ const EngineeringQuote = () => {
       </Card>
       
       <Card title="辅助设备选择" style={{ marginBottom: 20 }}>
-        <Table 
-          dataSource={auxMachines}
-          rowKey="id"
-          rowSelection={{
-            type: 'checkbox',
-            onChange: handleAuxDeviceSelect,
-            selectedRowKeys: selectedAuxDevices.map(device => device.id)
-          }}
-          columns={auxMachineColumns}
-          pagination={false}
-        />
-        <p style={{ marginTop: 10 }}><strong>辅助设备机时费: ¥{formatNumber(calculateAuxDeviceFee())}</strong></p>
+        {auxMachines.length > 0 ? (
+          <>
+            <Table 
+              dataSource={auxMachines}
+              rowKey="id"
+              rowSelection={{
+                type: 'checkbox',
+                onChange: handleAuxDeviceSelect,
+                selectedRowKeys: selectedAuxDevices.map(device => device.id)
+              }}
+              columns={auxMachineColumns}
+              pagination={false}
+            />
+            <p style={{ marginTop: 10 }}><strong>辅助设备机时费: ¥{formatNumber(calculateAuxDeviceFee())}</strong></p>
+          </>
+        ) : (
+          <EmptyState 
+            description="暂无可选择的辅助设备"
+            imageStyle={{ height: 40 }}
+          />
+        )}
       </Card>
       
       <Card title="费用明细" style={{ marginBottom: 20 }}>
@@ -754,7 +788,7 @@ const EngineeringQuote = () => {
   );
 
   if (loading) {
-    return <Spin tip="加载数据中..." />;
+    return <LoadingSpinner tip="正在加载设备数据..." />;
   }
 
   if (error) {
@@ -773,35 +807,7 @@ const EngineeringQuote = () => {
       <h1>工程报价</h1>
       
       {/* 步骤指示器 */}
-      <div style={{ marginBottom: 20 }}>
-        <div>步骤 {currentStep + 1} of {steps.length}</div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          {steps.map((_, index) => (
-            <React.Fragment key={index}>
-              <div style={{ 
-                width: 20, 
-                height: 20, 
-                borderRadius: '50%', 
-                backgroundColor: currentStep >= index ? '#1890ff' : '#f0f0f0',
-                marginRight: 10
-              }}></div>
-              {index < steps.length - 1 && (
-                <div style={{ 
-                  width: 60, 
-                  height: 4, 
-                  backgroundColor: currentStep > index ? '#1890ff' : '#f0f0f0',
-                  marginRight: 10
-                }}></div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: steps.length * 80 }}>
-          {steps.map((step, index) => (
-            <span key={index}>{step}</span>
-          ))}
-        </div>
-      </div>
+      <StepIndicator currentStep={currentStep} steps={steps} />
 
       {/* 渲染当前步骤的内容 */}
       {currentStep === 0 && renderMachineSelection()}

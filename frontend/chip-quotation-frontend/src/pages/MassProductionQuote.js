@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Select, Table, Tabs, Spin, Alert, Checkbox, Button, Card, InputNumber, message, Divider } from 'antd';
+import StepIndicator from '../components/StepIndicator';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
 import {
   getMachines
 } from '../services/machines';
@@ -524,28 +527,35 @@ const MassProductionQuote = () => {
   };
   
   const resetQuote = () => {
-    setSelectedMachine(null);
-    setSelectedConfig(null);
-    setSelectedCards([]);
-    setSelectedAuxDevices([]);
-    setSelectedTypes(['ft', 'cp']);
-    setFtData({ 
-      testMachine: null, 
-      handler: null, 
-      testMachineCards: [], 
-      handlerCards: [] 
+    ConfirmDialog.showResetConfirm({
+      title: '确认重置报价',
+      content: '您确定要重置所有选择吗？这将清除您当前的所有配置和选择。',
+      onOk: () => {
+        setSelectedMachine(null);
+        setSelectedConfig(null);
+        setSelectedCards([]);
+        setSelectedAuxDevices([]);
+        setSelectedTypes(['ft', 'cp']);
+        setFtData({ 
+          testMachine: null, 
+          handler: null, 
+          testMachineCards: [], 
+          handlerCards: [] 
+        });
+        setCpData({ 
+          testMachine: null, 
+          prober: null, 
+          testMachineCards: [], 
+          proberCards: [] 
+        });
+        setPersistedCardQuantities({});
+        setCurrentStep(0);
+        
+        // 清除sessionStorage中的状态
+        sessionStorage.removeItem('massProductionQuoteState');
+        message.success('报价已重置');
+      }
     });
-    setCpData({ 
-      testMachine: null, 
-      prober: null, 
-      testMachineCards: [], 
-      proberCards: [] 
-    });
-    setPersistedCardQuantities({});
-    setCurrentStep(0);
-    
-    // 清除sessionStorage中的状态
-    sessionStorage.removeItem('massProductionQuoteState');
   };
   
   const handleAuxDeviceSelect = (selectedRowKeys, selectedRows) => {
@@ -604,7 +614,7 @@ const MassProductionQuote = () => {
 
 
   if (loading) {
-    return <Spin tip="加载数据中..." />;
+    return <LoadingSpinner tip="正在加载量产报价数据..." />;
   }
 
   if (error) {
@@ -628,127 +638,143 @@ const MassProductionQuote = () => {
       <h2>量产报价</h2>
       
       {/* 步骤指示器 */}
-      <div style={{ marginBottom: 20 }}>
-        <div>步骤 {currentStep + 1} of 2</div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ 
-            width: 20, 
-            height: 20, 
-            borderRadius: '50%', 
-            backgroundColor: currentStep >= 0 ? '#1890ff' : '#f0f0f0',
-            marginRight: 10
-          }}></div>
-          <div style={{ 
-            width: 60, 
-            height: 4, 
-            backgroundColor: currentStep >= 1 ? '#1890ff' : '#f0f0f0',
-            marginRight: 10
-          }}></div>
-          <div style={{ 
-            width: 20, 
-            height: 20, 
-            borderRadius: '50%', 
-            backgroundColor: currentStep >= 1 ? '#1890ff' : '#f0f0f0'
-          }}></div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: 120 }}>
-          <span>机器选择</span>
-          <span>辅助设备</span>
-        </div>
-      </div>
+      <StepIndicator 
+        currentStep={currentStep}
+        steps={[
+          '机器选择',
+          '辅助设备'
+        ]}
+      />
 
       {/* 第一步：机器选择 */}
       {currentStep === 0 && (
         <>
           {/* 选择FT或CP */}
-          <div style={{ marginBottom: 20 }}>
+          <Card title="测试类型选择" style={{ marginBottom: 20 }}>
             <Checkbox.Group value={selectedTypes} onChange={handleProductionTypeChange}>
-              <Checkbox value="ft">FT</Checkbox>
-              <Checkbox value="cp">CP</Checkbox>
+              <Checkbox value="ft" style={{ marginRight: 20 }}>FT (Final Test)</Checkbox>
+              <Checkbox value="cp">CP (Circuit Probe)</Checkbox>
             </Checkbox.Group>
-          </div>
+            <div style={{ marginTop: 10, color: '#666', fontSize: '12px' }}>
+              可同时选择多种测试类型进行综合报价
+            </div>
+          </Card>
 
           {selectedTypes.includes('ft') && (
             <Card title="FT Configuration" style={{ marginBottom: 20 }}>
               {/* 测试机选择 */}
               <div style={{ marginBottom: 15 }}>
                 <h4>选择测试机</h4>
-                <Select 
-                  style={{ width: '100%' }}
-                  placeholder="选择测试机" 
-                  onChange={(value) => handleTestMachineSelect('ft', value)}
-                  value={ftData.testMachine ? ftData.testMachine.id : undefined}
-                  showSearch
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                  }
-                >
-                  {machines.map(machine => (
-                    <Option key={machine.id} value={machine.id}>
-                      {machine.name} ({machine.currency}, 汇率: {machine.exchange_rate}, 折扣率: {machine.discount_rate})
-                    </Option>
-                  ))}
-                </Select>
+                {machines && machines.length > 0 ? (
+                  <Select 
+                    style={{ width: '100%' }}
+                    placeholder="选择测试机" 
+                    onChange={(value) => handleTestMachineSelect('ft', value)}
+                    value={ftData.testMachine ? ftData.testMachine.id : undefined}
+                    showSearch
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                      option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                    }
+                  >
+                    {machines.map(machine => (
+                      <Option key={machine.id} value={machine.id}>
+                        {machine.name} ({machine.currency}, 汇率: {machine.exchange_rate}, 折扣率: {machine.discount_rate})
+                      </Option>
+                    ))}
+                  </Select>
+                ) : (
+                  <EmptyState 
+                    description="暂无可用的测试机"
+                    action={<Button onClick={fetchData}>刷新数据</Button>}
+                  />
+                )}
               </div>
 
               {/* 测试机板卡选择 */}
               {ftData.testMachine && (
                 <div style={{ marginBottom: 15 }}>
                   <h4>选择测试机板卡</h4>
-                  <Table 
-                    dataSource={cardTypes.filter(card => card.machine_id === ftData.testMachine.id)}
-                    rowKey="id"
-                    rowSelection={{
-                      type: 'checkbox',
-                      onChange: (selectedRowKeys, selectedRows) => 
-                        handleCardSelection('ft', 'testMachine', selectedRowKeys, selectedRows),
-                      selectedRowKeys: (ftData.testMachineCards || []).map(card => card.id)
-                    }}
-                    columns={cardColumns('ft', 'testMachine')}
-                    pagination={false}
-                  />
+                  {(() => {
+                    const availableCards = cardTypes.filter(card => card.machine_id === ftData.testMachine.id);
+                    return availableCards.length > 0 ? (
+                      <Table 
+                        dataSource={availableCards}
+                        rowKey="id"
+                        rowSelection={{
+                          type: 'checkbox',
+                          onChange: (selectedRowKeys, selectedRows) => 
+                            handleCardSelection('ft', 'testMachine', selectedRowKeys, selectedRows),
+                          selectedRowKeys: (ftData.testMachineCards || []).map(card => card.id)
+                        }}
+                        columns={cardColumns('ft', 'testMachine')}
+                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                      />
+                    ) : (
+                      <EmptyState 
+                        description={`该测试机暂无可用板卡`}
+                        size="small"
+                      />
+                    );
+                  })()} 
                 </div>
               )}
               
               {/* 分选机选择 */}
               <div style={{ marginBottom: 15 }}>
                 <h4>选择分选机</h4>
-                <Select 
-                  style={{ width: '100%' }}
-                  placeholder="选择分选机" 
-                  onChange={(value) => handleHandlerSelect('ft', value)}
-                  value={ftData.handler ? ftData.handler.id : undefined}
-                  showSearch
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                  }
-                >
-                  {handlers.map(handler => (
-                    <Option key={handler.id} value={handler.id}>
-                      {handler.name} ({handler.currency}, 汇率: {handler.exchange_rate}, 折扣率: {handler.discount_rate})
-                    </Option>
-                  ))}
-                </Select>
+                {handlers && handlers.length > 0 ? (
+                  <Select 
+                    style={{ width: '100%' }}
+                    placeholder="选择分选机" 
+                    onChange={(value) => handleHandlerSelect('ft', value)}
+                    value={ftData.handler ? ftData.handler.id : undefined}
+                    showSearch
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                      option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                    }
+                  >
+                    {handlers.map(handler => (
+                      <Option key={handler.id} value={handler.id}>
+                        {handler.name} ({handler.currency}, 汇率: {handler.exchange_rate}, 折扣率: {handler.discount_rate})
+                      </Option>
+                    ))}
+                  </Select>
+                ) : (
+                  <EmptyState 
+                    description="暂无可用的分选机"
+                    action={<Button onClick={fetchData}>刷新数据</Button>}
+                  />
+                )}
               </div>
 
               {/* 分选机板卡选择 */}
               {ftData.handler && (
                 <div style={{ marginBottom: 15 }}>
                   <h4>选择分选机板卡</h4>
-                  <Table 
-                    dataSource={cardTypes.filter(card => card.machine_id === ftData.handler.id)}
-                    rowKey="id"
-                    rowSelection={{
-                      type: 'checkbox',
-                      onChange: (selectedRowKeys, selectedRows) => 
-                        handleCardSelection('ft', 'handler', selectedRowKeys, selectedRows),
-                      selectedRowKeys: (ftData.handlerCards || []).map(card => card.id)
-                    }}
-                    columns={cardColumns('ft', 'handler')}
-                    pagination={false}
-                  />
+                  {(() => {
+                    const availableCards = cardTypes.filter(card => card.machine_id === ftData.handler.id);
+                    return availableCards.length > 0 ? (
+                      <Table 
+                        dataSource={availableCards}
+                        rowKey="id"
+                        rowSelection={{
+                          type: 'checkbox',
+                          onChange: (selectedRowKeys, selectedRows) => 
+                            handleCardSelection('ft', 'handler', selectedRowKeys, selectedRows),
+                          selectedRowKeys: (ftData.handlerCards || []).map(card => card.id)
+                        }}
+                        columns={cardColumns('ft', 'handler')}
+                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                      />
+                    ) : (
+                      <EmptyState 
+                        description={`该分选机暂无可用板卡`}
+                        size="small"
+                      />
+                    );
+                  })()} 
                 </div>
               )}
               
@@ -761,82 +787,116 @@ const MassProductionQuote = () => {
               {/* 测试机选择 */}
               <div style={{ marginBottom: 15 }}>
                 <h4>选择测试机</h4>
-                <Select 
-                  style={{ width: '100%' }}
-                  placeholder="选择测试机" 
-                  onChange={(value) => handleTestMachineSelect('cp', value)}
-                  value={cpData.testMachine ? cpData.testMachine.id : undefined}
-                  showSearch
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                  }
-                >
-                  {machines.map(machine => (
-                    <Option key={machine.id} value={machine.id}>
-                      {machine.name} ({machine.currency}, 汇率: {machine.exchange_rate}, 折扣率: {machine.discount_rate})
-                    </Option>
-                  ))}
-                </Select>
+                {machines && machines.length > 0 ? (
+                  <Select 
+                    style={{ width: '100%' }}
+                    placeholder="选择测试机" 
+                    onChange={(value) => handleTestMachineSelect('cp', value)}
+                    value={cpData.testMachine ? cpData.testMachine.id : undefined}
+                    showSearch
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                      option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                    }
+                  >
+                    {machines.map(machine => (
+                      <Option key={machine.id} value={machine.id}>
+                        {machine.name} ({machine.currency}, 汇率: {machine.exchange_rate}, 折扣率: {machine.discount_rate})
+                      </Option>
+                    ))}
+                  </Select>
+                ) : (
+                  <EmptyState 
+                    description="暂无可用的测试机"
+                    action={<Button onClick={fetchData}>刷新数据</Button>}
+                  />
+                )}
               </div>
               
               {/* 测试机板卡选择 */}
               {cpData.testMachine && (
                 <div style={{ marginBottom: 15 }}>
                   <h4>选择测试机板卡</h4>
-                  <Table 
-                    dataSource={cardTypes.filter(card => card.machine_id === cpData.testMachine.id)}
-                    rowKey="id"
-                    rowSelection={{
-                      type: 'checkbox',
-                      onChange: (selectedRowKeys, selectedRows) => 
-                        handleCardSelection('cp', 'testMachine', selectedRowKeys, selectedRows),
-                      selectedRowKeys: (cpData.testMachineCards || []).map(card => card.id)
-                    }}
-                    columns={cardColumns('cp', 'testMachine')}
-                    pagination={false}
-                  />
+                  {(() => {
+                    const availableCards = cardTypes.filter(card => card.machine_id === cpData.testMachine.id);
+                    return availableCards.length > 0 ? (
+                      <Table 
+                        dataSource={availableCards}
+                        rowKey="id"
+                        rowSelection={{
+                          type: 'checkbox',
+                          onChange: (selectedRowKeys, selectedRows) => 
+                            handleCardSelection('cp', 'testMachine', selectedRowKeys, selectedRows),
+                          selectedRowKeys: (cpData.testMachineCards || []).map(card => card.id)
+                        }}
+                        columns={cardColumns('cp', 'testMachine')}
+                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                      />
+                    ) : (
+                      <EmptyState 
+                        description={`该测试机暂无可用板卡`}
+                        size="small"
+                      />
+                    );
+                  })()} 
                 </div>
               )}
               
               {/* 探针台选择 */}
               <div style={{ marginBottom: 15 }}>
                 <h4>选择探针台</h4>
-                <Select 
-                  style={{ width: '100%' }}
-                  placeholder="选择探针台" 
-                  onChange={(value) => handleProberSelect('cp', value)}
-                  value={cpData.prober ? cpData.prober.id : undefined}
-                  showSearch
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                  }
-                >
-                  {probers.map(prober => (
-                    <Option key={prober.id} value={prober.id}>
-                      {prober.name} ({prober.currency}, 汇率: {prober.exchange_rate}, 折扣率: {prober.discount_rate})
-                    </Option>
-                  ))}
-                </Select>
+                {probers && probers.length > 0 ? (
+                  <Select 
+                    style={{ width: '100%' }}
+                    placeholder="选择探针台" 
+                    onChange={(value) => handleProberSelect('cp', value)}
+                    value={cpData.prober ? cpData.prober.id : undefined}
+                    showSearch
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                      option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                    }
+                  >
+                    {probers.map(prober => (
+                      <Option key={prober.id} value={prober.id}>
+                        {prober.name} ({prober.currency}, 汇率: {prober.exchange_rate}, 折扣率: {prober.discount_rate})
+                      </Option>
+                    ))}
+                  </Select>
+                ) : (
+                  <EmptyState 
+                    description="暂无可用的探针台"
+                    action={<Button onClick={fetchData}>刷新数据</Button>}
+                  />
+                )}
               </div>
               
               {/* 探针台板卡选择 */}
               {cpData.prober && (
                 <div style={{ marginBottom: 15 }}>
                   <h4>选择探针台板卡</h4>
-                  <Table 
-                    dataSource={cardTypes.filter(card => card.machine_id === cpData.prober.id)}
-                    rowKey="id"
-                    rowSelection={{
-                      type: 'checkbox',
-                      onChange: (selectedRowKeys, selectedRows) => 
-                        handleCardSelection('cp', 'prober', selectedRowKeys, selectedRows),
-                      selectedRowKeys: (cpData.proberCards || []).map(card => card.id)
-                    }}
-                    columns={cardColumns('cp', 'prober')}
-                    pagination={false}
-                  />
+                  {(() => {
+                    const availableCards = cardTypes.filter(card => card.machine_id === cpData.prober.id);
+                    return availableCards.length > 0 ? (
+                      <Table 
+                        dataSource={availableCards}
+                        rowKey="id"
+                        rowSelection={{
+                          type: 'checkbox',
+                          onChange: (selectedRowKeys, selectedRows) => 
+                            handleCardSelection('cp', 'prober', selectedRowKeys, selectedRows),
+                          selectedRowKeys: (cpData.proberCards || []).map(card => card.id)
+                        }}
+                        columns={cardColumns('cp', 'prober')}
+                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                      />
+                    ) : (
+                      <EmptyState 
+                        description={`该探针台暂无可用板卡`}
+                        size="small"
+                      />
+                    );
+                  })()} 
                 </div>
               )}
               
@@ -852,84 +912,125 @@ const MassProductionQuote = () => {
           <h2 className="section-title">辅助设备选择</h2>
           
           <Card title="辅助设备选择" style={{ marginBottom: 20 }}>
-            <Table 
-              dataSource={auxDevices.others || []}
-              rowKey="id"
-              rowSelection={{
-                type: 'checkbox',
-                onChange: handleAuxDeviceSelect,
-                selectedRowKeys: selectedAuxDevices.map(device => device.id)
-              }}
-              columns={auxDeviceColumns}
-              pagination={false}
-            />
-            <p style={{ marginTop: 10 }}><strong>辅助设备机时费: ¥{formatNumber(calculateAuxDeviceFee())}</strong></p>
+            {auxDevices.others && auxDevices.others.length > 0 ? (
+              <>
+                <Table 
+                  dataSource={auxDevices.others}
+                  rowKey="id"
+                  rowSelection={{
+                    type: 'checkbox',
+                    onChange: handleAuxDeviceSelect,
+                    selectedRowKeys: selectedAuxDevices.map(device => device.id)
+                  }}
+                  columns={auxDeviceColumns}
+                  pagination={{ pageSize: 10, showSizeChanger: true }}
+                />
+                <p style={{ marginTop: 10 }}><strong>辅助设备机时费: ¥{formatNumber(calculateAuxDeviceFee())}</strong></p>
+              </>
+            ) : (
+              <EmptyState 
+                description="暂无可用的辅助设备"
+                action={
+                  <Button onClick={fetchData}>
+                    刷新数据
+                  </Button>
+                }
+              />
+            )}
           </Card>
           
           <Card title="费用明细" style={{ marginBottom: 20 }}>
             <div style={{ padding: '20px 0' }}>
               {selectedTypes.includes('ft') && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span>FT小时费:</span>
-                  <span>¥{formatNumber(ftHourlyFee)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 15, padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
+                  <span style={{ fontWeight: 'bold', color: '#1890ff' }}>FT小时费:</span>
+                  <span style={{ fontWeight: 'bold', fontSize: '16px', color: '#1890ff' }}>¥{formatNumber(ftHourlyFee)}</span>
                 </div>
               )}
               {selectedTypes.includes('cp') && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span>CP小时费:</span>
-                  <span>¥{formatNumber(cpHourlyFee)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 15, padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
+                  <span style={{ fontWeight: 'bold', color: '#52c41a' }}>CP小时费:</span>
+                  <span style={{ fontWeight: 'bold', fontSize: '16px', color: '#52c41a' }}>¥{formatNumber(cpHourlyFee)}</span>
                 </div>
               )}
               {selectedAuxDevices.length > 0 && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span>辅助设备:</span>
-                    <span></span>
+                <div style={{ marginTop: 15 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, fontWeight: 'bold', borderBottom: '1px solid #d9d9d9', paddingBottom: '5px' }}>
+                    <span>辅助设备费用:</span>
+                    <span>¥{formatNumber(auxDeviceFee)}/小时</span>
                   </div>
                   {selectedAuxDevices.map((device, index) => (
-                    <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, paddingLeft: 20 }}>
-                      <span>{device.name}</span>
+                    <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, paddingLeft: 20, color: '#666' }}>
+                      <span>• {device.name}</span>
                       <span>¥{formatNumber(calculateAuxDeviceHourlyRate(device))}/小时</span>
                     </div>
                   ))}
                 </div>
               )}
+              <Divider />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 'bold', color: '#fa541c' }}>
+                <span>总计小时费:</span>
+                <span>¥{formatNumber(ftHourlyFee + cpHourlyFee + auxDeviceFee)}/小时</span>
+              </div>
             </div>
           </Card>
         </div>
       )}
 
       {/* 导航按钮 */}
-      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between' }}>
-        <div>
-          <Button 
-            onClick={handlePrevStep} 
-            disabled={currentStep === 0}
-          >
-            返回上一步
-          </Button>
-          <Button 
-            onClick={resetQuote}
-            style={{ marginLeft: 10 }}
-          >
-            重置报价
-          </Button>
+      <Card style={{ marginTop: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <Button 
+              onClick={handlePrevStep} 
+              disabled={currentStep === 0}
+              size="large"
+            >
+              返回上一步
+            </Button>
+            <Button 
+              onClick={resetQuote}
+              style={{ marginLeft: 10 }}
+              size="large"
+              danger
+            >
+              重置报价
+            </Button>
+          </div>
+          
+          {/* 进度提示 */}
+          <div style={{ textAlign: 'center', color: '#666' }}>
+            <div>步骤 {currentStep + 1} / 2</div>
+            <div style={{ fontSize: '12px', marginTop: '4px' }}>
+              {currentStep === 0 ? '配置测试机器和板卡' : '选择辅助设备并确认费用'}
+            </div>
+          </div>
+          
+          <div>
+            <Button 
+              onClick={() => {
+                ConfirmDialog.showCustomConfirm({
+                  title: '退出报价确认',
+                  content: '您确定要退出当前报价吗？未保存的配置将会丢失。',
+                  onOk: () => navigate('/')
+                });
+              }}
+              style={{ marginRight: 10 }}
+              size="large"
+            >
+              退出报价
+            </Button>
+            <Button 
+              type="primary" 
+              onClick={handleNextStep}
+              size="large"
+              disabled={currentStep === 0 && !selectedTypes.length}
+            >
+              {currentStep === 1 ? '生成报价结果' : '继续下一步'}
+            </Button>
+          </div>
         </div>
-        <div>
-          <Button 
-            onClick={() => navigate('/')}
-            style={{ marginRight: 10 }}
-          >
-            退出报价
-          </Button>
-          <Button 
-            type="primary" 
-            onClick={handleNextStep}
-          >
-            {currentStep === 1 ? '确认完成' : '继续下一步'}
-          </Button>
-        </div>
-      </div>
+      </Card>
     </div>
   );
 };
