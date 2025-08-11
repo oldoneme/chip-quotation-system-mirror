@@ -1,23 +1,12 @@
 import axios from 'axios';
-import cache from '../utils/cache';
-import { showError } from '../utils/notifications';
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: 'http://127.0.0.1:8000/api/v1',
   timeout: 10000,
+  proxy: false,
 });
 
-// 生成缓存key
-const getCacheKey = (config) => {
-  const method = config.method?.toLowerCase();
-  const url = config.url;
-  const params = JSON.stringify(config.params || {});
-  return `${method}:${url}:${params}`;
-};
-
-// 可缓存的请求方法
-const CACHEABLE_METHODS = ['get'];
 
 // 请求拦截器
 api.interceptors.request.use(
@@ -36,11 +25,6 @@ api.interceptors.response.use(
   (response) => {
     console.log('API Response:', response.status, response.config.url);
     
-    // 缓存GET请求的响应数据 (暂时禁用缓存来调试)
-    // if (CACHEABLE_METHODS.includes(response.config.method?.toLowerCase())) {
-    //   const cacheKey = getCacheKey(response.config);
-    //   cache.set(cacheKey, response.data);
-    // }
     
     return response;
   },
@@ -86,8 +70,6 @@ api.interceptors.response.use(
       errorMessage = error.message || '未知错误';
     }
     
-    // 显示用户友好的错误消息 (暂时禁用自动提示)
-    // showError(errorMessage);
     console.error('API Error Message:', errorMessage);
     
     return Promise.reject(error);

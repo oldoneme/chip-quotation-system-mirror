@@ -34,6 +34,11 @@ const Navigation = () => {
       icon: <ApiOutlined />,
       label: 'API测试',
     },
+    {
+      key: '/api-test-simple',
+      icon: <ApiOutlined />,
+      label: 'API简单测试',
+    },
   ];
 
   const handleMenuClick = ({ key }) => {

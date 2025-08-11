@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, Field
 from typing import List, Optional
 
 # Forward declarations to resolve circular references
@@ -8,8 +8,8 @@ if TYPE_CHECKING:
 
 # Machine Type schemas
 class MachineTypeBase(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(..., min_length=2, max_length=100, description="机器类型名称")
+    description: Optional[str] = Field(None, max_length=500, description="机器类型描述")
 
 class MachineTypeCreate(MachineTypeBase):
     pass
@@ -25,8 +25,8 @@ class MachineType(MachineTypeBase):
 
 # Supplier schemas
 class SupplierBase(BaseModel):
-    name: str
-    machine_type_id: int
+    name: str = Field(..., min_length=2, max_length=100, description="供应商名称")
+    machine_type_id: int = Field(..., gt=0, description="机器类型ID")
 
 class SupplierCreate(SupplierBase):
     pass
