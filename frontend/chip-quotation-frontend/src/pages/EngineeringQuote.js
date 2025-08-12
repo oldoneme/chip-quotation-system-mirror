@@ -59,7 +59,11 @@ const EngineeringQuote = () => {
 
   // 获取所有数据
   useEffect(() => {
+    let isMounted = true; // 防止组件卸载后设置状态
+    
     const fetchData = async () => {
+      if (!isMounted) return;
+      
       setLoading(true);
       setError(null);
       try {
@@ -172,36 +176,44 @@ const EngineeringQuote = () => {
           errorMessage = '网络连接失败，无法连接到服务器。请检查：\n1. 后端服务是否运行在 http://localhost:8000\n2. 网络连接是否正常\n3. 防火墙设置是否允许连接';
         }
         
-        setError(errorMessage);
+        if (isMounted) {
+          setError(errorMessage);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     // 检查是否从结果页或其他页面返回
     const isFromResultPage = location.state?.fromResultPage;
     
-    if (isFromResultPage) {
+    if (isFromResultPage && isMounted) {
       // 只有从结果页返回时才恢复状态
       const storedQuoteData = sessionStorage.getItem('quoteData');
       if (storedQuoteData) {
-        const parsedData = JSON.parse(storedQuoteData);
-        // 恢复状态
-        setTestMachine(parsedData.testMachine);
-        setHandler(parsedData.handler);
-        setProber(parsedData.prober);
-        setTestMachineCards(parsedData.testMachineCards || []);
-        setHandlerCards(parsedData.handlerCards || []);
-        setProberCards(parsedData.proberCards || []);
-        setSelectedPersonnel(parsedData.selectedPersonnel || []);
-        setSelectedAuxDevices(parsedData.selectedAuxDevices || []);
-        setEngineeringRate(parsedData.engineeringRate || 1.2);
-        setQuoteCurrency(parsedData.quoteCurrency || 'CNY');
-        setQuoteExchangeRate(parsedData.quoteExchangeRate || 7.2);
-        setPersistedCardQuantities(parsedData.persistedCardQuantities || {});
-        // 设置当前步骤
-        setCurrentStep(parsedData.currentStep || 0);
-        console.log('从 sessionStorage 恢复状态:', parsedData);
+        try {
+          const parsedData = JSON.parse(storedQuoteData);
+          // 恢复状态
+          setTestMachine(parsedData.testMachine);
+          setHandler(parsedData.handler);
+          setProber(parsedData.prober);
+          setTestMachineCards(parsedData.testMachineCards || []);
+          setHandlerCards(parsedData.handlerCards || []);
+          setProberCards(parsedData.proberCards || []);
+          setSelectedPersonnel(parsedData.selectedPersonnel || []);
+          setSelectedAuxDevices(parsedData.selectedAuxDevices || []);
+          setEngineeringRate(parsedData.engineeringRate || 1.2);
+          setQuoteCurrency(parsedData.quoteCurrency || 'CNY');
+          setQuoteExchangeRate(parsedData.quoteExchangeRate || 7.2);
+          setPersistedCardQuantities(parsedData.persistedCardQuantities || {});
+          // 设置当前步骤
+          setCurrentStep(parsedData.currentStep || 0);
+          console.log('从 sessionStorage 恢复状态:', parsedData);
+        } catch (error) {
+          console.error('解析保存状态时出错:', error);
+        }
       }
     } else {
       // 正常进入页面时清空所有状态，开始全新流程
@@ -210,6 +222,11 @@ const EngineeringQuote = () => {
     }
 
     fetchData();
+    
+    // 清理函数，防止内存泄漏
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const steps = [
@@ -225,6 +242,24 @@ const EngineeringQuote = () => {
     } else {
       return `¥${formattedNumber}`;
     }
+  };
+
+  // 统一的价格转换函数
+  const convertPrice = (price, deviceCurrency, deviceExchangeRate = 1) => {
+    let adjustedPrice = price;
+    
+    if (quoteCurrency === 'USD') {
+      if (deviceCurrency === 'CNY' || deviceCurrency === 'RMB') {
+        // RMB设备转USD：除以报价汇率
+        adjustedPrice = adjustedPrice / quoteExchangeRate;
+      }
+      // USD设备：不做汇率转换，直接使用原价格
+    } else {
+      // 报价币种是CNY，保持原逻辑
+      adjustedPrice = adjustedPrice * deviceExchangeRate;
+    }
+    
+    return adjustedPrice;
   };
 
   const nextStep = () => {
@@ -936,8 +971,20 @@ const EngineeringQuote = () => {
                   min={1}
                   max={20}
                   step={0.1}
+                  precision={1}
                   value={quoteExchangeRate}
-                  onChange={setQuoteExchangeRate}
+                  onChange={(value) => {
+                    if (value && value >= 1 && value <= 20) {
+                      setQuoteExchangeRate(value);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const value = parseFloat(e.target.value);
+                    if (isNaN(value) || value < 1 || value > 20) {
+                      message.error('汇率必须在1-20之间');
+                      setQuoteExchangeRate(7.2); // 重置为默认值
+                    }
+                  }}
                 />
                 <span>CNY</span>
               </div>

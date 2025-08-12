@@ -68,37 +68,45 @@ const MassProductionQuote = () => {
   const [persistedCardQuantities, setPersistedCardQuantities] = useState({});
   
   useEffect(() => {
+    let isMounted = true; // 防止组件卸载后设置状态
+    
     // 检查是否从结果页返回
     const isFromResultPage = location.state?.fromResultPage;
     
-    if (isFromResultPage) {
+    if (isFromResultPage && isMounted) {
       // 从结果页返回时，恢复之前保存的状态
       const savedState = sessionStorage.getItem('massProductionQuoteState');
       if (savedState) {
-        const parsedState = JSON.parse(savedState);
-        console.log('从 sessionStorage 恢复状态:', parsedState);
-        
-        // 恢复所有状态
-        setCurrentStep(parsedState.currentStep || 0);
-        setSelectedTypes(parsedState.selectedTypes || ['ft', 'cp']);
-        setFtData(parsedState.ftData || { 
-          testMachine: null, 
-          handler: null, 
-          testMachineCards: [], 
-          handlerCards: [],
-          proberCards: []
-        });
-        setCpData(parsedState.cpData || { 
-          testMachine: null, 
-          prober: null, 
-          testMachineCards: [], 
-          handlerCards: [],
-          proberCards: [] 
-        });
-        setSelectedAuxDevices(parsedState.selectedAuxDevices || []);
-        setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
-        setQuoteCurrency(parsedState.quoteCurrency || 'CNY');
-        setQuoteExchangeRate(parsedState.quoteExchangeRate || 7.2);
+        try {
+          const parsedState = JSON.parse(savedState);
+          console.log('从 sessionStorage 恢复状态:', parsedState);
+          
+          if (isMounted) {
+            // 恢复所有状态
+            setCurrentStep(parsedState.currentStep || 0);
+            setSelectedTypes(parsedState.selectedTypes || ['ft', 'cp']);
+            setFtData(parsedState.ftData || { 
+              testMachine: null, 
+              handler: null, 
+              testMachineCards: [], 
+              handlerCards: [],
+              proberCards: []
+            });
+            setCpData(parsedState.cpData || { 
+              testMachine: null, 
+              prober: null, 
+              testMachineCards: [], 
+              handlerCards: [],
+              proberCards: [] 
+            });
+            setSelectedAuxDevices(parsedState.selectedAuxDevices || []);
+            setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
+            setQuoteCurrency(parsedState.quoteCurrency || 'CNY');
+            setQuoteExchangeRate(parsedState.quoteExchangeRate || 7.2);
+          }
+        } catch (error) {
+          console.error('解析保存状态时出错:', error);
+        }
       }
     } else {
       // 正常进入页面时清空所有状态，开始全新流程
@@ -108,6 +116,11 @@ const MassProductionQuote = () => {
     
     // 加载数据
     fetchData();
+    
+    // 清理函数，防止内存泄漏
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // 格式化价格显示（包含币种符号）
@@ -230,8 +243,9 @@ const MassProductionQuote = () => {
       console.log('数据加载完成');
     } catch (error) {
       console.error('获取数据时出错:', error);
-      setError(error.message);
-      message.error('获取数据失败: ' + error.message);
+      const errorMessage = error.response?.data?.detail || error.message || '获取数据失败';
+      setError(errorMessage);
+      message.error('获取数据失败: ' + errorMessage);
     } finally {
       setLoading(false);
     }
@@ -756,8 +770,20 @@ const MassProductionQuote = () => {
                   min={1}
                   max={20}
                   step={0.1}
+                  precision={1}
                   value={quoteExchangeRate}
-                  onChange={setQuoteExchangeRate}
+                  onChange={(value) => {
+                    if (value && value >= 1 && value <= 20) {
+                      setQuoteExchangeRate(value);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const value = parseFloat(e.target.value);
+                    if (isNaN(value) || value < 1 || value > 20) {
+                      message.error('汇率必须在1-20之间');
+                      setQuoteExchangeRate(7.2); // 重置为默认值
+                    }
+                  }}
                 />
                 <span>CNY</span>
               </div>
