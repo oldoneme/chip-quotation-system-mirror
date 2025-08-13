@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Table, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from .database import Base
 
 class MachineType(Base):
@@ -31,6 +32,7 @@ class Machine(Base):
     description = Column(String)
     active = Column(Boolean, default=True)
     manufacturer = Column(String)
+    base_hourly_rate = Column(Float, default=0.0)  # 基础小时费率
     discount_rate = Column(Float, default=1.0)
     exchange_rate = Column(Float, default=1.0)
     currency = Column(String, default="RMB")  # 币种: RMB 或 USD
@@ -77,3 +79,16 @@ class AuxiliaryEquipment(Base):
     type = Column(String)  # 新增字段，用于区分handler和prober
 
 # 移除Personnel模型，改为使用标准值
+
+class Quotation(Base):
+    __tablename__ = "quotations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    total = Column(Float)
+    machine_id = Column(Integer, ForeignKey("machines.id"))
+    test_hours = Column(Float, default=1.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    details = Column(String)  # JSON string for detailed breakdown
+    
+    # Relationships
+    machine = relationship("Machine")

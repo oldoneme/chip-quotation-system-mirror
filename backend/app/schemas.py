@@ -48,6 +48,7 @@ class MachineBase(BaseModel):
     description: Optional[str] = None
     active: Optional[bool] = True
     manufacturer: Optional[str] = None
+    base_hourly_rate: Optional[float] = 0.0
     discount_rate: Optional[float] = 1.0
     exchange_rate: Optional[float] = 1.0
     currency: Optional[str] = "RMB"  # 币种: RMB 或 USD
@@ -85,6 +86,7 @@ class MachineUpdate(MachineBase):
     description: Optional[str] = None
     active: Optional[bool] = None
     manufacturer: Optional[str] = None
+    base_hourly_rate: Optional[float] = None
     discount_rate: Optional[float] = None
     exchange_rate: Optional[float] = None
     currency: Optional[str] = None
@@ -212,30 +214,37 @@ class Personnel(PersonnelBase):
         from_attributes = True
 
 # Quotation schemas
-class QuotationRequest(BaseModel):
-    machine_id: int
-    test_hours: float
-
-class QuotationResponse(BaseModel):
-    total: float
-    machine_id: int
-    test_hours: float
-
 class QuotationBase(BaseModel):
-    project_name: str
-    description: Optional[str] = None
-    total_amount: float
+    total: float
+    machine_id: Optional[int] = None
+    test_hours: Optional[float] = 1.0
+    details: Optional[str] = None
 
 class QuotationCreate(QuotationBase):
-    pass
+    machine_id: int
+    test_hours: float = 1.0
 
-class QuotationUpdate(QuotationBase):
-    project_name: Optional[str] = None
-    description: Optional[str] = None
-    total_amount: Optional[float] = None
+class QuotationUpdate(BaseModel):
+    total: Optional[float] = None
+    machine_id: Optional[int] = None
+    test_hours: Optional[float] = None
+    details: Optional[str] = None
 
 class Quotation(QuotationBase):
     id: int
+    created_at: Optional[str] = None
     
     class Config:
         from_attributes = True
+
+# Request/Response schemas for API
+class QuotationRequest(BaseModel):
+    machine_id: int
+    test_hours: float = 1.0
+    details: Optional[dict] = None
+
+class QuotationResponse(BaseModel):
+    total: float
+    machine_id: Optional[int] = None
+    test_hours: Optional[float] = None
+    details: Optional[dict] = None

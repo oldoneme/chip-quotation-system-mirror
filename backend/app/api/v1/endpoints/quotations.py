@@ -17,7 +17,9 @@ def calculate_quotation(
         total = crud.calculate_quotation(db, quotation_request)
         return schemas.QuotationResponse(
             total=total,
-            details={}
+            machine_id=quotation_request.machine_id,
+            test_hours=quotation_request.test_hours,
+            details=quotation_request.details or {}
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

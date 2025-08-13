@@ -61,17 +61,19 @@ def add_card_to_machine(machine_id: int, card_id: int, db: Session = Depends(get
 @router.delete("/{machine_id}/cards/{card_id}")
 def remove_card_from_machine(machine_id: int, card_id: int, db: Session = Depends(get_db)):
     db_machine = crud.get_machine(db, machine_id=machine_id)
-    db_card = crud.get_card(db, card_id=card_id)
-    
     if not db_machine:
         raise HTTPException(status_code=404, detail="Machine not found")
-    if not db_card:
-        raise HTTPException(status_code=404, detail="Card not found")
     
-    # 移除关联
-    if db_card in db_machine.cards:
-        db_machine.cards.remove(db_card)
-        db.commit()
-        db.refresh(db_machine)
+    # 删除对应的CardConfig
+    db_card_config = db.query(models.CardConfig).filter(
+        models.CardConfig.id == card_id,
+        models.CardConfig.machine_id == machine_id
+    ).first()
+    
+    if not db_card_config:
+        raise HTTPException(status_code=404, detail="Card configuration not found")
+    
+    db.delete(db_card_config)
+    db.commit()
     
     return {"message": "Card removed from machine successfully"}
