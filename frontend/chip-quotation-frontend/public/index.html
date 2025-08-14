@@ -24,11 +24,78 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-    <title>React App</title>
+    <title>芯片测试报价系统</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    
+    <!-- 认证重定向脚本 - 在React加载前执行 -->
+    <script>
+    (function() {
+        console.log('🔥 认证重定向脚本已加载');
+        
+        // 🛠️ 开发调试模式检查
+        const urlParams = new URLSearchParams(window.location.search);
+        const debugMode = urlParams.get('debug') === 'true' || 
+                         urlParams.get('dev') === 'true' ||
+                         window.location.hostname === 'localhost' ||
+                         window.location.port === '3000';
+        
+        if (debugMode) {
+            console.log('🛠️ 检测到调试模式，跳过认证检查');
+            console.log('💡 调试模式提示：');
+            console.log('   - 在URL添加 ?debug=true 启用调试模式');
+            console.log('   - localhost访问自动启用调试模式');
+            console.log('   - 调试模式下不会自动重定向认证');
+            
+            // 添加调试信息到页面
+            setTimeout(() => {
+                const debugInfo = document.createElement('div');
+                debugInfo.style.cssText = `
+                    position: fixed; top: 0; left: 0; right: 0; 
+                    background: #ff6b35; color: white; padding: 8px; 
+                    font-size: 12px; text-align: center; z-index: 9999;
+                    font-family: monospace;
+                `;
+                debugInfo.innerHTML = '🛠️ 开发调试模式 - 认证已跳过 | 添加 ?debug=false 恢复认证';
+                document.body.appendChild(debugInfo);
+            }, 1000);
+            
+            return; // 跳过认证检查
+        }
+        
+        // 检查是否已经在认证相关页面，避免无限循环
+        if (window.location.pathname.startsWith('/auth') || 
+            window.location.pathname.includes('/test-auth')) {
+            console.log('已在认证页面，跳过检查');
+            return;
+        }
+        
+        // 正常认证检查
+        console.log('🔐 执行认证状态检查...');
+        fetch('/api/me', { 
+            credentials: 'include' 
+        })
+        .then(response => {
+            console.log('认证状态检查:', response.status);
+            if (response.status === 401) {
+                console.log('用户未认证，重定向到企业微信登录...');
+                // 立即重定向到登录
+                window.location.href = '/auth/login';
+            } else {
+                console.log('用户已认证，继续正常加载');
+            }
+        })
+        .catch(error => {
+            console.error('认证检查失败:', error);
+            // 出现错误也重定向到登录
+            setTimeout(() => {
+                window.location.href = '/auth/login';
+            }, 2000);
+        });
+    })();
+    </script>
     <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.

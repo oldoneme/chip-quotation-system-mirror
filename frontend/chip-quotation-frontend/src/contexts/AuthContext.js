@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
 import api from '../services/api';
+
 
 const AuthContext = createContext();
 
@@ -19,17 +21,35 @@ export const AuthProvider = ({ children }) => {
   const checkAuth = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/me');
+      
+      const response = await axios.get('/api/me', { 
+        withCredentials: true,
+        timeout: 10000
+      });
+      
       setUser(response.data);
       setAuthenticated(true);
     } catch (error) {
+      
       if (error.response?.status === 401) {
+        // 检查是否在调试模式
+        const urlParams = new URLSearchParams(window.location.search);
+        const debugMode = urlParams.get('debug') === 'true' || 
+                         urlParams.get('dev') === 'true' ||
+                         window.location.hostname === 'localhost' ||
+                         window.location.port === '3000';
+        
+        if (debugMode) {
+          setUser(null);
+          setAuthenticated(false);
+          return;
+        }
+        
         // 未登录，跳转到登录
-        console.log('User not authenticated, redirecting to login...');
-        window.location.href = '/auth/login';
+        window.location.href = `${window.location.origin}/auth/login`;
         return;
       }
-      console.error('Auth check failed:', error);
+      
       setUser(null);
       setAuthenticated(false);
     } finally {
@@ -41,11 +61,11 @@ export const AuthProvider = ({ children }) => {
     try {
       await api.post('/auth/logout');
     } catch (error) {
-      console.error('Logout error:', error);
+      // 静默处理登出错误
     } finally {
       setUser(null);
       setAuthenticated(false);
-      window.location.href = '/auth/login';
+      window.location.href = `${window.location.origin}/auth/login`;
     }
   };
 
