@@ -1,4 +1,4 @@
-import sys
+#!/usr/bin/env python3
 import os
 import hashlib
 import base64
@@ -6,60 +6,15 @@ import struct
 import xml.etree.ElementTree as ET
 from typing import Optional
 
-# Add the project root directory to the path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-
 from fastapi import FastAPI, Query, HTTPException, Response, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ValidationError
 from Crypto.Cipher import AES
-from app.database import engine, Base
-from app.api.v1.api import api_router
-from app.core.config import settings
-from app.core.logging import setup_logging
-from app.core.exceptions import (
-    APIException,
-    api_exception_handler,
-    validation_exception_handler,
-    general_exception_handler
-)
-
-# 设置日志
-logger = setup_logging()
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
-
-app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
-    debug=settings.DEBUG,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json"
-)
-
-# 添加异常处理器
-app.add_exception_handler(APIException, api_exception_handler)
-app.add_exception_handler(ValidationError, validation_exception_handler)
-app.add_exception_handler(Exception, general_exception_handler)
-
-# 添加CORS中间件
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
-
-app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # 企业微信配置
-WECOM_TOKEN = os.getenv("WECOM_TOKEN", "")
-WECOM_AES_KEY = os.getenv("WECOM_AES_KEY", "")
-WECOM_CORP_ID = os.getenv("WECOM_CORP_ID", "")
+WECOM_TOKEN = os.getenv("WECOM_TOKEN", "cN9bXxcD80")
+WECOM_AES_KEY = os.getenv("WECOM_AES_KEY", "S1iZ8DxsKGpiL3b10oVpRm59FphYwKzhtdSCR18q3nl")
+WECOM_CORP_ID = os.getenv("WECOM_CORP_ID", "ww3bf2288344490c")
+
+app = FastAPI(title="企业微信回调服务")
 
 def pkcs7_unpad(data: bytes) -> bytes:
     """移除 PKCS#7 填充"""
@@ -74,6 +29,7 @@ def verify_signature(token: str, timestamp: str, nonce: str, encrypt_msg: str, m
     sha1_str = ''.join(sorted_params)
     hash_obj = hashlib.sha1(sha1_str.encode('utf-8'))
     calculated_signature = hash_obj.hexdigest()
+    print(f"计算的签名: {calculated_signature}, 接收的签名: {msg_signature}")
     return calculated_signature == msg_signature
 
 def decrypt_msg(encrypted_msg: str, aes_key: str) -> tuple[str, str]:
@@ -110,6 +66,10 @@ def decrypt_msg(encrypted_msg: str, aes_key: str) -> tuple[str, str]:
     
     return msg_content, corp_id
 
+@app.get("/")
+async def root():
+    return {"message": "企业微信回调服务运行中", "wecom_token": WECOM_TOKEN[:5] + "***"}
+
 @app.get("/wecom/callback")
 async def wecom_callback_verify(
     msg_signature: Optional[str] = Query(None),
@@ -118,16 +78,16 @@ async def wecom_callback_verify(
     echostr: Optional[str] = Query(None)
 ):
     """企业微信回调URL验证"""
-    logger.info(f"GET /wecom/callback - msg_signature: {msg_signature}, timestamp: {timestamp}, nonce: {nonce}, echostr: {echostr}")
+    print(f"GET /wecom/callback - 参数: msg_signature={msg_signature}, timestamp={timestamp}, nonce={nonce}, echostr={echostr}")
     
     # 检查必需参数
     if not all([msg_signature, timestamp, nonce, echostr]):
-        logger.error("Missing required parameters")
+        print("ERROR: 缺少必需参数")
         raise HTTPException(status_code=400, detail="Missing required parameters")
     
     # 验证签名
     if not verify_signature(WECOM_TOKEN, timestamp, nonce, echostr, msg_signature):
-        logger.error("Signature verification failed")
+        print("ERROR: 签名验证失败")
         raise HTTPException(status_code=403, detail="Signature verification failed")
     
     try:
@@ -136,14 +96,14 @@ async def wecom_callback_verify(
         
         # 验证CorpID
         if corp_id != WECOM_CORP_ID:
-            logger.error(f"CorpID mismatch: expected {WECOM_CORP_ID}, got {corp_id}")
+            print(f"ERROR: CorpID不匹配: 期望 {WECOM_CORP_ID}, 收到 {corp_id}")
             raise HTTPException(status_code=400, detail="CorpID mismatch")
         
-        logger.info(f"Successfully verified and decrypted echostr: {plaintext}")
+        print(f"SUCCESS: 验证并解密成功: {plaintext}")
         return Response(content=plaintext, media_type="text/plain")
     
     except Exception as e:
-        logger.error(f"Decryption failed: {str(e)}")
+        print(f"ERROR: 解密失败: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Decryption failed: {str(e)}")
 
 @app.post("/wecom/callback")
@@ -154,18 +114,18 @@ async def wecom_callback_event(
     nonce: Optional[str] = Query(None)
 ):
     """企业微信事件回调"""
-    logger.info(f"POST /wecom/callback - msg_signature: {msg_signature}, timestamp: {timestamp}, nonce: {nonce}")
+    print(f"POST /wecom/callback - 参数: msg_signature={msg_signature}, timestamp={timestamp}, nonce={nonce}")
     
     # 检查必需参数
     if not all([msg_signature, timestamp, nonce]):
-        logger.error("Missing required parameters")
+        print("ERROR: 缺少必需参数")
         raise HTTPException(status_code=400, detail="Missing required parameters")
     
     try:
         # 读取请求体
         body = await request.body()
         body_str = body.decode('utf-8')
-        logger.info(f"Request body: {body_str}")
+        print(f"请求体: {body_str}")
         
         # 解析XML
         root = ET.fromstring(body_str)
@@ -173,14 +133,14 @@ async def wecom_callback_event(
         # 获取Encrypt字段（支持CDATA和非CDATA）
         encrypt_elem = root.find('Encrypt')
         if encrypt_elem is None:
-            logger.error("Missing Encrypt field in XML")
+            print("ERROR: XML中缺少Encrypt字段")
             raise HTTPException(status_code=400, detail="Missing Encrypt field")
         
         encrypted_msg = encrypt_elem.text.strip()
         
         # 验证签名
         if not verify_signature(WECOM_TOKEN, timestamp, nonce, encrypted_msg, msg_signature):
-            logger.error("Signature verification failed")
+            print("ERROR: 签名验证失败")
             raise HTTPException(status_code=403, detail="Signature verification failed")
         
         # 解密消息
@@ -188,42 +148,26 @@ async def wecom_callback_event(
         
         # 验证CorpID
         if corp_id != WECOM_CORP_ID:
-            logger.error(f"CorpID mismatch: expected {WECOM_CORP_ID}, got {corp_id}")
+            print(f"ERROR: CorpID不匹配: 期望 {WECOM_CORP_ID}, 收到 {corp_id}")
             raise HTTPException(status_code=400, detail="CorpID mismatch")
         
         # 打印解密后的XML
-        logger.info(f"Decrypted XML:\n{plaintext_xml}")
+        print(f"SUCCESS: 解密的XML:\n{plaintext_xml}")
         
         # 返回success表示成功接收
         return Response(content="success", media_type="text/plain")
     
     except ET.ParseError as e:
-        logger.error(f"XML parsing failed: {str(e)}")
+        print(f"ERROR: XML解析失败: {str(e)}")
         raise HTTPException(status_code=400, detail=f"XML parsing failed: {str(e)}")
     except Exception as e:
-        logger.error(f"Event processing failed: {str(e)}")
+        print(f"ERROR: 事件处理失败: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Event processing failed: {str(e)}")
-
-@app.get("/test-route")
-async def test_route():
-    return {"message": "Test route works!"}
-
-@app.get("/")
-async def root():
-    return {
-        "message": f"Welcome to {settings.APP_NAME} API",
-        "version": settings.APP_VERSION,
-        "docs": "/docs",
-        "redoc": "/redoc"
-    }
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info(f"Starting {settings.APP_NAME} on port 8000")
-    uvicorn.run(
-        "app.main:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=settings.DEBUG,
-        log_level=settings.LOG_LEVEL.lower()
-    )
+    print(f"启动企业微信回调服务:")
+    print(f"  Token: {WECOM_TOKEN}")
+    print(f"  AES Key: {WECOM_AES_KEY}")
+    print(f"  Corp ID: {WECOM_CORP_ID}")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
