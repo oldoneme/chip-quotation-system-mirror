@@ -168,8 +168,13 @@ async def oauth_callback(
         
     except Exception as e:
         print(f"OAuth callback error: {e}")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Code: {code}")
+        print(f"State: {state}")
+        import traceback
+        traceback.print_exc()
         return RedirectResponse(
-            url=f"/?error=auth_failed&message=登录失败，请重试",
+            url=f"/?error=auth_failed&message=登录失败，请重试: {str(e)}",
             status_code=302
         )
 

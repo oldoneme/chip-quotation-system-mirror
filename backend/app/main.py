@@ -8,6 +8,11 @@ import random
 import xml.etree.ElementTree as ET
 from typing import Optional
 
+# 设置环境变量供认证模块使用（必须在导入之前设置）
+os.environ["WECOM_CORP_ID"] = "ww3bf2288344490c5c"
+os.environ["WECOM_AGENT_ID"] = "1000029"
+os.environ["WECOM_CORP_SECRET"] = "Q_JcyrQIsTcBJON2S3JPFqTvrjVi-zHJDXFVQ2pYqNg"
+
 # Add the project root directory to the path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
@@ -67,9 +72,6 @@ WECOM_TOKEN = os.getenv("WECOM_TOKEN", "")
 WECOM_AES_KEY = os.getenv("WECOM_AES_KEY", "")
 WECOM_CORP_ID = os.getenv("WECOM_CORP_ID", "")
 
-# 设置环境变量供认证模块使用
-os.environ["WECOM_AGENT_ID"] = "1000029"
-os.environ["WECOM_CORP_SECRET"] = "Q_JcyrQIsTcBJON2S3JPFqTvrjVi-zHJDXFVQ2pYqNg"
 
 def pkcs7_unpad(data: bytes) -> bytes:
     """移除 PKCS#7 填充"""

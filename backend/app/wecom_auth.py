@@ -57,6 +57,7 @@ class WeComOAuth:
         }
         
         param_str = "&".join([f"{k}={v}" for k, v in params.items()])
+        # 企业微信网页授权URL - 在企业微信内部使用
         return f"https://open.weixin.qq.com/connect/oauth2/authorize?{param_str}#wechat_redirect"
     
     def get_access_token(self) -> str:
