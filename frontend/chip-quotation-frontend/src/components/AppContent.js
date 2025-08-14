@@ -43,7 +43,7 @@ const AppContent = () => {
         <Header className="site-layout-background" style={{ padding: 0 }}>
           <Navigation />
         </Header>
-        <Content style={{ margin: '0 16px' }}>
+        <Content style={{ margin: '24px 16px 0' }}>
           <div className="site-layout-background" style={{ padding: 24, minHeight: 360 }}>
             <ErrorBoundary>
               <Breadcrumb />

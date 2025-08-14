@@ -64,6 +64,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 添加防缓存中间件
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    # 为所有响应添加防缓存头
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    # 添加版本标识
+    response.headers["X-App-Version"] = "2024.8.14.2340"
+    return response
+
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 

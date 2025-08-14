@@ -45,8 +45,8 @@ export const AuthProvider = ({ children }) => {
                                    document.referrer.includes('work.weixin.qq.com') ||
                                    sessionStorage.getItem('wework_authenticated') === 'true';
         
-        if (debugMode || isWeWorkEnvironment) {
-          console.log(debugMode ? '🛠️ 调试模式：认证失败，不重定向' : '🏢 企业微信环境：认证失败，不重定向');
+        if (debugMode) {
+          console.log('🛠️ 调试模式：认证失败，不重定向');
           setUser(null);
           setAuthenticated(false);
           return;

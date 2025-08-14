@@ -69,9 +69,10 @@ const Navigation = () => {
       display: 'flex', 
       justifyContent: 'space-between', 
       alignItems: 'center',
-      padding: '0 24px',
+      padding: '6px 24px',
       background: '#001529',
-      borderBottom: '1px solid #f0f0f0'
+      borderBottom: '1px solid #f0f0f0',
+      minHeight: '64px'
     }}>
       {/* Logo and Title */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
@@ -79,9 +80,11 @@ const Navigation = () => {
         {user && user.name && sessionStorage.getItem('wework_authenticated') === 'true' && (
           <div style={{ 
             color: '#1890ff', 
-            fontSize: '0.75rem', 
-            marginBottom: '2px',
-            fontWeight: 'normal'
+            fontSize: '0.7rem', 
+            marginBottom: '1px',
+            fontWeight: 'normal',
+            whiteSpace: 'nowrap',
+            lineHeight: 1.2
           }}>
             企业微信用户：{user.name} ({user.role === 'admin' ? '管理员' : '普通用户'})
           </div>
@@ -89,13 +92,17 @@ const Navigation = () => {
         <div 
           style={{ 
             color: 'white', 
-            fontSize: '1.5rem', 
+            fontSize: window.innerWidth <= 768 ? '1rem' : '1.5rem',
             fontWeight: 'bold',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: window.innerWidth <= 768 ? '150px' : 'auto'
           }}
           onClick={() => navigate('/')}
         >
-          芯片测试报价系统
+芯片测试报价系统
         </div>
       </div>
 
@@ -126,13 +133,13 @@ const Navigation = () => {
         
         {/* User Dropdown */}
         <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-          <Space style={{ cursor: 'pointer', color: 'white' }}>
+          <Space style={{ cursor: 'pointer', color: 'white', whiteSpace: 'nowrap' }}>
             <Avatar 
               size="small" 
               src={user?.avatar} 
               icon={<UserOutlined />}
             />
-            <span>{user?.name || '用户'}</span>
+            <span style={{ whiteSpace: 'nowrap' }}>{user?.name || '用户'}</span>
           </Space>
         </Dropdown>
       </div>

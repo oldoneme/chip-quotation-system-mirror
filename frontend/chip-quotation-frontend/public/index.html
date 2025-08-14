@@ -95,20 +95,8 @@
         .then(response => {
             console.log('认证状态检查:', response.status);
             if (response.status === 401) {
-                if (isWeWorkEnvironment) {
-                    // 企业微信环境：检查是否已经尝试过初始认证
-                    const hasTriedAuth = sessionStorage.getItem('wework_auth_attempted');
-                    if (!hasTriedAuth) {
-                        console.log('🏢 企业微信环境：首次访问，重定向进行认证');
-                        sessionStorage.setItem('wework_auth_attempted', 'true');
-                        window.location.href = '/auth/login';
-                    } else {
-                        console.log('🏢 企业微信环境：已尝试认证但失败，继续加载应用');
-                    }
-                } else {
-                    console.log('用户未认证，重定向到企业微信登录...');
-                    window.location.href = '/auth/login';
-                }
+                console.log('用户未认证，重定向到企业微信登录...');
+                window.location.href = '/auth/login';
             } else {
                 console.log('用户已认证，继续正常加载');
                 // 认证成功，清除尝试标记
@@ -119,13 +107,9 @@
         })
         .catch(error => {
             console.error('认证检查失败:', error);
-            if (isWeWorkEnvironment) {
-                console.log('🏢 企业微信环境：认证检查失败，但不重定向，继续加载应用');
-            } else {
-                setTimeout(() => {
-                    window.location.href = '/auth/login';
-                }, 2000);
-            }
+            setTimeout(() => {
+                window.location.href = '/auth/login';
+            }, 2000);
         });
     })();
     </script>
