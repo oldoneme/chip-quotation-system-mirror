@@ -32,14 +32,21 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       
       if (error.response?.status === 401) {
-        // 检查是否在调试模式
+        // 检查是否在调试模式或企业微信环境
         const urlParams = new URLSearchParams(window.location.search);
         const debugMode = urlParams.get('debug') === 'true' || 
                          urlParams.get('dev') === 'true' ||
                          window.location.hostname === 'localhost' ||
                          window.location.port === '3000';
         
-        if (debugMode) {
+        const isWeWorkEnvironment = window.navigator.userAgent.includes('wxwork') || 
+                                   window.navigator.userAgent.includes('MicroMessenger') ||
+                                   document.referrer.includes('weixin.qq.com') ||
+                                   document.referrer.includes('work.weixin.qq.com') ||
+                                   sessionStorage.getItem('wework_authenticated') === 'true';
+        
+        if (debugMode || isWeWorkEnvironment) {
+          console.log(debugMode ? '🛠️ 调试模式：认证失败，不重定向' : '🏢 企业微信环境：认证失败，不重定向');
           setUser(null);
           setAuthenticated(false);
           return;

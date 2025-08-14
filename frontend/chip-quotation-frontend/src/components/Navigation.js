@@ -74,7 +74,18 @@ const Navigation = () => {
       borderBottom: '1px solid #f0f0f0'
     }}>
       {/* Logo and Title */}
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+        {/* 显示企业微信用户信息 */}
+        {user && user.name && sessionStorage.getItem('wework_authenticated') === 'true' && (
+          <div style={{ 
+            color: '#1890ff', 
+            fontSize: '0.75rem', 
+            marginBottom: '2px',
+            fontWeight: 'normal'
+          }}>
+            企业微信用户：{user.name} ({user.role === 'admin' ? '管理员' : '普通用户'})
+          </div>
+        )}
         <div 
           style={{ 
             color: 'white', 

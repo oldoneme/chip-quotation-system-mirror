@@ -278,6 +278,12 @@ class AuthService:
         # 检查部门权限
         try:
             user_dept_ids = json.loads(user.department_ids or "[]")
+            
+            # 如果用户没有部门信息，默认允许访问（适用于企业微信单部门或小企业）
+            if not user_dept_ids:
+                print(f"用户 {user.name} 没有部门信息，默认允许访问")
+                return True
+                
             allowed_depts = self.db.query(Department).filter(
                 Department.dept_id.in_(user_dept_ids),
                 Department.is_allowed == True
@@ -285,7 +291,8 @@ class AuthService:
             
             return len(allowed_depts) > 0
         except (json.JSONDecodeError, TypeError):
-            return False
+            print(f"用户 {user.name} 部门权限解析失败，默认允许访问")
+            return True
     
     def create_session(self, user: User, user_agent: str = None, ip_address: str = None) -> UserSession:
         """
