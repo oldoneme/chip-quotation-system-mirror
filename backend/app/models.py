@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Table, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Table, DateTime, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -92,3 +92,64 @@ class Quotation(Base):
     
     # Relationships
     machine = relationship("Machine")
+
+
+# 用户认证相关模型
+class User(Base):
+    """企业微信用户模型"""
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    userid = Column(String, unique=True, index=True)  # 企业微信用户ID
+    name = Column(String, index=True)  # 用户姓名
+    mobile = Column(String)  # 手机号
+    email = Column(String)  # 邮箱
+    department = Column(String)  # 部门
+    position = Column(String)  # 职位
+    role = Column(String, default="user")  # 角色: admin, manager, user
+    is_active = Column(Boolean, default=True)  # 是否激活
+    avatar = Column(String)  # 头像URL
+    
+    # 企业微信相关信息
+    department_ids = Column(Text)  # 部门ID列表，JSON格式存储
+    is_leader_in_dept = Column(Text)  # 在各部门中是否为主管，JSON格式
+    direct_leader = Column(String)  # 直属上级
+    
+    # 系统字段
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login = Column(DateTime)
+    
+    # Relationships
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+
+
+class UserSession(Base):
+    """用户会话模型"""
+    __tablename__ = "user_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    session_token = Column(String, unique=True, index=True)  # 会话令牌
+    expires_at = Column(DateTime)  # 过期时间
+    created_at = Column(DateTime, default=datetime.utcnow)
+    user_agent = Column(String)  # 浏览器信息
+    ip_address = Column(String)  # IP地址
+    is_active = Column(Boolean, default=True)
+    
+    # Relationships
+    user = relationship("User", back_populates="sessions")
+
+
+class Department(Base):
+    """部门模型"""
+    __tablename__ = "departments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    dept_id = Column(Integer, unique=True, index=True)  # 企业微信部门ID
+    name = Column(String, index=True)  # 部门名称
+    parent_id = Column(Integer)  # 上级部门ID
+    order = Column(Integer, default=0)  # 排序
+    is_allowed = Column(Boolean, default=False)  # 是否允许访问系统
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

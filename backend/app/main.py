@@ -3,6 +3,8 @@ import os
 import hashlib
 import base64
 import struct
+import time
+import random
 import xml.etree.ElementTree as ET
 from typing import Optional
 
@@ -16,6 +18,7 @@ from pydantic import ValidationError
 from Crypto.Cipher import AES
 from app.database import engine, Base
 from app.api.v1.api import api_router
+from app.auth_routes import router as auth_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.exceptions import (
@@ -24,6 +27,8 @@ from app.core.exceptions import (
     validation_exception_handler,
     general_exception_handler
 )
+from app.wecom_message_handler import MessageHandler
+from app.wecom_crypto import encrypt_msg, decrypt_msg, generate_signature, verify_signature
 
 # 设置日志
 logger = setup_logging()
@@ -55,11 +60,16 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(auth_router)
 
 # 企业微信配置
 WECOM_TOKEN = os.getenv("WECOM_TOKEN", "")
 WECOM_AES_KEY = os.getenv("WECOM_AES_KEY", "")
 WECOM_CORP_ID = os.getenv("WECOM_CORP_ID", "")
+
+# 设置环境变量供认证模块使用
+os.environ["WECOM_AGENT_ID"] = "1000029"
+os.environ["WECOM_CORP_SECRET"] = "Q_JcyrQIsTcBJON2S3JPFqTvrjVi-zHJDXFVQ2pYqNg"
 
 def pkcs7_unpad(data: bytes) -> bytes:
     """移除 PKCS#7 填充"""
@@ -194,8 +204,28 @@ async def wecom_callback_event(
         # 打印解密后的XML
         logger.info(f"Decrypted XML:\n{plaintext_xml}")
         
-        # 返回success表示成功接收
-        return Response(content="success", media_type="text/plain")
+        # 处理消息并生成回复
+        handler = MessageHandler(WECOM_CORP_ID)
+        reply_xml = handler.process_message(plaintext_xml)
+        
+        # 加密回复消息
+        encrypted_reply = encrypt_msg(reply_xml, WECOM_AES_KEY, WECOM_CORP_ID)
+        
+        # 生成签名
+        reply_nonce = str(random.randint(100000000, 999999999))
+        reply_timestamp = str(int(time.time()))
+        reply_signature = generate_signature(WECOM_TOKEN, reply_timestamp, reply_nonce, encrypted_reply)
+        
+        # 构造加密的回复XML
+        response_xml = f"""<xml>
+    <Encrypt><![CDATA[{encrypted_reply}]]></Encrypt>
+    <MsgSignature><![CDATA[{reply_signature}]]></MsgSignature>
+    <TimeStamp>{reply_timestamp}</TimeStamp>
+    <Nonce><![CDATA[{reply_nonce}]]></Nonce>
+</xml>"""
+        
+        logger.info(f"Sending encrypted reply")
+        return Response(content=response_xml, media_type="application/xml")
     
     except ET.ParseError as e:
         logger.error(f"XML parsing failed: {str(e)}")

@@ -1,12 +1,14 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, Button } from 'antd';
-import { HomeOutlined, DatabaseOutlined, ApiOutlined, CalculatorOutlined, BarChartOutlined } from '@ant-design/icons';
+import { Menu, Button, Dropdown, Avatar, Space } from 'antd';
+import { HomeOutlined, DatabaseOutlined, ApiOutlined, CalculatorOutlined, BarChartOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+import { useAuth } from '../contexts/AuthContext';
 import HelpModal from './HelpModal';
 
 const Navigation = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth();
   
   const menuItems = [
     {
@@ -44,6 +46,23 @@ const Navigation = () => {
   const handleMenuClick = ({ key }) => {
     navigate(key);
   };
+
+  const userMenuItems = [
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: `${user?.name || '用户'} (${user?.role === 'admin' ? '管理员' : '普通用户'})`,
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: '退出登录',
+      onClick: logout,
+    },
+  ];
 
   return (
     <div style={{ 
@@ -83,7 +102,7 @@ const Navigation = () => {
         }}
       />
 
-      {/* Quick Actions */}
+      {/* Quick Actions and User Menu */}
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
         <HelpModal />
         <Button 
@@ -93,6 +112,18 @@ const Navigation = () => {
         >
           快速报价
         </Button>
+        
+        {/* User Dropdown */}
+        <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+          <Space style={{ cursor: 'pointer', color: 'white' }}>
+            <Avatar 
+              size="small" 
+              src={user?.avatar} 
+              icon={<UserOutlined />}
+            />
+            <span>{user?.name || '用户'}</span>
+          </Space>
+        </Dropdown>
       </div>
     </div>
   );
