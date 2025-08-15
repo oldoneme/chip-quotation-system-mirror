@@ -64,14 +64,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 添加防缓存中间件
+# 智能缓存中间件
 @app.middleware("http")
-async def add_no_cache_headers(request: Request, call_next):
+async def smart_cache_headers(request: Request, call_next):
     response = await call_next(request)
-    # 为所有响应添加防缓存头
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
+    path = request.url.path
+    
+    # HTML文件不缓存（确保每次都获取最新版本）
+    if path == "/" or path.endswith(".html"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["X-Content-Type"] = "HTML"
+    
+    # 带哈希的静态资源长缓存（immutable，1年）
+    elif "/static/" in path and any(path.endswith(ext) for ext in [".js", ".css", ".png", ".jpg", ".svg", ".woff2", ".woff", ".ttf"]):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        response.headers["X-Content-Type"] = "Static"
+    
+    # API接口不缓存
+    elif path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["X-Content-Type"] = "API"
+    
+    # 其他资源短缓存（5分钟）
+    else:
+        response.headers["Cache-Control"] = "public, max-age=300"
+        response.headers["X-Content-Type"] = "Other"
+    
     # 添加版本标识
     response.headers["X-App-Version"] = "2024.8.14.2340"
     return response
