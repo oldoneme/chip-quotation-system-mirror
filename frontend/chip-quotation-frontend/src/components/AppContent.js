@@ -9,6 +9,10 @@ import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import QuoteTypeSelection from '../pages/QuoteTypeSelection';
 import EngineeringQuote from '../pages/EngineeringQuote';
 import MassProductionQuote from '../pages/MassProductionQuote';
+import InquiryQuote from '../pages/InquiryQuote';
+import ToolingQuote from '../pages/ToolingQuote';
+import ProcessQuote from '../pages/ProcessQuote';
+import ComprehensiveQuote from '../pages/ComprehensiveQuote';
 import QuoteResult from '../pages/QuoteResult';
 import DatabaseManagement from '../pages/DatabaseManagement';
 import HierarchicalDatabaseManagement from '../pages/HierarchicalDatabaseManagement';
@@ -49,6 +53,11 @@ const AppContent = () => {
               <Breadcrumb />
               <Routes>
                 <Route path="/" element={<QuoteTypeSelection />} />
+                <Route path="/quote-type-selection" element={<QuoteTypeSelection />} />
+                <Route path="/inquiry-quote" element={<InquiryQuote />} />
+                <Route path="/tooling-quote" element={<ToolingQuote />} />
+                <Route path="/process-quote" element={<ProcessQuote />} />
+                <Route path="/comprehensive-quote" element={<ComprehensiveQuote />} />
                 <Route path="/engineering-quote" element={<EngineeringQuote />} />
                 <Route path="/mass-production-quote" element={<MassProductionQuote />} />
                 <Route path="/quote-result" element={<QuoteResult />} />
