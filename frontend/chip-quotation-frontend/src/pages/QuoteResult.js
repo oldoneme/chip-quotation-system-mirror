@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Table, Button, Card, Divider, message } from 'antd';
-import { formatNumber } from '../utils';
+import { formatNumber, formatHourlyRate } from '../utils';
 import '../App.css';
 
 const QuoteResult = () => {
@@ -9,9 +9,27 @@ const QuoteResult = () => {
   const navigate = useNavigate();
   const [quoteData, setQuoteData] = useState(null);
 
+  // 货币配置
+  const currencies = [
+    { value: 'CNY', label: '人民币 (CNY)', symbol: '￥' },
+    { value: 'USD', label: '美元 (USD)', symbol: '$' },
+    { value: 'EUR', label: '欧元 (EUR)', symbol: '€' }
+  ];
+
   // 格式化价格显示（包含币种符号）
   const formatPrice = (number) => {
     const formattedNumber = formatNumber(number);
+    const currency = quoteData?.quoteCurrency || 'CNY';
+    if (currency === 'USD') {
+      return `$${formattedNumber}`;
+    } else {
+      return `¥${formattedNumber}`;
+    }
+  };
+
+  // 格式化机时价格显示（包含币种符号，精确到个位）
+  const formatHourlyPrice = (number) => {
+    const formattedNumber = formatHourlyRate(number);
     const currency = quoteData?.quoteCurrency || 'CNY';
     if (currency === 'USD') {
       return `$${formattedNumber}`;
@@ -141,6 +159,25 @@ const QuoteResult = () => {
     return rate;
   };
   
+  // 计算单个工序的板卡成本（用于工序报价）
+  const calculateProcessCardCost = (process, cardTypes) => {
+    if (!process.machineData || !process.cardQuantities || !cardTypes) return 0;
+    
+    let cardCost = 0;
+    Object.entries(process.cardQuantities).forEach(([cardId, quantity]) => {
+      const card = cardTypes.find(c => c.id === parseInt(cardId));
+      if (card && quantity > 0) {
+        // 板卡单价除以10000（从数据库存储格式转换），再乘以数量，再除以UPH得到单颗成本
+        const cardUnitPrice = (card.unit_price || 0) / 10000;
+        const cardHourlyCost = cardUnitPrice * quantity;
+        const cardUnitCost = process.uph > 0 ? cardHourlyCost / process.uph : 0;
+        cardCost += cardUnitCost;
+      }
+    });
+    
+    return cardCost;
+  };
+
   // 计算辅助设备费用（不乘以工程系数）
   const calculateAuxDeviceCost = () => {
     if (!quoteData || !quoteData.selectedAuxDevices || !quoteData.cardTypes) return 0;
@@ -234,15 +271,15 @@ const QuoteResult = () => {
               {/* 设备费用 */}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span>测试机机时费（含工程系数）:</span>
-                <span>{formatPrice(calculateTestMachineCost())}</span>
+                <span>{formatHourlyPrice(calculateTestMachineCost())}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span>分选机机时费（含工程系数）:</span>
-                <span>{formatPrice(calculateHandlerCost())}</span>
+                <span>{formatHourlyPrice(calculateHandlerCost())}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span>探针台机时费（含工程系数）:</span>
-                <span>{formatPrice(calculateProberCost())}</span>
+                <span>{formatHourlyPrice(calculateProberCost())}</span>
               </div>
               
               {/* 辅助设备费用 */}
@@ -286,13 +323,13 @@ const QuoteResult = () => {
               {quoteData.selectedPersonnel && quoteData.selectedPersonnel.includes('工程师') && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span>工程师小时费:</span>
-                  <span>{formatPrice(calculateEngineerCost())}</span>
+                  <span>{formatHourlyPrice(calculateEngineerCost())}</span>
                 </div>
               )}
               {quoteData.selectedPersonnel && quoteData.selectedPersonnel.includes('技术员') && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span>技术员小时费:</span>
-                  <span>{formatPrice(calculateTechnicianCost())}</span>
+                  <span>{formatHourlyPrice(calculateTechnicianCost())}</span>
                 </div>
               )}
             </>
@@ -331,7 +368,7 @@ const QuoteResult = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>机时费率（含询价系数 {quoteData.inquiryFactor || 1.5}）:</span>
                       <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                        {formatPrice(machine.hourlyRate || 0)}/小时
+                        {formatHourlyPrice(machine.hourlyRate || 0)}/小时
                       </span>
                     </div>
                     {machine.selectedCards && machine.selectedCards.length > 0 && (
@@ -344,7 +381,7 @@ const QuoteResult = () => {
               </div>
               
               <div style={{ marginBottom: 20, fontSize: '18px', fontWeight: 'bold', textAlign: 'right', color: '#1890ff' }}>
-                总机时费率: {formatPrice(quoteData.totalHourlyRate || 0)}/小时
+                总机时费率: {formatHourlyPrice(quoteData.totalHourlyRate || 0)}/小时
               </div>
               
               {quoteData.remarks && (
@@ -485,8 +522,6 @@ const QuoteResult = () => {
                   <div>项目名称: {quoteData.projectInfo?.projectName || '-'}</div>
                   <div>芯片封装: {quoteData.projectInfo?.chipPackage || '-'}</div>
                   <div>测试类型: {quoteData.projectInfo?.testType || '-'}</div>
-                  <div>年产量: {quoteData.projectInfo?.volume ? `${quoteData.projectInfo.volume.toLocaleString()} 颗` : '-'}</div>
-                  <div>交期计划: {quoteData.projectInfo?.deliverySchedule || '-'}</div>
                 </div>
               </div>
               
@@ -513,16 +548,41 @@ const QuoteResult = () => {
                           <div>设备型号: {process.machine || '-'}</div>
                           <div>单位产能: {process.uph || 0} UPH</div>
                           <div style={{ gridColumn: '1 / -1', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e8e8e8' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                              <span>单颗成本:</span>
-                              <span style={{ color: '#52c41a' }}>{formatPrice(process.unitCost || 0)}</span>
-                            </div>
+                            {(() => {
+                              const laborCost = process.unitCost || 0;
+                              const cardCost = calculateProcessCardCost(process, quoteData.cardTypes);
+                              const totalCost = laborCost + cardCost;
+                              return (
+                                <div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                                    <span>单颗成本:</span>
+                                    <span style={{ color: '#52c41a' }}>{formatPrice(totalCost)}</span>
+                                  </div>
+                                  {cardCost > 0 && (
+                                    <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>  - 人工成本:</span>
+                                        <span>{formatPrice(laborCost)}</span>
+                                      </div>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>  - 板卡成本:</span>
+                                        <span>{formatPrice(cardCost)}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
                     ))}
                     <div style={{ textAlign: 'right', marginTop: 10, fontSize: '16px', fontWeight: 'bold', color: '#52c41a' }}>
-                      CP工序小计: {formatPrice(quoteData.cpProcesses.reduce((sum, p) => sum + (p.unitCost || 0), 0))}
+                      CP工序小计: {formatPrice(quoteData.cpProcesses.reduce((sum, p) => {
+                        const laborCost = p.unitCost || 0;
+                        const cardCost = calculateProcessCardCost(p, quoteData.cardTypes);
+                        return sum + laborCost + cardCost;
+                      }, 0))}
                     </div>
                   </div>
                 )}
@@ -547,16 +607,41 @@ const QuoteResult = () => {
                           <div>设备型号: {process.machine || '-'}</div>
                           <div>单位产能: {process.uph || 0} UPH</div>
                           <div style={{ gridColumn: '1 / -1', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e8e8e8' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                              <span>单颗成本:</span>
-                              <span style={{ color: '#1890ff' }}>{formatPrice(process.unitCost || 0)}</span>
-                            </div>
+                            {(() => {
+                              const laborCost = process.unitCost || 0;
+                              const cardCost = calculateProcessCardCost(process, quoteData.cardTypes);
+                              const totalCost = laborCost + cardCost;
+                              return (
+                                <div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                                    <span>单颗成本:</span>
+                                    <span style={{ color: '#1890ff' }}>{formatPrice(totalCost)}</span>
+                                  </div>
+                                  {cardCost > 0 && (
+                                    <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>  - 人工成本:</span>
+                                        <span>{formatPrice(laborCost)}</span>
+                                      </div>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>  - 板卡成本:</span>
+                                        <span>{formatPrice(cardCost)}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
                     ))}
                     <div style={{ textAlign: 'right', marginTop: 10, fontSize: '16px', fontWeight: 'bold', color: '#1890ff' }}>
-                      FT工序小计: {formatPrice(quoteData.ftProcesses.reduce((sum, p) => sum + (p.unitCost || 0), 0))}
+                      FT工序小计: {formatPrice(quoteData.ftProcesses.reduce((sum, p) => {
+                        const laborCost = p.unitCost || 0;
+                        const cardCost = calculateProcessCardCost(p, quoteData.cardTypes);
+                        return sum + laborCost + cardCost;
+                      }, 0))}
                     </div>
                   </div>
                 )}
@@ -588,6 +673,173 @@ const QuoteResult = () => {
               )}
             </>
           )}
+
+          {/* 综合报价显示 */}
+          {quoteData && quoteData.type === '综合报价' && (
+            <>
+              <div style={{ marginBottom: 20 }}>
+                <h3>报价方案类型</h3>
+                <div style={{ padding: '15px', background: '#f5f5f5', borderRadius: '4px', marginBottom: '15px' }}>
+                  <strong>
+                    {quoteData.quoteType === 'package' ? '套餐定价方案' :
+                     quoteData.quoteType === 'volume' ? '分级定价方案' :
+                     quoteData.quoteType === 'time' ? '合约定价方案' : '自定义方案'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* 套餐定价显示 */}
+              {quoteData.quoteType === 'package' && quoteData.packages && (
+                <div style={{ marginBottom: 20 }}>
+                  <h4>套餐配置</h4>
+                  {quoteData.packages.map((pkg, index) => (
+                    <div key={index} style={{ 
+                      padding: '12px', 
+                      marginBottom: '10px', 
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '4px',
+                      background: '#fafafa'
+                    }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{pkg.name}</div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>{pkg.description}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>服务内容: {pkg.services.join(', ')}</span>
+                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                          {currencies.find(c => c.value === quoteData.currency)?.symbol}{pkg.price}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 分级定价显示 */}
+              {quoteData.quoteType === 'volume' && quoteData.volumeTiers && (
+                <div style={{ marginBottom: 20 }}>
+                  <h4>数量分级定价</h4>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#fafafa' }}>
+                        <th style={{ padding: '8px', border: '1px solid #d9d9d9', textAlign: 'left' }}>数量范围</th>
+                        <th style={{ padding: '8px', border: '1px solid #d9d9d9', textAlign: 'right' }}>单价</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quoteData.volumeTiers.map((tier, index) => (
+                        <tr key={index}>
+                          <td style={{ padding: '8px', border: '1px solid #d9d9d9' }}>
+                            {tier.minQty} - {tier.maxQty || '以上'}
+                          </td>
+                          <td style={{ padding: '8px', border: '1px solid #d9d9d9', textAlign: 'right' }}>
+                            {currencies.find(c => c.value === quoteData.currency)?.symbol}{tier.unitPrice}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 合约定价显示 */}
+              {quoteData.quoteType === 'time' && quoteData.timeContracts && (
+                <div style={{ marginBottom: 20 }}>
+                  <h4>合约期限定价</h4>
+                  {quoteData.timeContracts.map((contract, index) => (
+                    <div key={index} style={{ 
+                      padding: '12px', 
+                      marginBottom: '10px', 
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '4px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span><strong>{contract.duration}个月合约</strong></span>
+                        <span>折扣: {contract.discount}%</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>月费: {currencies.find(c => c.value === quoteData.currency)?.symbol}{contract.monthlyRate}</span>
+                        <span style={{ fontWeight: 'bold', color: '#52c41a' }}>
+                          总价: {currencies.find(c => c.value === quoteData.currency)?.symbol}
+                          {(contract.monthlyRate * contract.duration * (1 - contract.discount / 100)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 自定义方案显示 */}
+              {quoteData.quoteType === 'custom' && quoteData.customTerms && (
+                <div style={{ marginBottom: 20 }}>
+                  <h4>自定义条款</h4>
+                  {quoteData.customTerms.map((term, index) => (
+                    <div key={index} style={{ 
+                      padding: '12px', 
+                      marginBottom: '10px', 
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '4px'
+                    }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{term.name}</div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>{term.description}</div>
+                      <div style={{ textAlign: 'right', fontWeight: 'bold', color: '#1890ff' }}>
+                        {currencies.find(c => c.value === quoteData.currency)?.symbol}{term.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 协议条款 */}
+              {quoteData.agreementTerms && (
+                <div style={{ marginBottom: 20 }}>
+                  <h4>协议条款</h4>
+                  <div style={{ padding: '12px', background: '#f9f9f9', borderRadius: '4px' }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>有效期：</strong> {quoteData.agreementTerms.validityPeriod}天
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>付款条件：</strong> 
+                      {quoteData.agreementTerms.paymentTerms === '30_days' ? '30天' :
+                       quoteData.agreementTerms.paymentTerms === '60_days' ? '60天' :
+                       quoteData.agreementTerms.paymentTerms === '90_days' ? '90天' :
+                       quoteData.agreementTerms.paymentTerms === 'prepaid' ? '预付款' : '货到付款'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>交付条款：</strong> 
+                      {quoteData.agreementTerms.deliveryTerms === 'standard' ? '标准交付' :
+                       quoteData.agreementTerms.deliveryTerms === 'expedited' ? '加急交付' :
+                       quoteData.agreementTerms.deliveryTerms === 'scheduled' ? '计划交付' : '灵活交付'}
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>质保期：</strong> {quoteData.agreementTerms.warrantyPeriod}天
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 价格汇总 */}
+              <div style={{ marginBottom: 20 }}>
+                <h4>价格汇总</h4>
+                <div style={{ padding: '15px', background: '#e6f7ff', borderRadius: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 'bold', color: '#1890ff' }}>
+                    <span>最终报价：</span>
+                    <span>
+                      {currencies.find(c => c.value === quoteData.currency)?.symbol}
+                      {quoteData.calculatedTotals?.finalTotal?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {quoteData.remarks && (
+                <div style={{ marginBottom: 20 }}>
+                  <h4>备注说明</h4>
+                  <div style={{ paddingLeft: 15, color: '#666', fontStyle: 'italic' }}>
+                    {quoteData.remarks}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
           
           {quoteData && quoteData.type === '量产报价' && (
             <>
@@ -595,13 +847,13 @@ const QuoteResult = () => {
                 {quoteData.selectedTypes && quoteData.selectedTypes.includes('ft') && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                     <span>FT小时费:</span>
-                    <span>{formatPrice(quoteData.ftHourlyFee || 0)}</span>
+                    <span>{formatHourlyPrice(quoteData.ftHourlyFee || 0)}</span>
                   </div>
                 )}
                 {quoteData.selectedTypes && quoteData.selectedTypes.includes('cp') && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                     <span>CP小时费:</span>
-                    <span>{formatPrice(quoteData.cpHourlyFee || 0)}</span>
+                    <span>{formatHourlyPrice(quoteData.cpHourlyFee || 0)}</span>
                   </div>
                 )}
                 {quoteData.selectedAuxDevices && quoteData.selectedAuxDevices.length > 0 && (
@@ -631,7 +883,7 @@ const QuoteResult = () => {
                             {device.name}
                             {typeName && ` (${typeName})`}
                           </span>
-                          <span>{formatPrice(calculateSingleAuxDeviceCost(device))}/小时</span>
+                          <span>{formatHourlyPrice(calculateSingleAuxDeviceCost(device))}/小时</span>
                         </div>
                       );
                     })}

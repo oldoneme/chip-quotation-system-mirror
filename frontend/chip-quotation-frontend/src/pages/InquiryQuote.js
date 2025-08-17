@@ -4,7 +4,7 @@ import { Table, InputNumber } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
-import { formatNumber } from '../utils';
+import { formatNumber, formatHourlyRate } from '../utils';
 import '../App.css';
 
 const InquiryQuote = () => {
@@ -248,18 +248,25 @@ const InquiryQuote = () => {
 
   // 处理板卡数量变化
   const handleCardQuantityChange = (machineId, cardId, quantity) => {
-    const key = `${machineId}_${cardId}`;
-    setPersistedCardQuantities(prev => ({
-      ...prev,
+    // 找到对应的机器数据，使用真实的机器数据库ID
+    const machine = formData.machines.find(m => m.id === machineId);
+    const realMachineId = machine?.machineData?.id || machineId;
+    const key = `${realMachineId}_${cardId}`;
+    
+    // 创建新的数量状态
+    const newPersistedCardQuantities = {
+      ...persistedCardQuantities,
       [key]: quantity
-    }));
+    };
+    
+    setPersistedCardQuantities(newPersistedCardQuantities);
 
-    // 重新计算机器费率
+    // 重新计算机器费率 - 使用新的数量状态
     setFormData(prev => ({
       ...prev,
       machines: prev.machines.map(machine => {
         if (machine.id === machineId) {
-          const hourlyRate = calculateMachineHourlyRate(machine.machineData, machine.selectedCards);
+          const hourlyRate = calculateMachineHourlyRateWithQuantities(machine.machineData, machine.selectedCards, newPersistedCardQuantities);
           return {
             ...machine,
             hourlyRate: hourlyRate
@@ -270,14 +277,19 @@ const InquiryQuote = () => {
     }));
   };
 
-  // 计算机器小时费率（基于选中的板卡）
+  // 计算机器小时费率（基于选中的板卡）- 使用当前状态的数量
   const calculateMachineHourlyRate = (machineData, selectedCards) => {
+    return calculateMachineHourlyRateWithQuantities(machineData, selectedCards, persistedCardQuantities);
+  };
+
+  // 计算机器小时费率（基于选中的板卡）- 可指定数量状态
+  const calculateMachineHourlyRateWithQuantities = (machineData, selectedCards, quantities) => {
     if (!machineData || !selectedCards || selectedCards.length === 0) {
       return 0;
     }
 
     const totalCardCost = selectedCards.reduce((sum, card) => {
-      const quantity = persistedCardQuantities[`${machineData.id}_${card.id}`] || 1;
+      const quantity = quantities[`${machineData.id}_${card.id}`] || 1;
       let adjustedPrice = card.unit_price / 10000; // 转换为万元
       
       // 根据币种转换
@@ -305,26 +317,39 @@ const InquiryQuote = () => {
     return `${symbol}${formattedNumber}`;
   };
 
+  // 格式化机时价格显示（包含币种符号，精确到个位）
+  const formatHourlyPrice = (number) => {
+    const formattedNumber = formatHourlyRate(number);
+    const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
+    return `${symbol}${formattedNumber}`;
+  };
+
   // 板卡表格列定义
-  const cardColumns = (machineId) => [
-    { title: 'Part Number', dataIndex: 'part_number' },
-    { title: 'Board Name', dataIndex: 'board_name' },
-    { 
-      title: 'Unit Price', 
-      dataIndex: 'unit_price',
-      render: (value) => formatNumber(value || 0)
-    },
-    { 
-      title: 'Quantity', 
-      render: (_, record) => (
-        <InputNumber 
-          min={1} 
-          defaultValue={persistedCardQuantities[`${machineId}_${record.id}`] || 1}
-          onChange={(value) => handleCardQuantityChange(machineId, record.id, value)}
-        />
-      ) 
-    }
-  ];
+  const cardColumns = (machineId) => {
+    // 获取真实的机器数据库ID
+    const machine = formData.machines.find(m => m.id === machineId);
+    const realMachineId = machine?.machineData?.id || machineId;
+    
+    return [
+      { title: 'Part Number', dataIndex: 'part_number' },
+      { title: 'Board Name', dataIndex: 'board_name' },
+      { 
+        title: 'Unit Price', 
+        dataIndex: 'unit_price',
+        render: (value) => formatNumber(value || 0)
+      },
+      { 
+        title: 'Quantity', 
+        render: (_, record) => (
+          <InputNumber 
+            min={1} 
+            value={persistedCardQuantities[`${realMachineId}_${record.id}`] || 1}
+            onChange={(value) => handleCardQuantityChange(machineId, record.id, value)}
+          />
+        ) 
+      }
+    ];
+  };
 
   const handleInputChange = (section, field, value) => {
     setFormData(prev => ({
@@ -535,7 +560,7 @@ const InquiryQuote = () => {
               <div className="form-group">
                 <label>机时费率</label>
                 <div className="rate-display">
-                  {currencies.find(c => c.value === formData.currency)?.symbol} {machine.hourlyRate}/小时
+                  {formatHourlyPrice(machine.hourlyRate)}/小时
                 </div>
               </div>
             </div>
@@ -619,8 +644,7 @@ const InquiryQuote = () => {
         <div className="summary-item">
           <span>总机时费率：</span>
           <span className="summary-value">
-            {currencies.find(c => c.value === formData.currency)?.symbol} 
-            {formData.machines.reduce((sum, machine) => sum + machine.hourlyRate, 0)}/小时
+            {formatHourlyPrice(formData.machines.reduce((sum, machine) => sum + machine.hourlyRate, 0))}/小时
           </span>
         </div>
       </div>

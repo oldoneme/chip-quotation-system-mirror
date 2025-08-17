@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
+import { formatHourlyRate } from '../utils';
 import '../App.css';
 
 const ComprehensiveQuote = () => {
@@ -273,7 +274,9 @@ const ComprehensiveQuote = () => {
 
   const handleSubmit = () => {
     const quoteData = {
-      type: 'comprehensive',
+      type: '综合报价',
+      number: `CQ-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`,
+      date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       ...formData,
       calculatedTotals: {
         packageTotal: calculatePackageTotal(),
@@ -285,7 +288,7 @@ const ComprehensiveQuote = () => {
       generatedAt: new Date().toISOString()
     };
 
-    navigate('/quote-result', { state: { quoteData } });
+    navigate('/quote-result', { state: quoteData });
   };
 
   const handleBack = () => {
@@ -478,7 +481,8 @@ const ComprehensiveQuote = () => {
                     <div className="service-info">
                       <span className="service-name">{service.name}</span>
                       <span className="service-price">
-                        {currencies.find(c => c.value === formData.currency)?.symbol}{service.basePrice}/{service.unit}
+                        {currencies.find(c => c.value === formData.currency)?.symbol}
+                        {service.unit === '小时' ? formatHourlyRate(service.basePrice) : service.basePrice}/{service.unit}
                       </span>
                     </div>
                   </label>

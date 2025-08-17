@@ -1,11 +1,25 @@
 import api from './api';
+import dataCache from './dataCache';
 
 // 获取所有配置列表
 export const getConfigurations = async () => {
+  const cacheKey = 'configurations_list';
+  
+  // 先检查缓存
+  const cachedData = dataCache.get(cacheKey);
+  if (cachedData) {
+    console.log('Returning configurations from cache');
+    return cachedData;
+  }
+
   try {
     console.log('Fetching configurations from API...');
     const response = await api.get('/configurations/');
     console.log('Configurations fetched successfully:', response.data);
+    
+    // 保存到缓存
+    dataCache.set(cacheKey, response.data);
+    
     return response.data;
   } catch (error) {
     console.error('Error fetching configurations:', error);

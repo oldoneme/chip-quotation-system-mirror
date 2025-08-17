@@ -1,11 +1,25 @@
 import api from './api';
+import dataCache from './dataCache';
 
 // 获取所有板卡配置列表
 export const getCardTypes = async () => {
+  const cacheKey = 'card_types_list';
+  
+  // 先检查缓存
+  const cachedData = dataCache.get(cacheKey);
+  if (cachedData) {
+    console.log('Returning card types from cache');
+    return cachedData;
+  }
+
   try {
     console.log('Fetching card configs from API...');
     const response = await api.get('/card-configs/');
     console.log('Card configs fetched successfully:', response.data);
+    
+    // 保存到缓存
+    dataCache.set(cacheKey, response.data);
+    
     return response.data;
   } catch (error) {
     console.error('Error fetching card configs:', error);

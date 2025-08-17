@@ -17,3 +17,13 @@ export const formatNumber = (num) => {
 export const formatCurrency = (amount, currency = '¥') => {
   return `${currency}${formatNumber(amount)}`;
 };
+
+/**
+ * 格式化机时价格，精确到个位（无小数位）
+ * @param {number} num - 需要格式化的数字
+ * @returns {string} 格式化后的字符串，例如: 1,234
+ */
+export const formatHourlyRate = (num) => {
+  if (num === null || num === undefined) return '0';
+  return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};

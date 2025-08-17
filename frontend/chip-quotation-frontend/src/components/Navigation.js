@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, Button, Dropdown, Avatar, Space, Drawer } from 'antd';
-import { HomeOutlined, DatabaseOutlined, ApiOutlined, CalculatorOutlined, BarChartOutlined, UserOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
+import { HomeOutlined, DatabaseOutlined, CalculatorOutlined, BarChartOutlined, SearchOutlined, SettingOutlined, UnorderedListOutlined, AppstoreOutlined, ToolOutlined, UserOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import HelpModal from './HelpModal';
 
@@ -30,29 +30,39 @@ const Navigation = () => {
       label: '首页',
     },
     {
+      key: '/inquiry-quote',
+      icon: <SearchOutlined />,
+      label: '询价报价',
+    },
+    {
+      key: '/tooling-quote',
+      icon: <ToolOutlined />,
+      label: '工装夹具报价',
+    },
+    {
       key: '/engineering-quote',
       icon: <CalculatorOutlined />,
-      label: '工程报价',
+      label: '工程机时报价',
     },
     {
       key: '/mass-production-quote',
       icon: <BarChartOutlined />,
-      label: '量产报价',
+      label: '量产机时报价',
+    },
+    {
+      key: '/process-quote',
+      icon: <UnorderedListOutlined />,
+      label: '量产工序报价',
+    },
+    {
+      key: '/comprehensive-quote',
+      icon: <SettingOutlined />,
+      label: '综合报价',
     },
     {
       key: '/hierarchical-database-management',
       icon: <DatabaseOutlined />,
       label: '数据库管理',
-    },
-    {
-      key: '/api-test',
-      icon: <ApiOutlined />,
-      label: 'API测试',
-    },
-    {
-      key: '/api-test-simple',
-      icon: <ApiOutlined />,
-      label: 'API简单测试',
     },
   ];
 
@@ -89,38 +99,6 @@ const Navigation = () => {
         borderBottom: '1px solid #f0f0f0',
         minHeight: isMobile ? '50px' : '64px'
       }}>
-        {/* Logo and Title */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-          {/* 显示企业微信用户信息 - 移动端隐藏 */}
-          {!isMobile && user && user.name && sessionStorage.getItem('wework_authenticated') === 'true' && (
-            <div style={{ 
-              color: '#1890ff', 
-              fontSize: '0.7rem', 
-              marginBottom: '1px',
-              fontWeight: 'normal',
-              whiteSpace: 'nowrap',
-              lineHeight: 1.2
-            }}>
-              企业微信用户：{user.name} ({user.role === 'admin' ? '管理员' : '普通用户'})
-            </div>
-          )}
-          <div 
-            style={{ 
-              color: 'white', 
-              fontSize: isMobile ? '1rem' : '1.5rem',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: isMobile ? '150px' : 'auto'
-            }}
-            onClick={() => navigate('/')}
-          >
-            芯片测试报价系统
-          </div>
-        </div>
-
         {/* Desktop Navigation Menu */}
         {!isMobile && (
           <Menu
@@ -141,13 +119,6 @@ const Navigation = () => {
         {!isMobile && (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <HelpModal />
-            <Button 
-              type="primary" 
-              size="small"
-              onClick={() => navigate('/engineering-quote')}
-            >
-              快速报价
-            </Button>
             
             {/* User Dropdown */}
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
@@ -218,17 +189,6 @@ const Navigation = () => {
 
         {/* Mobile Quick Actions */}
         <div style={{ padding: '16px', borderTop: '1px solid #f0f0f0', marginTop: '16px' }}>
-          <Button 
-            type="primary" 
-            block
-            onClick={() => {
-              navigate('/engineering-quote');
-              setDrawerVisible(false);
-            }}
-            style={{ marginBottom: '8px' }}
-          >
-            快速报价
-          </Button>
           <HelpModal />
           <Button 
             danger

@@ -16,8 +16,6 @@ import ComprehensiveQuote from '../pages/ComprehensiveQuote';
 import QuoteResult from '../pages/QuoteResult';
 import DatabaseManagement from '../pages/DatabaseManagement';
 import HierarchicalDatabaseManagement from '../pages/HierarchicalDatabaseManagement';
-import ApiTest from '../pages/ApiTest';
-import ApiTestSimple from '../pages/ApiTestSimple';
 
 const { Header, Content, Footer } = Layout;
 
@@ -63,8 +61,6 @@ const AppContent = () => {
                 <Route path="/quote-result" element={<QuoteResult />} />
                 <Route path="/database-management" element={<DatabaseManagement />} />
                 <Route path="/hierarchical-database-management" element={<HierarchicalDatabaseManagement />} />
-                <Route path="/api-test" element={<ApiTest />} />
-                <Route path="/api-test-simple" element={<ApiTestSimple />} />
               </Routes>
             </ErrorBoundary>
           </div>
