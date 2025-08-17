@@ -42,13 +42,13 @@ const QuoteTypeSelection = () => {
     <div className="quote-type-container">
       {/* 页面标题区域 */}
       <div className="page-header">
-        <h1 className="main-title">芯片测试小时费率报价系统</h1>
+        <h1 className="main-title">芯片测试报价系统</h1>
         <p className="sub-title">快速生成专业的芯片测试服务报价</p>
       </div>
 
       {/* 第一阶段：未合作阶段询价 */}
       <div className="quote-section">
-        <h2 className="section-title">📋 第一阶段：未合作阶段询价</h2>
+        <h2 className="section-title">📋 初步询价</h2>
         <p className="stage-description">初步接触，快速了解价格范围</p>
         <div className="quote-type-cards">
           {/* 询价报价卡片 */}
@@ -66,7 +66,7 @@ const QuoteTypeSelection = () => {
 
       {/* 第二阶段：待合作阶段机时报价 */}
       <div className="quote-section">
-        <h2 className="section-title">⚡ 第二阶段：待合作阶段机时报价</h2>
+        <h2 className="section-title">⚡ 机时报价</h2>
         <p className="stage-description">项目确定，详细技术方案和成本评估</p>
         <div className="quote-type-cards">
           {/* 工装夹具报价卡片 */}
@@ -106,7 +106,7 @@ const QuoteTypeSelection = () => {
 
       {/* 第三阶段：合作阶段量产报价 */}
       <div className="quote-section">
-        <h2 className="section-title">🏭 第三阶段：合作阶段量产报价</h2>
+        <h2 className="section-title">🏭 量产单颗报价</h2>
         <p className="stage-description">长期合作，规模化生产和协议式定价</p>
         <div className="quote-type-cards">
           {/* 量产工序报价卡片 */}

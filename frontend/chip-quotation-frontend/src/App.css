@@ -7,6 +7,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f0f2f5;
+  /* 移动端优化 */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 企业微信和移动端触摸优化 */
+a, button, .ant-btn {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
 }
 
 /* 页面容器 */

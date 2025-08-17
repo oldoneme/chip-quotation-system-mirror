@@ -94,20 +94,36 @@ async def get_current_user_info(
 @router.get("/auth/login")
 async def login(
     request: Request,
-    redirect_url: Optional[str] = None
+    redirect_url: Optional[str] = None,
+    from_source: Optional[str] = None,
+    mobile: Optional[str] = None
 ):
     """发起OAuth登录"""
     wecom = WeComOAuth()
     
-    # 生成状态参数（可以包含重定向URL）
+    # 获取用户代理信息，用于判断移动端
+    user_agent = request.headers.get("user-agent", "").lower()
+    is_mobile = mobile == "1" or any(device in user_agent for device in [
+        "android", "iphone", "ipad", "ipod", "blackberry", "iemobile", "opera mini"
+    ])
+    is_wecom = from_source == "wecom" or "wxwork" in user_agent or "micromessenger" in user_agent
+    
+    # 生成状态参数（包含环境信息）
     state_data = {
         "timestamp": datetime.now().isoformat(),
-        "redirect_url": redirect_url or "/"
+        "redirect_url": redirect_url or "/",
+        "is_mobile": is_mobile,
+        "is_wecom": is_wecom,
+        "user_agent": user_agent[:100]  # 截取前100个字符避免太长
     }
     state = json.dumps(state_data)
     
     # 获取授权URL
     auth_url = wecom.get_authorize_url(state)
+    
+    # 移动端添加特殊日志
+    if is_mobile:
+        print(f"📱 移动端登录请求: {user_agent[:50]}...")
     
     return RedirectResponse(url=auth_url, status_code=302)
 

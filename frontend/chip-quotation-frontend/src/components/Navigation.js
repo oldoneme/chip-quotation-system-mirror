@@ -134,14 +134,66 @@ const Navigation = () => {
           </div>
         )}
 
-        {/* Mobile Menu Button */}
+        {/* Mobile Header Content */}
         {isMobile && (
-          <Button
-            type="text"
-            icon={<MenuOutlined />}
-            onClick={() => setDrawerVisible(true)}
-            style={{ color: 'white', fontSize: '18px' }}
-          />
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            width: '100%'
+          }}>
+            {/* Mobile User Info */}
+            {user && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                color: 'white',
+                flex: 1
+              }}>
+                <Avatar 
+                  size="small" 
+                  src={user?.avatar} 
+                  icon={<UserOutlined />}
+                />
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  lineHeight: 1.2
+                }}>
+                  <span style={{ 
+                    fontSize: '14px', 
+                    fontWeight: '500',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '150px'
+                  }}>
+                    {user?.name || '用户'}
+                  </span>
+                  <span style={{ 
+                    fontSize: '11px', 
+                    opacity: 0.8,
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {user?.role === 'admin' ? '管理员' : '普通用户'}
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {/* Mobile Menu Button */}
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={() => setDrawerVisible(true)}
+              style={{ 
+                color: 'white', 
+                fontSize: '18px',
+                flexShrink: 0
+              }}
+            />
+          </div>
         )}
       </div>
 
