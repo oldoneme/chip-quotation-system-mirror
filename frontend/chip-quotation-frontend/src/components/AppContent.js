@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { Layout } from 'antd';
+import { Layout, Spin } from 'antd';
+import { useAuth } from '../contexts/AuthContext';
 import Navigation from './Navigation';
 import Breadcrumb from './Breadcrumb';
 import ErrorBoundary from './ErrorBoundary';
@@ -17,8 +18,24 @@ import ApiTestSimple from '../pages/ApiTestSimple';
 const { Header, Content, Footer } = Layout;
 
 const AppContent = () => {
+  const { loading } = useAuth();
+  
   // 现在可以安全地使用键盘快捷键，因为我们在Router内部
   useKeyboardShortcuts();
+
+  // 认证加载中
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '100vh' 
+      }}>
+        <Spin size="large" tip="正在验证用户身份..." />
+      </div>
+    );
+  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -26,7 +43,7 @@ const AppContent = () => {
         <Header className="site-layout-background" style={{ padding: 0 }}>
           <Navigation />
         </Header>
-        <Content style={{ margin: '0 16px' }}>
+        <Content style={{ margin: '24px 16px 0' }}>
           <div className="site-layout-background" style={{ padding: 24, minHeight: 360 }}>
             <ErrorBoundary>
               <Breadcrumb />
@@ -43,7 +60,9 @@ const AppContent = () => {
             </ErrorBoundary>
           </div>
         </Content>
-        <Footer style={{ textAlign: 'center' }}>芯片测试报价系统 ©2023</Footer>
+        <Footer style={{ textAlign: 'center' }}>
+          芯片测试报价系统 ©2023
+        </Footer>
       </Layout>
     </Layout>
   );
