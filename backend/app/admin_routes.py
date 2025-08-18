@@ -12,7 +12,7 @@ from .admin_auth import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 class AdminLoginRequest(BaseModel):
     username: str
@@ -247,7 +247,7 @@ async def admin_login_page(request: Request):
             };
             
             try {
-                const response = await fetch('/admin/login', {
+                const response = await fetch('/api/admin/login', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

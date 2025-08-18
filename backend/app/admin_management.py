@@ -330,10 +330,10 @@ def get_user_management_html():
         // 退出登录
         async function logout() {
             try {
-                await fetch('/admin/logout', { method: 'POST', credentials: 'include' });
-                window.location.href = '/admin/login';
+                await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
+                window.location.href = '/api/admin/login';
             } catch (error) {
-                window.location.href = '/admin/login';
+                window.location.href = '/api/admin/login';
             }
         }
     </script>
