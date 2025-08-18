@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["admin-management"])
 
-@router.get("/user-management", response_class=HTMLResponse)
+@router.get("/api/admin/management", response_class=HTMLResponse)
 async def user_management_page(request: Request):
     """独立的用户管理页面 - 支持管理员认证"""
     

@@ -259,7 +259,7 @@ async def admin_login_page(request: Request):
                 
                 if (response.ok) {
                     // 登录成功，跳转到用户管理页面
-                    window.location.href = '/user-management';
+                    window.location.href = '/api/admin/management';
                 } else {
                     // 登录失败，显示错误消息
                     errorMessage.textContent = result.detail || '登录失败';
