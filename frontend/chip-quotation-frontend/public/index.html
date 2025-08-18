@@ -3,11 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="format-detection" content="telephone=no">
     <meta name="theme-color" content="#000000" />
     <meta
       name="description"
-      content="Web site created using create-react-app"
+      content="芯片测试报价系统 - 专业的芯片测试服务报价平台"
     />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <!--
@@ -30,26 +33,54 @@
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
     
-    <!-- 认证重定向脚本 - 在React加载前执行 -->
+    <!-- 移动端性能优化和企业微信认证脚本 -->
     <script>
     (function() {
+        // 添加移动端加载优化
+        if ('serviceWorker' in navigator && 'caches' in window) {
+            // 简单的缓存策略，避免重复加载
+            caches.keys().then(names => {
+                if (names.length > 3) {
+                    // 清理旧缓存
+                    names.slice(3).forEach(name => caches.delete(name));
+                }
+            });
+        }
+        
         console.log('🔥 认证重定向脚本已加载');
         
-        // 🛠️ 开发调试模式和企业微信环境检查
+        // 增强的企业微信环境检测
+        const userAgent = window.navigator.userAgent.toLowerCase();
         const urlParams = new URLSearchParams(window.location.search);
-        const isWeWorkEnvironment = window.navigator.userAgent.includes('wxwork') || 
-                                   window.navigator.userAgent.includes('MicroMessenger') ||
+        
+        const isWeWorkEnvironment = userAgent.includes('wxwork') || 
+                                   userAgent.includes('micromessenger') ||
+                                   userAgent.includes('wecom') ||
                                    document.referrer.includes('weixin.qq.com') ||
                                    document.referrer.includes('work.weixin.qq.com') ||
-                                   sessionStorage.getItem('wework_authenticated') === 'true';
+                                   sessionStorage.getItem('wework_authenticated') === 'true' ||
+                                   urlParams.get('from') === 'wecom';
         
         const debugMode = urlParams.get('debug') === 'true' || 
                          urlParams.get('dev') === 'true' ||
                          window.location.hostname === 'localhost' ||
-                         window.location.port === '3000';
+                         window.location.port === '3000' ||
+                         sessionStorage.getItem('debug_mode_enabled') === 'true';
         
-        // 企业微信环境需要特殊处理
-        const skipRedirectMode = debugMode || isWeWorkEnvironment;
+        // 移动端检测
+        const isMobile = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+        
+        // 企业微信移动端特殊处理
+        if (isWeWorkEnvironment && isMobile) {
+            console.log('📱 检测到企业微信移动端环境');
+            sessionStorage.setItem('wework_mobile', 'true');
+            
+            // 移动端添加视口优化
+            const viewport = document.querySelector('meta[name="viewport"]');
+            if (viewport) {
+                viewport.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+            }
+        }
         
         if (debugMode) {
             console.log('🛠️ 检测到调试模式，跳过认证检查');
@@ -76,7 +107,7 @@
         
         // 企业微信环境标记
         if (isWeWorkEnvironment) {
-            console.log('🏢 检测到企业微信环境，执行认证检查但不重定向');
+            console.log('🏢 检测到企业微信环境，执行认证检查');
             sessionStorage.setItem('wework_authenticated', 'true');
         }
         
@@ -87,18 +118,101 @@
             return;
         }
         
-        // 正常认证检查
+        // 移动端显示加载提示
+        if (isMobile) {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'mobile-loading';
+            loadingDiv.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10000;
+                font-size: 14px; color: #666; text-align: center;
+                font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            `;
+            loadingDiv.innerHTML = '正在加载芯片测试报价系统...<br><small>请稍候</small>';
+            document.body.appendChild(loadingDiv);
+            
+            // 30秒后移除加载提示
+            setTimeout(() => {
+                const loading = document.getElementById('mobile-loading');
+                if (loading) loading.remove();
+            }, 30000);
+        }
+        
+        // 认证检查
         console.log('🔐 执行认证状态检查...');
+        
+        // 检查是否有认证失败的标记
+        const authFailCount = parseInt(sessionStorage.getItem('auth_fail_count') || '0');
+        
+        if (authFailCount >= 3) {
+            console.warn('🚫 检测到多次认证失败，启用调试模式');
+            const loading = document.getElementById('mobile-loading');
+            if (loading) {
+                loading.innerHTML = '认证服务异常<br><small>已启用调试模式</small>';
+                setTimeout(() => loading.remove(), 2000);
+            }
+            
+            // 清除认证失败计数
+            sessionStorage.removeItem('auth_fail_count');
+            sessionStorage.setItem('debug_mode_enabled', 'true');
+            return;
+        }
+        
+        // 增加超时处理
+        const authTimeout = setTimeout(() => {
+            console.warn('认证检查超时');
+            const newFailCount = authFailCount + 1;
+            sessionStorage.setItem('auth_fail_count', newFailCount.toString());
+            
+            if (newFailCount >= 3) {
+                console.log('多次超时，启用调试模式');
+                sessionStorage.setItem('debug_mode_enabled', 'true');
+                location.reload();
+            } else {
+                window.location.href = '/auth/login';
+            }
+        }, 8000); // 8秒超时
+        
         fetch('/api/me', { 
-            credentials: 'include' 
+            credentials: 'include',
+            headers: {
+                'Cache-Control': 'no-cache',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
         })
         .then(response => {
+            clearTimeout(authTimeout);
             console.log('认证状态检查:', response.status);
+            
             if (response.status === 401) {
-                console.log('用户未认证，重定向到企业微信登录...');
-                window.location.href = '/auth/login';
+                const newFailCount = authFailCount + 1;
+                console.log(`用户未认证 (${newFailCount}/3)`);
+                
+                if (newFailCount >= 3) {
+                    console.log('多次认证失败，启用调试模式');
+                    sessionStorage.setItem('debug_mode_enabled', 'true');
+                    sessionStorage.removeItem('auth_fail_count');
+                    location.reload();
+                    return;
+                }
+                
+                sessionStorage.setItem('auth_fail_count', newFailCount.toString());
+                
+                // 企业微信环境下，添加特殊参数
+                const loginUrl = isWeWorkEnvironment 
+                    ? '/auth/login?from=wecom&mobile=' + (isMobile ? '1' : '0')
+                    : '/auth/login';
+                window.location.href = loginUrl;
             } else {
                 console.log('用户已认证，继续正常加载');
+                // 清除认证失败计数
+                sessionStorage.removeItem('auth_fail_count');
+                
+                // 移除移动端加载提示
+                const loading = document.getElementById('mobile-loading');
+                if (loading) loading.remove();
+                
                 // 认证成功，清除尝试标记
                 if (isWeWorkEnvironment) {
                     sessionStorage.removeItem('wework_auth_attempted');
@@ -106,10 +220,43 @@
             }
         })
         .catch(error => {
+            clearTimeout(authTimeout);
             console.error('认证检查失败:', error);
-            setTimeout(() => {
-                window.location.href = '/auth/login';
-            }, 2000);
+            
+            const newFailCount = authFailCount + 1;
+            sessionStorage.setItem('auth_fail_count', newFailCount.toString());
+            
+            // 网络错误时的处理
+            if (isMobile) {
+                const loading = document.getElementById('mobile-loading');
+                if (loading) {
+                    if (newFailCount >= 3) {
+                        loading.innerHTML = '认证服务异常<br><small>启用调试模式中...</small>';
+                        setTimeout(() => {
+                            sessionStorage.setItem('debug_mode_enabled', 'true');
+                            sessionStorage.removeItem('auth_fail_count');
+                            location.reload();
+                        }, 2000);
+                        return;
+                    } else {
+                        loading.innerHTML = `网络连接异常 (${newFailCount}/3)<br><small>正在重试...</small>`;
+                    }
+                }
+            }
+            
+            if (newFailCount >= 3) {
+                console.log('多次网络错误，启用调试模式');
+                sessionStorage.setItem('debug_mode_enabled', 'true');
+                sessionStorage.removeItem('auth_fail_count');
+                location.reload();
+            } else {
+                setTimeout(() => {
+                    const loginUrl = isWeWorkEnvironment 
+                        ? '/auth/login?from=wecom&mobile=' + (isMobile ? '1' : '0')
+                        : '/auth/login';
+                    window.location.href = loginUrl;
+                }, 3000);
+            }
         });
     })();
     </script>

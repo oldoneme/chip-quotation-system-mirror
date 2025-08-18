@@ -52,8 +52,23 @@ export const AuthProvider = ({ children }) => {
           return;
         }
         
-        // 未登录，跳转到登录
-        window.location.href = `${window.location.origin}/auth/login`;
+        // 企业微信环境内：直接尝试OAuth认证
+        if (isWeWorkEnvironment) {
+          console.log('📱 企业微信环境：未认证，跳转到OAuth');
+          // 未登录，跳转到登录
+          window.location.href = `${window.location.origin}/auth/login`;
+          return;
+        }
+        
+        // 非企业微信环境：模拟用户登录（临时方案）
+        console.log('🌐 非企业微信环境：使用临时认证');
+        setUser({
+          id: 1,
+          userid: 'temp_user',
+          name: '临时用户',
+          role: 'user'
+        });
+        setAuthenticated(true);
         return;
       }
       

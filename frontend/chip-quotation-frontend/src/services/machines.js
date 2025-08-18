@@ -1,11 +1,25 @@
 import api from './api';
+import dataCache from './dataCache';
 
 // 获取所有机器列表
 export const getMachines = async () => {
+  const cacheKey = 'machines_list';
+  
+  // 先检查缓存
+  const cachedData = dataCache.get(cacheKey);
+  if (cachedData) {
+    console.log('Returning machines from cache');
+    return cachedData;
+  }
+
   try {
     console.log('Fetching machines from API...');
     const response = await api.get('/machines/');
     console.log('Machines fetched successfully:', response.data);
+    
+    // 保存到缓存
+    dataCache.set(cacheKey, response.data);
+    
     return response.data;
   } catch (error) {
     console.error('Error fetching machines:', error);

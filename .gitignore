@@ -154,3 +154,7 @@ Thumbs.db
 # PowerShell scripts
 *.ps1
 EOF < /dev/null
+node_modules/
+*.jpg
+*.png
+*.jpeg

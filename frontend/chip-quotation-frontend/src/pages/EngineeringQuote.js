@@ -4,6 +4,7 @@ import { Select, Table, Tabs, Spin, Alert, InputNumber, Form, Button, Card, Chec
 import StepIndicator from '../components/StepIndicator';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
+import { formatHourlyRate } from '../utils';
 import {
   getMachines
 } from '../services/machines';
@@ -237,6 +238,16 @@ const EngineeringQuote = () => {
   // 格式化价格显示（包含币种符号）
   const formatPrice = (number) => {
     const formattedNumber = formatNumber(number);
+    if (quoteCurrency === 'USD') {
+      return `$${formattedNumber}`;
+    } else {
+      return `¥${formattedNumber}`;
+    }
+  };
+
+  // 格式化机时价格显示（包含币种符号，精确到个位）
+  const formatHourlyPrice = (number) => {
+    const formattedNumber = formatHourlyRate(number);
     if (quoteCurrency === 'USD') {
       return `$${formattedNumber}`;
     } else {
@@ -635,7 +646,7 @@ const EngineeringQuote = () => {
       title: '小时费率',
       render: (_, record) => {
         const rate = calculateAuxDeviceHourlyRate(record);
-        return rate > 0 ? `${formatPrice(rate)}/小时` : 'N/A';
+        return rate > 0 ? `${formatHourlyPrice(rate)}/小时` : 'N/A';
       }
     }
   ];
@@ -705,7 +716,7 @@ const EngineeringQuote = () => {
           </div>
         )}
 
-        <p><strong>测试机机时费: {formatPrice(calculateTestMachineFee())}</strong></p>
+        <p><strong>测试机机时费: {formatHourlyPrice(calculateTestMachineFee())}</strong></p>
       </Card>
 
       {/* 分选机选择 */}
@@ -750,7 +761,7 @@ const EngineeringQuote = () => {
           </div>
         )}
 
-        <p><strong>分选机机时费: {formatPrice(calculateHandlerFee())}</strong></p>
+        <p><strong>分选机机时费: {formatHourlyPrice(calculateHandlerFee())}</strong></p>
       </Card>
 
       {/* 探针台选择 */}
@@ -795,7 +806,7 @@ const EngineeringQuote = () => {
           </div>
         )}
 
-        <p><strong>探针台机时费: {formatPrice(calculateProberFee())}</strong></p>
+        <p><strong>探针台机时费: {formatHourlyPrice(calculateProberFee())}</strong></p>
       </Card>
     </div>
   );
@@ -822,18 +833,18 @@ const EngineeringQuote = () => {
                 borderBottom: index < personnelOptions.length - 1 ? '1px solid #f0f0f0' : 'none'
               }}>
                 <Checkbox value={person.type}>{person.type}</Checkbox>
-                <span>¥{formatNumber(person.rate)}/小时</span>
+                <span>¥{formatHourlyRate(person.rate)}/小时</span>
               </div>
             ))}
           </Checkbox.Group>
         </div>
         
         {selectedPersonnel.includes('工程师') && (
-          <p><strong>工程师小时费: ¥{formatNumber(calculatePersonnelFee('工程师'))}</strong></p>
+          <p><strong>工程师小时费: ¥{formatHourlyRate(calculatePersonnelFee('工程师'))}</strong></p>
         )}
         
         {selectedPersonnel.includes('技术员') && (
-          <p><strong>技术员小时费: ¥{formatNumber(calculatePersonnelFee('技术员'))}</strong></p>
+          <p><strong>技术员小时费: ¥{formatHourlyRate(calculatePersonnelFee('技术员'))}</strong></p>
         )}
       </Card>
       
@@ -851,7 +862,7 @@ const EngineeringQuote = () => {
               columns={auxMachineColumns}
               pagination={false}
             />
-            <p style={{ marginTop: 10 }}><strong>辅助设备机时费: {formatPrice(calculateAuxDeviceFee())}</strong></p>
+            <p style={{ marginTop: 10 }}><strong>辅助设备机时费: {formatHourlyPrice(calculateAuxDeviceFee())}</strong></p>
           </>
         ) : (
           <EmptyState 
@@ -878,13 +889,13 @@ const EngineeringQuote = () => {
           {selectedPersonnel.includes('工程师') && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
               <span>工程师小时费:</span>
-              <span>{formatPrice(calculatePersonnelFeeForQuote('工程师'))}</span>
+              <span>{formatHourlyPrice(calculatePersonnelFeeForQuote('工程师'))}</span>
             </div>
           )}
           {selectedPersonnel.includes('技术员') && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
               <span>技术员小时费:</span>
-              <span>{formatPrice(calculatePersonnelFeeForQuote('技术员'))}</span>
+              <span>{formatHourlyPrice(calculatePersonnelFeeForQuote('技术员'))}</span>
             </div>
           )}
           {selectedAuxDevices.length > 0 && (
@@ -896,7 +907,7 @@ const EngineeringQuote = () => {
               {selectedAuxDevices.map((device, index) => (
                 <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, paddingLeft: 20 }}>
                   <span>{device.name} ({device.supplier?.machine_type?.name || '辅助设备'})</span>
-                  <span>¥{formatNumber(device.hourly_rate || 0)}/小时</span>
+                  <span>¥{formatHourlyRate(device.hourly_rate || 0)}/小时</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
