@@ -1,0 +1,159 @@
+.user-management-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header .ant-typography {
+  margin-bottom: 4px;
+}
+
+.stats-row {
+  margin-bottom: 24px;
+}
+
+.stats-row .ant-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.users-table-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.users-table .ant-table-thead > tr > th {
+  background-color: #fafafa;
+  font-weight: 600;
+  border-bottom: 2px solid #e8e8e8;
+}
+
+.user-info-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #262626;
+}
+
+.user-details {
+  line-height: 1.2;
+}
+
+.user-contact {
+  line-height: 1.2;
+}
+
+.role-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.role-tag {
+  margin: 0;
+  font-weight: 500;
+}
+
+.role-edit-btn {
+  padding: 0;
+  font-size: 12px;
+  height: auto;
+  line-height: 1;
+}
+
+.status-cell {
+  display: flex;
+  justify-content: center;
+}
+
+.role-description {
+  background-color: #f6f8fa;
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 16px;
+  border: 1px solid #e1e8ed;
+}
+
+.role-description > div > div {
+  margin: 4px 0;
+}
+
+.user-management-no-permission {
+  padding: 24px;
+  max-width: 600px;
+  margin: 40px auto;
+}
+
+.user-management-no-permission .ant-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .user-management-container {
+    padding: 16px;
+  }
+  
+  .stats-row .ant-col {
+    margin-bottom: 8px;
+  }
+  
+  .users-table .ant-table-thead > tr > th {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  
+  .users-table .ant-table-tbody > tr > td {
+    padding: 8px 12px;
+  }
+  
+  .user-info-cell .user-name {
+    font-size: 13px;
+  }
+  
+  .role-tag {
+    font-size: 11px;
+    padding: 0 6px;
+  }
+}
+
+/* 表格行悬停效果 */
+.users-table .ant-table-tbody > tr:hover > td {
+  background-color: #f5f9ff !important;
+}
+
+/* 状态开关样式 */
+.ant-switch-small {
+  min-width: 44px;
+}
+
+.ant-switch-small.ant-switch-checked {
+  background-color: #52c41a;
+}
+
+/* 角色标签动画效果 */
+.role-tag {
+  transition: all 0.3s ease;
+}
+
+.role-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}

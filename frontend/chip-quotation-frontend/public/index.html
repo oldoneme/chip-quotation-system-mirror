@@ -111,10 +111,11 @@
             sessionStorage.setItem('wework_authenticated', 'true');
         }
         
-        // 检查是否已经在认证相关页面，避免无限循环
+        // 检查是否已经在认证相关页面或管理员页面，避免无限循环
         if (window.location.pathname.startsWith('/auth') || 
-            window.location.pathname.includes('/test-auth')) {
-            console.log('已在认证页面，跳过检查');
+            window.location.pathname.includes('/test-auth') ||
+            window.location.pathname.startsWith('/api/admin')) {
+            console.log('已在认证页面或管理员页面，跳过检查');
             return;
         }
         
