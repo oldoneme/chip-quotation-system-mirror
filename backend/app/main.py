@@ -19,11 +19,14 @@ sys.path.insert(0, project_root)
 
 from fastapi import FastAPI, Query, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from Crypto.Cipher import AES
 from app.database import engine, Base
 from app.api.v1.api import api_router
 from app.auth_routes import router as auth_router
+from app.admin_routes import router as admin_router
+from app.admin_management import router as admin_management_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.exceptions import (
@@ -100,6 +103,29 @@ async def smart_cache_headers(request: Request, call_next):
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(admin_management_router)
+
+# 配置静态文件服务 (必须在所有API路由之后)
+static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    # 为SPA应用提供fallback路由
+    from fastapi.responses import FileResponse
+    
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # 检查静态文件是否存在
+        file_path = os.path.join(static_dir, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        # 否则返回index.html (SPA fallback)
+        index_path = os.path.join(static_dir, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        
+        raise HTTPException(status_code=404, detail="Not found")
 
 # 企业微信配置
 WECOM_TOKEN = os.getenv("WECOM_TOKEN", "")
