@@ -23,7 +23,7 @@ async def user_management_page(request: Request):
         pass
     
     # 未认证，重定向到登录页面
-    return RedirectResponse(url="/admin/login", status_code=302)
+    return RedirectResponse(url="/api/admin/login", status_code=302)
 
 def get_user_management_html():
     """返回用户管理页面的HTML"""
@@ -97,7 +97,7 @@ def get_user_management_html():
             const fetchUsers = async () => {
                 setLoading(true);
                 try {
-                    const response = await fetch('/api/users/', { credentials: 'include' });
+                    const response = await fetch('/api/v1/users/', { credentials: 'include' });
                     if (response.ok) {
                         const data = await response.json();
                         setUsers(data);
@@ -112,7 +112,7 @@ def get_user_management_html():
 
             const fetchStats = async () => {
                 try {
-                    const response = await fetch('/api/users/stats', { credentials: 'include' });
+                    const response = await fetch('/api/v1/users/stats', { credentials: 'include' });
                     if (response.ok) {
                         const data = await response.json();
                         setStats(data);
@@ -135,7 +135,7 @@ def get_user_management_html():
                 }
 
                 try {
-                    const response = await fetch(`/api/users/\${selectedUser.id}/role`, {
+                    const response = await fetch(`/api/v1/users/\${selectedUser.id}/role`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
@@ -159,7 +159,7 @@ def get_user_management_html():
 
             const handleStatusChange = async (userId, isActive) => {
                 try {
-                    const response = await fetch(`/api/users/\${userId}/status`, {
+                    const response = await fetch(`/api/v1/users/\${userId}/status`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
