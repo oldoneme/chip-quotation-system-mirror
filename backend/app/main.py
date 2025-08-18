@@ -115,6 +115,10 @@ if os.path.exists(static_dir):
     
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
+        # 排除API路径和特殊路径
+        if full_path.startswith("api/") or full_path.startswith("auth/") or full_path.startswith("admin/") or full_path == "user-management":
+            raise HTTPException(status_code=404, detail="Not found")
+        
         # 检查静态文件是否存在
         file_path = os.path.join(static_dir, full_path)
         if os.path.isfile(file_path):
