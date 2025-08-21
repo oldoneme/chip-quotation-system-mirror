@@ -1,5 +1,6 @@
 from pydantic import BaseModel, validator, Field
 from typing import List, Optional
+from datetime import datetime
 
 # Forward declarations to resolve circular references
 from typing import TYPE_CHECKING
@@ -248,3 +249,37 @@ class QuotationResponse(BaseModel):
     machine_id: Optional[int] = None
     test_hours: Optional[float] = None
     details: Optional[dict] = None
+
+# User schemas
+class UserBase(BaseModel):
+    userid: str = Field(..., min_length=1, max_length=64, description="企业微信用户ID")
+    name: str = Field(..., min_length=1, max_length=100, description="用户姓名")
+    mobile: Optional[str] = Field(None, max_length=20, description="手机号")
+    email: Optional[str] = Field(None, max_length=100, description="邮箱")
+    department: Optional[str] = Field(None, max_length=100, description="部门")
+    position: Optional[str] = Field(None, max_length=100, description="职位")
+    role: str = Field(default="user", description="角色: super_admin, admin, manager, user")
+    is_active: bool = Field(default=True, description="是否激活")
+    avatar: Optional[str] = Field(None, description="头像URL")
+
+class UserCreate(UserBase):
+    pass
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    mobile: Optional[str] = None
+    email: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    avatar: Optional[str] = None
+
+class User(UserBase):
+    id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True

@@ -106,7 +106,7 @@ class User(Base):
     email = Column(String)  # 邮箱
     department = Column(String)  # 部门
     position = Column(String)  # 职位
-    role = Column(String, default="user")  # 角色: admin, manager, user
+    role = Column(String, default="user")  # 角色: super_admin, admin, manager, user
     is_active = Column(Boolean, default=True)  # 是否激活
     avatar = Column(String)  # 头像URL
     
