@@ -16,9 +16,10 @@ class WecomService:
     """企业微信服务类"""
     
     def __init__(self):
-        self.corp_id = os.getenv("WECOM_CORP_ID")
-        self.corp_secret = os.getenv("WECOM_CORP_SECRET")
-        self.agent_id = os.getenv("WECOM_AGENT_ID")
+        # 兼容两种环境变量命名方式
+        self.corp_id = os.getenv("WECOM_CORP_ID") or os.getenv("WECHAT_CORP_ID")
+        self.corp_secret = os.getenv("WECOM_CORP_SECRET") or os.getenv("WECHAT_AGENT_SECRET")
+        self.agent_id = os.getenv("WECOM_AGENT_ID") or os.getenv("WECHAT_AGENT_ID")
         self.base_url = "https://qyapi.weixin.qq.com/cgi-bin"
         
         # Redis客户端用于缓存token
@@ -201,25 +202,81 @@ class WecomService:
     def get_all_users(self) -> List[Dict]:
         """
         获取应用可见范围内的所有用户
-        使用应用接口而不是通讯录接口
+        优先级：通讯录权限 > 应用可见范围 > 部门用户列表
         """
         token = self.get_access_token()
         if not token:
             return []
         
-        # 使用agent/get_workbench_template接口获取应用可见用户
-        # 或者使用message/send接口的touser参数@all获取用户列表
-        # 但最直接的方式是通过已登录的用户获取
+        # 方法1：尝试获取应用可见范围
+        visible_users = self.get_app_visible_users()
+        if visible_users:
+            logger.info(f"通过应用可见范围获取到{len(visible_users)}个用户")
+            return visible_users
         
-        # 尝试使用应用权限获取用户
-        try:
-            # 由于没有通讯录权限，我们暂时返回空列表
-            # 实际使用时，应该从已登录用户中获取
-            logger.warning("当前应用没有通讯录权限，请在企业微信管理后台开启")
-            return []
+        # 方法2：尝试获取部门用户（通常根部门包含所有用户）
+        dept_users = self.get_department_users(department_id=1, fetch_child=True)
+        if dept_users:
+            # 转换为详细用户信息
+            detailed_users = []
+            for user in dept_users:
+                user_detail = self.get_user_detail(user.get("userid", ""))
+                if user_detail:
+                    detailed_users.append(user_detail)
             
+            if detailed_users:
+                logger.info(f"通过部门接口获取到{len(detailed_users)}个用户")
+                return detailed_users
+        
+        # 方法3：如果都失败，提示权限问题
+        logger.warning("无法获取企业微信用户列表，请检查应用权限配置")
+        return []
+    
+    def get_app_visible_users(self) -> List[Dict]:
+        """
+        获取应用的可见范围用户
+        使用应用管理接口
+        """
+        token = self.get_access_token()
+        if not token:
+            return []
+        
+        try:
+            # 获取应用详情，包含可见范围
+            url = f"{self.base_url}/agent/get"
+            params = {
+                "access_token": token,
+                "agentid": self.agent_id
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get("errcode") == 0:
+                allow_userinfos = data.get("allow_userinfos", {})
+                user_list = allow_userinfos.get("user", [])
+                
+                if user_list:
+                    # 获取每个用户的详细信息
+                    detailed_users = []
+                    for user_info in user_list:
+                        userid = user_info.get("userid")
+                        if userid:
+                            user_detail = self.get_user_detail(userid)
+                            if user_detail:
+                                detailed_users.append(user_detail)
+                    
+                    return detailed_users
+                else:
+                    logger.info("应用可见范围为所有成员，尝试获取部门用户")
+                    return []
+            else:
+                logger.error(f"获取应用信息失败: {data}")
+                return []
+                
         except Exception as e:
-            logger.error(f"获取用户列表异常: {e}")
+            logger.error(f"获取应用可见范围异常: {e}")
             return []
     
     def get_visible_users(self) -> List[Dict]:

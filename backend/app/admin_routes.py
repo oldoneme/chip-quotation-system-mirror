@@ -327,6 +327,13 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
         .btn:hover {{
             background: #0056b3;
         }}
+        .btn-danger {{
+            background: #dc3545;
+            color: white;
+        }}
+        .btn-danger:hover {{
+            background: #c82333;
+        }}
         table {{
             width: 100%;
             border-collapse: collapse;
@@ -391,6 +398,7 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
             <h2>企业微信用户管理</h2>
             <button class="btn" onclick="syncUsers()">同步企业微信用户</button>
             <button class="btn" onclick="refreshUsers()">刷新用户列表</button>
+            <button class="btn btn-danger" onclick="cleanupTestUsers()">删除测试用户</button>
             
             <table id="usersTable">
                 <thead>
@@ -427,6 +435,30 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
                 window.location.href = '/admin/login';
             }} catch (error) {{
                 console.error('退出登录失败:', error);
+            }}
+        }}
+        
+        async function cleanupTestUsers() {{
+            if (!confirm('确定要删除所有测试用户吗？\\n这将删除：张三、李四、王五、赵六、孙七\\n此操作不可恢复！')) {{
+                return;
+            }}
+            
+            try {{
+                const response = await fetch('/admin/users/cleanup-test', {{
+                    method: 'POST',
+                    credentials: 'include'
+                }});
+                const result = await response.json();
+                
+                if (result.success) {{
+                    alert(`${{result.message}}`);
+                    refreshUsers();  // 刷新用户列表
+                }} else {{
+                    alert('删除测试用户失败：' + result.message);
+                }}
+            }} catch (error) {{
+                console.error('删除测试用户异常:', error);
+                alert('删除测试用户失败：网络错误');
             }}
         }}
         
@@ -614,7 +646,27 @@ async def get_users(admin_info: dict = Depends(require_admin_auth), db: Session 
         
         users = db.query(User).all()
         
-        # 特别检查张三的角色
+        # 如果数据库中只有测试用户，尝试从企业微信同步
+        test_userids = {'zhangsan', 'lisi', 'wangwu', 'zhaoliu', 'sunqi'}
+        db_userids = {user.userid for user in users}
+        
+        if test_userids.issubset(db_userids) and len(users) <= 6:
+            logger.info("检测到测试用户数据，尝试从企业微信同步真实用户")
+            # 自动触发同步
+            try:
+                wecom = WecomService()
+                wecom_users = wecom.get_all_users()
+                
+                if wecom_users:
+                    logger.info(f"从企业微信获取到{len(wecom_users)}个用户，开始同步")
+                    # 这里可以触发同步逻辑，但为了简化，先记录日志
+                    # 实际同步将通过手动点击同步按钮完成
+                else:
+                    logger.warning("从企业微信获取用户失败，显示现有数据")
+            except Exception as e:
+                logger.error(f"尝试同步企业微信用户时出错: {e}")
+        
+        # 特别检查张三的角色（调试用）
         zhangsan = next((u for u in users if u.userid == 'zhangsan'), None)
         if zhangsan:
             logger.info(f"获取用户列表时，张三的角色为: {zhangsan.role}, 更新时间: {zhangsan.updated_at}")
@@ -715,6 +767,48 @@ async def sync_wecom_users(admin_info: dict = Depends(require_admin_auth), db: S
         logger.error(f"同步企业微信用户失败: {e}")
         db.rollback()
         return {"success": False, "message": f"同步失败: {str(e)}", "synced": 0}
+
+@router.post("/users/cleanup-test")
+async def cleanup_test_users(admin_info: dict = Depends(require_admin_auth), db: Session = Depends(get_db)):
+    """清理测试用户数据"""
+    try:
+        # 定义测试用户ID列表
+        test_userids = ['zhangsan', 'lisi', 'wangwu', 'zhaoliu', 'sunqi']
+        
+        deleted_count = 0
+        deleted_users = []
+        
+        for userid in test_userids:
+            user = db.query(User).filter(User.userid == userid).first()
+            if user:
+                deleted_users.append(f"{user.name}({user.userid})")
+                db.delete(user)
+                deleted_count += 1
+        
+        # 提交删除操作
+        db.commit()
+        
+        if deleted_count > 0:
+            message = f"成功删除{deleted_count}个测试用户: {', '.join(deleted_users)}"
+            logger.info(message)
+            return {
+                "success": True,
+                "message": message,
+                "deleted": deleted_count,
+                "deleted_users": deleted_users
+            }
+        else:
+            return {
+                "success": True,
+                "message": "没有找到需要删除的测试用户",
+                "deleted": 0,
+                "deleted_users": []
+            }
+            
+    except Exception as e:
+        logger.error(f"删除测试用户失败: {e}")
+        db.rollback()
+        return {"success": False, "message": f"删除失败: {str(e)}", "deleted": 0}
 
 @router.put("/users/{userid}/role")
 async def update_user_role(
