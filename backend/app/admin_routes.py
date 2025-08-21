@@ -16,6 +16,7 @@ from .models import User
 from .schemas import User as UserSchema, UserUpdate
 from .admin_auth import authenticate_admin, create_admin_token, verify_admin_token
 from .wecom_service import WecomService
+from .middleware.session_manager import record_role_change
 
 logger = logging.getLogger(__name__)
 
@@ -461,28 +462,50 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
         }});
         
         async function refreshUsers() {{
+            console.log('refreshUsers() 被调用');
             try {{
-                const response = await fetch('/admin/users', {{
-                    credentials: 'include'  // 包含cookie
+                console.log('正在请求 /admin/users');
+                const response = await fetch('/admin/users?' + new Date().getTime(), {{
+                    credentials: 'include',  // 包含cookie
+                    cache: 'no-cache',       // 禁用缓存
+                    headers: {{
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }}
                 }});
+                console.log('响应状态:', response.status);
                 if (response.ok) {{
                     const users = await response.json();
+                    console.log('获取到用户数据:', users.length, '个用户');
                     displayUsers(users);
                 }} else {{
                     console.error('获取用户列表失败:', response.status);
+                    const responseText = await response.text();
+                    console.error('错误响应内容:', responseText);
                     const tbody = document.querySelector('#usersTable tbody');
-                    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px;">获取用户列表失败，请重新登录</td></tr>';
+                    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px;">获取用户列表失败(${{response.status}})，请重新登录</td></tr>`;
                 }}
             }} catch (error) {{
-                console.error('获取用户列表失败:', error);
+                console.error('获取用户列表异常:', error);
+                const tbody = document.querySelector('#usersTable tbody');
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px;">网络错误，请刷新页面</td></tr>';
             }}
         }}
         
         function displayUsers(users) {{
+            console.log('displayUsers() 被调用，用户数据:', users);
             const tbody = document.querySelector('#usersTable tbody');
+            console.log('找到tbody元素:', tbody);
             if (users.length === 0) {{
                 tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px;">暂无用户数据</td></tr>';
                 return;
+            }}
+            
+            // 特别检查张三的数据
+            const zhangsan = users.find(user => user.userid === 'zhangsan');
+            if (zhangsan) {{
+                console.log('张三的数据:', zhangsan);
+                console.log('张三的角色:', zhangsan.role, '显示为:', getRoleText(zhangsan.role));
             }}
             
             tbody.innerHTML = users.map(user => `
@@ -541,9 +564,11 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
                     }});
                     const result = await response.json();
                     if (response.ok) {{
+                        console.log('角色修改成功，准备刷新用户列表');
                         alert('角色修改成功');
                         refreshUsers();
                     }} else {{
+                        console.error('角色修改失败:', result);
                         alert('角色修改失败：' + result.detail);
                     }}
                 }} catch (error) {{
@@ -584,7 +609,16 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
 async def get_users(admin_info: dict = Depends(require_admin_auth), db: Session = Depends(get_db)):
     """获取所有用户列表"""
     try:
+        # 强制刷新数据库会话，避免缓存问题
+        db.expire_all()  # 清除会话中的所有对象缓存
+        
         users = db.query(User).all()
+        
+        # 特别检查张三的角色
+        zhangsan = next((u for u in users if u.userid == 'zhangsan'), None)
+        if zhangsan:
+            logger.info(f"获取用户列表时，张三的角色为: {zhangsan.role}, 更新时间: {zhangsan.updated_at}")
+        
         logger.info(f"成功获取{len(users)}个用户")
         return users
     except Exception as e:
@@ -698,10 +732,34 @@ async def update_user_role(
     if new_role not in ["user", "manager", "admin", "super_admin"]:
         raise HTTPException(status_code=400, detail="无效的角色")
     
+    # 记录旧角色
+    old_role = user.role
+    
+    # 更新角色
     user.role = new_role
+    user.updated_at = datetime.now()
     db.commit()
     
-    return {"success": True, "message": "角色修改成功"}
+    # 刷新对象以确保数据库状态同步
+    db.refresh(user)
+    logger.info(f"角色更新后，用户{userid}在数据库中的角色为: {user.role}")
+    
+    # 如果角色确实发生了变化，记录变更
+    if old_role != new_role:
+        # 记录角色变更历史
+        record_role_change(userid, old_role, new_role)
+        
+        logger.info(f"用户{userid}角色从{old_role}修改为{new_role}，立即生效")
+        
+        return {
+            "success": True, 
+            "message": f"角色修改成功，新权限立即生效",
+            "role_changed": True,
+            "old_role": old_role,
+            "new_role": new_role
+        }
+    else:
+        return {"success": True, "message": "角色未发生变化"}
 
 @router.put("/users/{userid}/status")
 async def update_user_status(

@@ -13,6 +13,7 @@ from .database import get_db
 from .wecom_auth import AuthService, WeComOAuth
 from .auth_schemas import UserResponse, LoginResponse
 from .models import User
+from .middleware.session_manager import is_session_invalidated
 
 router = APIRouter()
 
@@ -29,9 +30,27 @@ def get_current_user(
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    user = auth_service.get_user_by_session_token(session_token)
+    # 获取会话对象以检查登录时间
+    session = auth_service.get_session_by_token(session_token)
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    user = session.user
     if not user:
         raise HTTPException(status_code=401, detail="Invalid session")
+    
+    # 方案2：实时获取最新用户信息（角色更改立即生效）
+    # 重新从数据库获取最新的用户信息，确保角色和状态是最新的
+    fresh_user = auth_service.db.query(User).filter(User.id == user.id).first()
+    if fresh_user:
+        user = fresh_user
+    
+    # 方案1：角色更改需要重新登录（已禁用）
+    # 检查会话是否已失效（角色变更后需要重新登录）
+    # if is_session_invalidated(user.userid, session.created_at):
+    #     # 使当前会话失效
+    #     auth_service.invalidate_session(session_token)
+    #     raise HTTPException(status_code=401, detail="Session invalidated due to role change. Please login again.")
     
     # 检查权限
     if not auth_service.check_user_permission(user):
@@ -48,9 +67,25 @@ def get_current_user_optional(
     if not session_token:
         return None
     
-    user = auth_service.get_user_by_session_token(session_token)
+    # 获取会话对象以检查登录时间
+    session = auth_service.get_session_by_token(session_token)
+    if not session:
+        return None
+    
+    user = session.user
     if not user:
         return None
+    
+    # 实时获取最新用户信息（角色更改立即生效）
+    fresh_user = auth_service.db.query(User).filter(User.id == user.id).first()
+    if fresh_user:
+        user = fresh_user
+    
+    # 已禁用：检查会话是否已失效（角色变更后需要重新登录）
+    # if is_session_invalidated(user.userid, session.created_at):
+    #     # 使当前会话失效
+    #     auth_service.invalidate_session(session_token)
+    #     return None
     
     # 检查权限
     if not auth_service.check_user_permission(user):
