@@ -237,8 +237,9 @@ async def sync_departments(
     auth_service: AuthService = Depends(get_auth_service)
 ):
     """同步企业微信部门信息（管理员专用）"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    # 检查管理员权限
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     
     try:
         count = auth_service.wecom.sync_departments(auth_service.db)
@@ -247,14 +248,15 @@ async def sync_departments(
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
 
-@router.get("/admin/users")
-async def list_users(
+@router.get("/admin/wecom-users")
+async def list_wecom_users(
     current_user: User = Depends(get_current_user),
     auth_service: AuthService = Depends(get_auth_service)
 ):
-    """获取用户列表（管理员专用）"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """获取用户列表（企业微信管理员专用）"""
+    # 检查管理员权限
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     
     users = auth_service.db.query(User).all()
     return [

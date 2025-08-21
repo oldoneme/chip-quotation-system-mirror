@@ -3,16 +3,19 @@
 提供独立的管理员登录和用户管理功能
 """
 from fastapi import APIRouter, HTTPException, Response, Request, Depends
+from fastapi import status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict
 import logging
+from datetime import datetime
 
 from .database import get_db
 from .models import User
 from .schemas import User as UserSchema, UserUpdate
 from .admin_auth import authenticate_admin, create_admin_token, verify_admin_token
+from .wecom_service import WecomService
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,7 @@ class AdminLoginResponse(BaseModel):
 def require_admin_auth(request: Request):
     """验证管理员身份的依赖函数"""
     token = request.cookies.get("admin_token")
+    
     if not token:
         raise HTTPException(status_code=401, detail="未登录")
     
@@ -209,33 +213,52 @@ async def admin_login_page():
 """
 
 @router.post("/login")
-async def admin_login(request: AdminLoginRequest, response: Response):
+async def admin_login(login_request: AdminLoginRequest, request: Request, response: Response):
     """超级管理员登录"""
-    if not authenticate_admin(request.username, request.password):
+    if not authenticate_admin(login_request.username, login_request.password):
         raise HTTPException(
             status_code=401,
             detail="用户名或密码错误"
         )
     
     # 创建JWT令牌
-    access_token = create_admin_token(request.username)
+    access_token = create_admin_token(login_request.username)
     
     # 设置HTTP-only cookie
-    response.set_cookie(
-        key="admin_token",
-        value=access_token,
-        httponly=True,
-        secure=False,  # 开发环境设为False，生产环境应设为True
-        samesite="lax",
-        max_age=8 * 60 * 60  # 8小时
-    )
+    # 检查是否通过HTTPS访问
+    is_secure = request.url.scheme == "https"
+    
+    if "chipinfos.com.cn" in str(request.url.hostname):
+        # 生产环境使用域名设置
+        response.set_cookie(
+            key="admin_token",
+            value=access_token,
+            httponly=True,
+            secure=is_secure,
+            samesite="lax",
+            max_age=8 * 60 * 60,
+            domain=".chipinfos.com.cn"
+        )
+    else:
+        # 开发环境不设置域名
+        response.set_cookie(
+            key="admin_token",
+            value=access_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=8 * 60 * 60
+        )
     
     return {"success": True, "message": "登录成功"}
 
 @router.post("/logout")
 async def admin_logout(response: Response):
     """超级管理员退出登录"""
-    response.delete_cookie("admin_token")
+    response.delete_cookie(
+        "admin_token",
+        domain=".chipinfos.com.cn"
+    )
     return {"success": True, "message": "退出成功"}
 
 @router.get("/management", response_class=HTMLResponse)
@@ -396,7 +419,10 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
     <script>
         async function logout() {{
             try {{
-                await fetch('/admin/logout', {{ method: 'POST' }});
+                await fetch('/admin/logout', {{ 
+                    method: 'POST',
+                    credentials: 'include' 
+                }});
                 window.location.href = '/admin/login';
             }} catch (error) {{
                 console.error('退出登录失败:', error);
@@ -404,25 +430,49 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
         }}
         
         async function syncUsers() {{
+            const syncBtn = document.querySelector('button[onclick="syncUsers()"]');
+            const originalText = syncBtn.innerText;
+            syncBtn.innerText = '同步中...';
+            syncBtn.disabled = true;
+            
             try {{
-                const response = await fetch('/admin/users/sync', {{ method: 'POST' }});
+                const response = await fetch('/admin/users/sync', {{ 
+                    method: 'POST',
+                    credentials: 'include'
+                }});
                 const result = await response.json();
-                if (response.ok) {{
-                    alert('同步成功：' + result.message);
+                if (result.success) {{
+                    alert(`同步成功！\\n${{result.message}}`);
                     refreshUsers();
                 }} else {{
-                    alert('同步失败：' + result.detail);
+                    alert('同步失败：' + (result.message || '未知错误'));
                 }}
             }} catch (error) {{
                 alert('同步失败：网络错误');
+            }} finally {{
+                syncBtn.innerText = originalText;
+                syncBtn.disabled = false;
             }}
         }}
         
+        // 页面加载时自动获取用户列表
+        document.addEventListener('DOMContentLoaded', function() {{
+            refreshUsers();
+        }});
+        
         async function refreshUsers() {{
             try {{
-                const response = await fetch('/admin/users');
-                const users = await response.json();
-                displayUsers(users);
+                const response = await fetch('/admin/users', {{
+                    credentials: 'include'  // 包含cookie
+                }});
+                if (response.ok) {{
+                    const users = await response.json();
+                    displayUsers(users);
+                }} else {{
+                    console.error('获取用户列表失败:', response.status);
+                    const tbody = document.querySelector('#usersTable tbody');
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px;">获取用户列表失败，请重新登录</td></tr>';
+                }}
             }} catch (error) {{
                 console.error('获取用户列表失败:', error);
             }}
@@ -486,7 +536,8 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
                     const response = await fetch(`/admin/users/${{userid}}/role`, {{
                         method: 'PUT',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ role: selectedRole }})
+                        body: JSON.stringify({{ role: selectedRole }}),
+                        credentials: 'include'
                     }});
                     const result = await response.json();
                     if (response.ok) {{
@@ -508,7 +559,8 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
                     const response = await fetch(`/admin/users/${{userid}}/status`, {{
                         method: 'PUT',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ is_active: !currentStatus }})
+                        body: JSON.stringify({{ is_active: !currentStatus }}),
+                        credentials: 'include'
                     }});
                     const result = await response.json();
                     if (response.ok) {{
@@ -527,17 +579,108 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
 </html>
 """
 
+
 @router.get("/users")
 async def get_users(admin_info: dict = Depends(require_admin_auth), db: Session = Depends(get_db)):
     """获取所有用户列表"""
-    users = db.query(User).all()
-    return users
+    try:
+        users = db.query(User).all()
+        logger.info(f"成功获取{len(users)}个用户")
+        return users
+    except Exception as e:
+        logger.error(f"获取用户列表异常: {e}")
+        raise HTTPException(status_code=500, detail="获取用户列表失败")
 
 @router.post("/users/sync")
 async def sync_wecom_users(admin_info: dict = Depends(require_admin_auth), db: Session = Depends(get_db)):
     """同步企业微信用户"""
-    # 这里将实现企业微信用户同步功能
-    return {"success": True, "message": "同步功能正在开发中"}
+    try:
+        wecom = WecomService()
+        
+        # 获取企业微信所有用户
+        wecom_users = wecom.get_all_users()
+        
+        # 如果无法从企业微信获取，使用已登录用户的信息
+        if not wecom_users:
+            # 获取所有已登录过的用户（有last_login记录的）
+            existing_users = db.query(User).filter(User.last_login != None).all()
+            if existing_users:
+                message = f"企业微信通讯录权限未开启，当前显示{len(existing_users)}个已登录用户"
+                return {
+                    "success": True,
+                    "message": message,
+                    "total": len(existing_users),
+                    "new": 0,
+                    "updated": 0
+                }
+            else:
+                return {"success": False, "message": "企业微信通讯录权限未开启，请在管理后台配置", "synced": 0}
+        
+        synced_count = 0
+        updated_count = 0
+        new_count = 0
+        
+        for wecom_user in wecom_users:
+            userid = wecom_user.get("userid")
+            if not userid:
+                continue
+            
+            # 查找本地用户
+            local_user = db.query(User).filter(User.userid == userid).first()
+            
+            if local_user:
+                # 更新现有用户信息
+                local_user.name = wecom_user.get("name", local_user.name)
+                local_user.mobile = wecom_user.get("mobile", local_user.mobile)
+                local_user.email = wecom_user.get("email", local_user.email)
+                local_user.position = wecom_user.get("position", local_user.position)
+                local_user.avatar = wecom_user.get("avatar", local_user.avatar)
+                
+                # 处理部门信息
+                departments = wecom_user.get("department", [])
+                if departments:
+                    local_user.department = str(departments[0]) if isinstance(departments[0], int) else str(departments)
+                
+                local_user.updated_at = datetime.now()
+                updated_count += 1
+            else:
+                # 创建新用户
+                new_user = User(
+                    userid=userid,
+                    name=wecom_user.get("name", ""),
+                    mobile=wecom_user.get("mobile", ""),
+                    email=wecom_user.get("email", ""),
+                    position=wecom_user.get("position", ""),
+                    avatar=wecom_user.get("avatar", ""),
+                    department=str(wecom_user.get("department", [])[0]) if wecom_user.get("department") else "",
+                    role="user",  # 默认为普通用户
+                    is_active=wecom_user.get("status", 1) == 1,
+                    created_at=datetime.now(),
+                    updated_at=datetime.now()
+                )
+                db.add(new_user)
+                new_count += 1
+            
+            synced_count += 1
+        
+        # 提交事务
+        db.commit()
+        
+        message = f"同步完成：总计{synced_count}个用户，新增{new_count}个，更新{updated_count}个"
+        logger.info(message)
+        
+        return {
+            "success": True,
+            "message": message,
+            "total": synced_count,
+            "new": new_count,
+            "updated": updated_count
+        }
+        
+    except Exception as e:
+        logger.error(f"同步企业微信用户失败: {e}")
+        db.rollback()
+        return {"success": False, "message": f"同步失败: {str(e)}", "synced": 0}
 
 @router.put("/users/{userid}/role")
 async def update_user_role(
