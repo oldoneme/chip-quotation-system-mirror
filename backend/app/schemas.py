@@ -283,3 +283,88 @@ class User(UserBase):
     
     class Config:
         from_attributes = True
+
+
+# 新增的报价权限管理相关schemas
+class QuotationStatusUpdate(BaseModel):
+    status: str = Field(..., description="报价状态: pending, approved, rejected, completed")
+    comment: Optional[str] = Field(None, max_length=500, description="审核备注")
+    
+    @validator('status')
+    def validate_status(cls, v):
+        allowed_statuses = ['pending', 'approved', 'rejected', 'completed']
+        if v not in allowed_statuses:
+            raise ValueError(f'状态必须是以下之一: {allowed_statuses}')
+        return v
+
+
+class QuotationPriorityUpdate(BaseModel):
+    priority: str = Field(..., description="优先级: low, normal, high, urgent")
+    
+    @validator('priority')
+    def validate_priority(cls, v):
+        allowed_priorities = ['low', 'normal', 'high', 'urgent']
+        if v not in allowed_priorities:
+            raise ValueError(f'优先级必须是以下之一: {allowed_priorities}')
+        return v
+
+
+# 操作日志相关schemas
+class OperationLogBase(BaseModel):
+    user_id: int
+    operation: str = Field(..., description="操作类型")
+    details: Optional[str] = Field(None, description="操作详情")
+    created_at: Optional[datetime] = None
+
+
+class OperationLog(OperationLogBase):
+    id: int
+    user_name: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
+# 用户信息管理相关schemas
+class UserProfileUpdate(BaseModel):
+    """用户个人信息更新"""
+    mobile: Optional[str] = Field(None, max_length=20)
+    email: Optional[str] = Field(None, max_length=100)
+    
+    @validator('mobile')
+    def validate_mobile(cls, v):
+        if v and len(v) < 11:
+            raise ValueError('手机号长度不能少于11位')
+        return v
+
+
+class UserManagementUpdate(BaseModel):
+    """管理员用户管理更新"""
+    name: Optional[str] = None
+    mobile: Optional[str] = None
+    email: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+# 统计分析相关schemas
+class QuotationStats(BaseModel):
+    """报价统计信息"""
+    total_count: int
+    pending_count: int
+    approved_count: int
+    rejected_count: int
+    total_amount: float
+    avg_amount: float
+    period: str = Field(..., description="统计周期")
+
+
+class UserStats(BaseModel):
+    """用户统计信息"""
+    user_id: int
+    user_name: str
+    quotation_count: int
+    approved_count: int
+    total_amount: float
+    success_rate: float

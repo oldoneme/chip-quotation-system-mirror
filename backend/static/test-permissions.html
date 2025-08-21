@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>权限系统测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .user-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .role-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+        .role-super_admin { background: #e53e3e; }
+        .role-admin { background: #ed8936; }
+        .role-manager { background: #4299e1; }
+        .role-user { background: #48bb78; }
+        
+        .api-test {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        
+        button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #3182ce;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c53030;
+        }
+        
+        .success {
+            background: #f0fff4;
+            color: #38a169;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 权限系统测试页面</h1>
+        
+        <div class="user-info" id="user-info">
+            <h3>当前用户信息</h3>
+            <p>正在加载用户信息...</p>
+        </div>
+        
+        <div class="api-test">
+            <h3>API权限测试</h3>
+            <p>测试不同API端点的访问权限：</p>
+            
+            <button onclick="testAPI('/api/me')">GET /api/me (个人信息)</button>
+            <button onclick="testAPI('/api/v1/users')">GET /api/v1/users (所有用户)</button>
+            <button onclick="testAPI('/api/v1/quotations')">GET /api/v1/quotations (报价列表)</button>
+            <button onclick="testAPI('/api/v1/statistics/quotations')">GET /api/v1/statistics/quotations (统计数据)</button>
+            <button onclick="testAPI('/api/v1/operation-logs')">GET /api/v1/operation-logs (操作日志)</button>
+            <button onclick="testAPI('/api/v1/statistics/dashboard')">GET /api/v1/statistics/dashboard (仪表盘数据)</button>
+            
+            <div class="result" id="api-result">点击按钮测试API访问权限</div>
+        </div>
+        
+        <div class="api-test">
+            <h3>权限检查测试</h3>
+            <p>根据当前用户角色显示的权限功能：</p>
+            
+            <!-- 所有用户都能看到 -->
+            <div data-min-role="user">
+                ✅ <strong>一般用户功能</strong>: 查看个人信息、创建报价、查看个人统计
+            </div>
+            
+            <!-- 销售经理及以上 -->
+            <div data-min-role="manager" style="display: none;">
+                ✅ <strong>销售经理功能</strong>: 查看所有报价、审核报价、查看团队统计
+            </div>
+            
+            <!-- 管理员及以上 -->
+            <div data-min-role="admin" style="display: none;">
+                ✅ <strong>管理员功能</strong>: 用户管理、删除报价、查看所有日志
+            </div>
+            
+            <!-- 超级管理员 -->
+            <div data-role="super_admin" style="display: none;">
+                ✅ <strong>超级管理员功能</strong>: 系统配置、角色管理、系统维护
+            </div>
+            
+            <div id="permission-summary" class="result">
+                正在检查权限...
+            </div>
+        </div>
+        
+        <div class="api-test">
+            <h3>快速链接</h3>
+            <a href="/dashboard" style="text-decoration: none;">
+                <button>🏠 回到仪表盘</button>
+            </a>
+            <a href="/auth/logout" style="text-decoration: none;">
+                <button style="background: #f56565;">🚪 退出登录</button>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        // 角色权限映射
+        const ROLE_PERMISSIONS = {
+            'super_admin': [
+                'system:admin_panel', 'system:user_management', 'system:role_management',
+                'user:view_all', 'user:create', 'user:edit_all', 'user:delete', 'user:change_role',
+                'quotation:view_all', 'quotation:create', 'quotation:edit_all', 'quotation:delete',
+                'quotation:approve_reject', 'statistics:view_all', 'logs:view_all'
+            ],
+            'admin': [
+                'user:view_all', 'user:create', 'user:edit_all', 'user:disable_enable',
+                'quotation:view_all', 'quotation:create', 'quotation:edit_all', 'quotation:delete',
+                'quotation:approve_reject', 'statistics:view_all', 'logs:view_all'
+            ],
+            'manager': [
+                'user:view_all', 'quotation:view_all', 'quotation:create', 'quotation:edit_all',
+                'quotation:approve_reject', 'statistics:view_all', 'logs:view_all'
+            ],
+            'user': [
+                'user:view_self', 'user:edit_self', 'quotation:view_own', 'quotation:create',
+                'quotation:edit_own_pending', 'statistics:view_own', 'logs:view_own'
+            ]
+        };
+
+        function hasRole(roles) {
+            if (!currentUser) return false;
+            const rolesList = Array.isArray(roles) ? roles : [roles];
+            return rolesList.includes(currentUser.role);
+        }
+
+        function isManagerOrAbove() {
+            return hasRole(['manager', 'admin', 'super_admin']);
+        }
+
+        function isAdminOrAbove() {
+            return hasRole(['admin', 'super_admin']);
+        }
+
+        // 应用权限控制
+        function applyPermissions() {
+            if (!currentUser) return;
+            
+            // 应用基于角色的显示控制
+            document.querySelectorAll('[data-role]').forEach(element => {
+                const roles = element.dataset.role.split(',').map(r => r.trim());
+                element.style.display = hasRole(roles) ? 'block' : 'none';
+            });
+            
+            // 应用基于最低角色的显示控制
+            document.querySelectorAll('[data-min-role]').forEach(element => {
+                const minRole = element.dataset.minRole;
+                let hasAccess = false;
+                
+                switch (minRole) {
+                    case 'user':
+                        hasAccess = true;
+                        break;
+                    case 'manager':
+                        hasAccess = isManagerOrAbove();
+                        break;
+                    case 'admin':
+                        hasAccess = isAdminOrAbove();
+                        break;
+                    case 'super_admin':
+                        hasAccess = hasRole('super_admin');
+                        break;
+                }
+                
+                element.style.display = hasAccess ? 'block' : 'none';
+            });
+            
+            // 生成权限摘要
+            const userPermissions = ROLE_PERMISSIONS[currentUser.role] || [];
+            const permissionSummary = document.getElementById('permission-summary');
+            permissionSummary.innerHTML = `当前用户权限 (${userPermissions.length}个):\n${userPermissions.join(', ')}`;
+            permissionSummary.className = 'result success';
+        }
+
+        // 加载用户信息
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/me', {
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                currentUser = await response.json();
+                
+                // 更新用户信息显示
+                const userInfoDiv = document.getElementById('user-info');
+                userInfoDiv.innerHTML = `
+                    <h3>当前用户信息</h3>
+                    <p><strong>姓名:</strong> ${currentUser.name}</p>
+                    <p><strong>用户ID:</strong> ${currentUser.userid}</p>
+                    <p><strong>角色:</strong> <span class="role-badge role-${currentUser.role}">${getRoleDisplayName(currentUser.role)}</span></p>
+                    <p><strong>部门:</strong> ${currentUser.department || '未设置'}</p>
+                    <p><strong>职位:</strong> ${currentUser.position || '未设置'}</p>
+                    <p><strong>状态:</strong> ${currentUser.is_active ? '激活' : '禁用'}</p>
+                    <p><strong>上次登录:</strong> ${currentUser.last_login ? new Date(currentUser.last_login).toLocaleString() : '首次登录'}</p>
+                `;
+                
+                // 应用权限控制
+                applyPermissions();
+                
+            } catch (error) {
+                console.error('加载用户信息失败:', error);
+                document.getElementById('user-info').innerHTML = `
+                    <h3>用户信息加载失败</h3>
+                    <p style="color: #c53030;">错误: ${error.message}</p>
+                    <p>请检查您的登录状态或刷新页面重试。</p>
+                `;
+            }
+        }
+
+        function getRoleDisplayName(role) {
+            const roleNames = {
+                'super_admin': '超级管理员',
+                'admin': '管理员',
+                'manager': '销售经理',
+                'user': '一般用户'
+            };
+            return roleNames[role] || role;
+        }
+
+        // 测试API端点
+        async function testAPI(endpoint) {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML = `正在测试 ${endpoint} ...`;
+            resultDiv.className = 'result';
+            
+            try {
+                const response = await fetch(endpoint, {
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                let responseText = '';
+                try {
+                    const data = await response.json();
+                    responseText = JSON.stringify(data, null, 2);
+                } catch {
+                    responseText = await response.text();
+                }
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `✅ ${endpoint} - 成功 (${response.status})\n\n响应数据:\n${responseText}`;
+                    resultDiv.className = 'result success';
+                } else {
+                    resultDiv.innerHTML = `❌ ${endpoint} - 失败 (${response.status})\n\n错误信息:\n${responseText}`;
+                    resultDiv.className = 'result error';
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `❌ ${endpoint} - 网络错误\n\n错误详情:\n${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+        });
+    </script>
+</body>
+</html>

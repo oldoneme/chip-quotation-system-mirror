@@ -269,3 +269,118 @@ def calculate_quotation(db: Session, quotation_request: schemas.QuotationRequest
     total *= quotation_request.test_hours
     
     return total
+
+# Enhanced Quotation CRUD operations with permission management
+def create_quotation(db: Session, quotation: dict, user_id: int):
+    """创建报价（带用户关联）"""
+    quotation['created_by'] = user_id
+    db_quotation = models.Quotation(**quotation)
+    db.add(db_quotation)
+    db.commit()
+    db.refresh(db_quotation)
+    return db_quotation
+
+def get_user_quotations(db: Session, user_id: int, skip: int = 0, limit: int = 100):
+    """获取用户的报价列表"""
+    return db.query(models.Quotation).filter(
+        models.Quotation.created_by == user_id
+    ).offset(skip).limit(limit).all()
+
+def update_quotation_status(db: Session, quotation_id: int, status: str, reviewer_id: int, review_comment: str = None):
+    """更新报价状态（审核）"""
+    db_quotation = db.query(models.Quotation).filter(models.Quotation.id == quotation_id).first()
+    if db_quotation:
+        db_quotation.status = status
+        db_quotation.reviewed_by = reviewer_id
+        db_quotation.review_comment = review_comment
+        db_quotation.reviewed_at = models.datetime.utcnow()
+        db.commit()
+        db.refresh(db_quotation)
+    return db_quotation
+
+def update_quotation_priority(db: Session, quotation_id: int, priority: str):
+    """更新报价优先级"""
+    db_quotation = db.query(models.Quotation).filter(models.Quotation.id == quotation_id).first()
+    if db_quotation:
+        db_quotation.priority = priority
+        db.commit()
+        db.refresh(db_quotation)
+    return db_quotation
+
+def get_quotations_for_export(db: Session, start_date: str = None, end_date: str = None):
+    """获取导出用的报价数据"""
+    query = db.query(models.Quotation)
+    
+    if start_date:
+        query = query.filter(models.Quotation.created_at >= start_date)
+    if end_date:
+        query = query.filter(models.Quotation.created_at <= end_date)
+    
+    return query.all()
+
+# User CRUD operations
+def get_user(db: Session, user_id: int):
+    """根据ID获取用户"""
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
+def get_user_by_userid(db: Session, userid: str):
+    """根据企业微信userid获取用户"""
+    return db.query(models.User).filter(models.User.userid == userid).first()
+
+def get_users(db: Session, skip: int = 0, limit: int = 100):
+    """获取用户列表"""
+    return db.query(models.User).offset(skip).limit(limit).all()
+
+def create_user(db: Session, user: schemas.UserCreate):
+    """创建用户"""
+    db_user = models.User(**user.dict())
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def update_user(db: Session, user_id: int, update_data: dict):
+    """更新用户信息"""
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if db_user:
+        for key, value in update_data.items():
+            if hasattr(db_user, key):
+                setattr(db_user, key, value)
+        db.commit()
+        db.refresh(db_user)
+    return db_user
+
+def update_user_profile(db: Session, user_id: int, update_data: dict):
+    """更新用户个人资料"""
+    return update_user(db, user_id, update_data)
+
+def update_user_status(db: Session, user_id: int, is_active: bool):
+    """更新用户状态"""
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if db_user:
+        db_user.is_active = is_active
+        db.commit()
+        db.refresh(db_user)
+    return db_user
+
+# Operation Log CRUD operations
+def log_operation(db: Session, user_id: int, operation: str, details: str = None):
+    """记录操作日志"""
+    from datetime import datetime
+    db_log = models.OperationLog(
+        user_id=user_id,
+        operation=operation,
+        details=details,
+        created_at=datetime.utcnow()
+    )
+    db.add(db_log)
+    db.commit()
+    db.refresh(db_log)
+    return db_log
+
+def get_operation_logs(db: Session, skip: int = 0, limit: int = 100, user_id: int = None):
+    """获取操作日志列表"""
+    query = db.query(models.OperationLog)
+    if user_id:
+        query = query.filter(models.OperationLog.user_id == user_id)
+    return query.order_by(models.OperationLog.created_at.desc()).offset(skip).limit(limit).all()

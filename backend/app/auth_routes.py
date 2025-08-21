@@ -146,7 +146,7 @@ async def login(
     # 生成状态参数（包含环境信息）
     state_data = {
         "timestamp": datetime.now().isoformat(),
-        "redirect_url": redirect_url or "/",
+        "redirect_url": redirect_url or "/dashboard",  # 默认跳转到仪表盘
         "is_mobile": is_mobile,
         "is_wecom": is_wecom,
         "user_agent": user_agent[:100]  # 截取前100个字符避免太长
@@ -177,11 +177,11 @@ async def oauth_callback(
     
     try:
         # 解析状态参数
-        redirect_url = "/"
+        redirect_url = "/dashboard"  # 默认跳转到权限控制仪表盘
         if state:
             try:
                 state_data = json.loads(state)
-                redirect_url = state_data.get("redirect_url", "/")
+                redirect_url = state_data.get("redirect_url", "/dashboard")
             except json.JSONDecodeError:
                 pass
         

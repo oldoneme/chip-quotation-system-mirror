@@ -285,6 +285,22 @@ async def root():
         "redoc": "/redoc"
     }
 
+# 添加静态文件服务
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/dashboard")
+async def dashboard():
+    """权限控制仪表盘页面"""
+    return FileResponse('static/dashboard.html')
+
+@app.get("/test-permissions")
+async def test_permissions():
+    """权限系统测试页面"""
+    return FileResponse('static/test-permissions.html')
+
 if __name__ == "__main__":
     import uvicorn
     logger.info(f"Starting {settings.APP_NAME} on port 8000")
