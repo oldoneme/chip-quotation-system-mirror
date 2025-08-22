@@ -99,6 +99,7 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """获取当前用户信息"""
+    
     # 解析部门信息
     try:
         department_ids = json.loads(current_user.department_ids or "[]")
@@ -107,7 +108,8 @@ async def get_current_user_info(
         department_ids = []
         is_leader_in_dept = []
     
-    return UserResponse(
+    
+    response_data = UserResponse(
         id=current_user.id,
         userid=current_user.userid,
         name=current_user.name,
@@ -124,6 +126,8 @@ async def get_current_user_info(
         created_at=current_user.created_at,
         last_login=current_user.last_login
     )
+    
+    return response_data
 
 
 @router.get("/auth/login")
@@ -155,10 +159,6 @@ async def login(
     
     # 获取授权URL
     auth_url = wecom.get_authorize_url(state)
-    
-    # 移动端添加特殊日志
-    if is_mobile:
-        print(f"📱 移动端登录请求: {user_agent[:50]}...")
     
     return RedirectResponse(url=auth_url, status_code=302)
 

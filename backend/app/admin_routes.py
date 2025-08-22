@@ -818,42 +818,64 @@ async def update_user_role(
     db: Session = Depends(get_db)
 ):
     """修改用户角色"""
-    user = db.query(User).filter(User.userid == userid).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
-    
-    new_role = role_data.get("role")
-    if new_role not in ["user", "manager", "admin", "super_admin"]:
-        raise HTTPException(status_code=400, detail="无效的角色")
-    
-    # 记录旧角色
-    old_role = user.role
-    
-    # 更新角色
-    user.role = new_role
-    user.updated_at = datetime.now()
-    db.commit()
-    
-    # 刷新对象以确保数据库状态同步
-    db.refresh(user)
-    logger.info(f"角色更新后，用户{userid}在数据库中的角色为: {user.role}")
-    
-    # 如果角色确实发生了变化，记录变更
-    if old_role != new_role:
-        # 记录角色变更历史
-        record_role_change(userid, old_role, new_role)
+    try:
+        logger.info(f"开始处理角色修改请求: userid={userid}, role_data={role_data}")
         
-        logger.info(f"用户{userid}角色从{old_role}修改为{new_role}，立即生效")
+        user = db.query(User).filter(User.userid == userid).first()
+        if not user:
+            logger.warning(f"用户不存在: {userid}")
+            raise HTTPException(status_code=404, detail="用户不存在")
         
-        return {
-            "success": True, 
-            "message": f"角色修改成功，新权限立即生效",
-            "role_changed": True,
-            "old_role": old_role,
-            "new_role": new_role
-        }
-    else:
-        return {"success": True, "message": "角色未发生变化"}
+        new_role = role_data.get("role")
+        if new_role not in ["user", "manager", "admin", "super_admin"]:
+            logger.warning(f"无效的角色: {new_role}")
+            raise HTTPException(status_code=400, detail="无效的角色")
+        
+        # 记录旧角色
+        old_role = user.role
+        logger.info(f"用户{userid}当前角色: {old_role}, 新角色: {new_role}")
+        
+        # 更新角色
+        user.role = new_role
+        user.updated_at = datetime.now()
+        
+        logger.info("准备提交数据库更改...")
+        db.commit()
+        logger.info("数据库提交成功")
+        
+        # 刷新对象以确保数据库状态同步
+        db.refresh(user)
+        logger.info(f"角色更新后，用户{userid}在数据库中的角色为: {user.role}")
+        
+        # 如果角色确实发生了变化，记录变更
+        if old_role != new_role:
+            # 记录角色变更历史
+            try:
+                record_role_change(userid, old_role, new_role)
+                logger.info("角色变更历史记录成功")
+            except Exception as e:
+                logger.warning(f"记录角色变更历史失败: {e}")
+            
+            logger.info(f"用户{userid}角色从{old_role}修改为{new_role}，立即生效")
+            
+            return {
+                "success": True, 
+                "message": f"角色修改成功，新权限立即生效",
+                "role_changed": True,
+                "old_role": old_role,
+                "new_role": new_role
+            }
+        else:
+            return {"success": True, "message": "角色未发生变化"}
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.exception(f"角色修改过程中发生异常: {e}")
+        logger.error(f"详细错误信息: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"修改失败: {str(e)}")
 
 @router.put("/users/{userid}/status")
 async def update_user_status(
