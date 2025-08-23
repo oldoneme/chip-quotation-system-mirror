@@ -43,6 +43,18 @@ const QuoteResult = () => {
     }
   };
 
+  // 格式化单颗费用显示（4位小数，万分位向上取整）- 用于工序报价
+  const formatUnitPrice = (number) => {
+    const currency = getCurrency();
+    const symbol = currency === 'USD' ? '$' : '¥';
+    if (number === null || number === undefined || number === 0) return `${symbol}0.0000`;
+    
+    // 万分位向上取整：乘以10000，向上取整，再除以10000
+    const ceiledToFourDecimals = Math.ceil(number * 10000) / 10000;
+    const formatted = ceiledToFourDecimals.toFixed(4);
+    return `${symbol}${formatted}`;
+  };
+
   useEffect(() => {
     let newData = null;
     
@@ -561,17 +573,17 @@ const QuoteResult = () => {
                                 <div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
                                     <span>单颗成本:</span>
-                                    <span style={{ color: '#52c41a' }}>{formatPrice(totalCost)}</span>
+                                    <span style={{ color: '#52c41a' }}>{formatUnitPrice(totalCost)}</span>
                                   </div>
                                   {cardCost > 0 && (
                                     <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <span>  - 人工成本:</span>
-                                        <span>{formatPrice(laborCost)}</span>
+                                        <span>{formatUnitPrice(laborCost)}</span>
                                       </div>
                                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <span>  - 板卡成本:</span>
-                                        <span>{formatPrice(cardCost)}</span>
+                                        <span>{formatUnitPrice(cardCost)}</span>
                                       </div>
                                     </div>
                                   )}
@@ -582,12 +594,8 @@ const QuoteResult = () => {
                         </div>
                       </div>
                     ))}
-                    <div style={{ textAlign: 'right', marginTop: 10, fontSize: '16px', fontWeight: 'bold', color: '#52c41a' }}>
-                      CP工序小计: {formatPrice(quoteData.cpProcesses.reduce((sum, p) => {
-                        const laborCost = p.unitCost || 0;
-                        const cardCost = calculateProcessCardCost(p, quoteData.cardTypes);
-                        return sum + laborCost + cardCost;
-                      }, 0))}
+                    <div style={{ textAlign: 'right', marginTop: 10, fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                      注：CP工序各道工序报价不可直接相加
                     </div>
                   </div>
                 )}
@@ -620,17 +628,17 @@ const QuoteResult = () => {
                                 <div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
                                     <span>单颗成本:</span>
-                                    <span style={{ color: '#1890ff' }}>{formatPrice(totalCost)}</span>
+                                    <span style={{ color: '#1890ff' }}>{formatUnitPrice(totalCost)}</span>
                                   </div>
                                   {cardCost > 0 && (
                                     <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <span>  - 人工成本:</span>
-                                        <span>{formatPrice(laborCost)}</span>
+                                        <span>{formatUnitPrice(laborCost)}</span>
                                       </div>
                                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <span>  - 板卡成本:</span>
-                                        <span>{formatPrice(cardCost)}</span>
+                                        <span>{formatUnitPrice(cardCost)}</span>
                                       </div>
                                     </div>
                                   )}
@@ -641,29 +649,29 @@ const QuoteResult = () => {
                         </div>
                       </div>
                     ))}
-                    <div style={{ textAlign: 'right', marginTop: 10, fontSize: '16px', fontWeight: 'bold', color: '#1890ff' }}>
-                      FT工序小计: {formatPrice(quoteData.ftProcesses.reduce((sum, p) => {
-                        const laborCost = p.unitCost || 0;
-                        const cardCost = calculateProcessCardCost(p, quoteData.cardTypes);
-                        return sum + laborCost + cardCost;
-                      }, 0))}
+                    <div style={{ textAlign: 'right', marginTop: 10, fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                      注：FT工序各道工序报价不可直接相加
                     </div>
                   </div>
                 )}
               </div>
               
               <div style={{ marginBottom: 20 }}>
-                <h4>成本汇总</h4>
-                <div style={{ paddingLeft: 15, border: '1px solid #e8e8e8', borderRadius: '6px', padding: '15px', backgroundColor: '#f6ffed' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, fontSize: '16px' }}>
-                    <span>单颗总成本:</span>
-                    <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                      {formatPrice(quoteData.totalUnitCost || 0)}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 'bold', color: '#52c41a', paddingTop: '10px', borderTop: '1px solid #d9f7be' }}>
-                    <span>项目总成本:</span>
-                    <span>{formatPrice(quoteData.totalProjectCost || 0)}</span>
+                <h4>报价说明</h4>
+                <div style={{ paddingLeft: 15, border: '1px solid #e8e8e8', borderRadius: '6px', padding: '15px', backgroundColor: '#f0f8ff' }}>
+                  <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#666' }}>
+                    <div style={{ marginBottom: '8px', fontWeight: 'bold', color: '#1890ff' }}>
+                      ✓ 工序报价说明：
+                    </div>
+                    <div style={{ marginBottom: '5px' }}>
+                      • 以上为各工序独立报价，反映每道工序的实际成本
+                    </div>
+                    <div style={{ marginBottom: '5px' }}>
+                      • 不同工序存在良率差异，实际成本需根据良率计算
+                    </div>
+                    <div style={{ color: '#f5222d', fontWeight: 'bold' }}>
+                      • 各工序报价不可直接相加，请根据实际生产需求选择
+                    </div>
                   </div>
                 </div>
               </div>
