@@ -5,11 +5,13 @@ import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonC
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
 import { formatNumber, formatHourlyRate } from '../utils';
+import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
 
 const InquiryQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -330,25 +332,33 @@ const InquiryQuote = () => {
     const machine = formData.machines.find(m => m.id === machineId);
     const realMachineId = machine?.machineData?.id || machineId;
     
-    return [
+    const columns = [
       { title: 'Part Number', dataIndex: 'part_number' },
       { title: 'Board Name', dataIndex: 'board_name' },
-      { 
+    ];
+    
+    // 只有管理员以上权限才能看到价格
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      columns.push({ 
         title: 'Unit Price', 
         dataIndex: 'unit_price',
         render: (value) => formatNumber(value || 0)
-      },
-      { 
-        title: 'Quantity', 
-        render: (_, record) => (
-          <InputNumber 
-            min={1} 
-            value={persistedCardQuantities[`${realMachineId}_${record.id}`] || 1}
-            onChange={(value) => handleCardQuantityChange(machineId, record.id, value)}
+      });
+    }
+    
+    columns.push({ 
+      title: 'Quantity', 
+      render: (_, record) => (
+        <InputNumber 
+          min={1} 
+          value={persistedCardQuantities[`${realMachineId}_${record.id}`] || 1}
+          onChange={(value) => handleCardQuantityChange(machineId, record.id, value)}
           />
         ) 
       }
-    ];
+    );
+    
+    return columns;
   };
 
   const handleInputChange = (section, field, value) => {

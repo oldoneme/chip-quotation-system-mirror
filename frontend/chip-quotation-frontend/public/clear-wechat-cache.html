@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>清除缓存</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <h2>清除企业微信缓存</h2>
+    <p>请在企业微信中打开此页面，然后点击右上角菜单，选择"刷新"</p>
+    <button onclick="forceReload()">强制刷新</button>
+    
+    <script>
+    function forceReload() {
+        // 清除所有缓存
+        if ('caches' in window) {
+            caches.keys().then(function(names) {
+                for (let name of names)
+                    caches.delete(name);
+            });
+        }
+        
+        // 清除sessionStorage和localStorage
+        sessionStorage.clear();
+        localStorage.clear();
+        
+        // 强制刷新
+        window.location.href = '/?v=' + Date.now();
+    }
+    
+    // 自动执行一次
+    setTimeout(forceReload, 1000);
+    </script>
+</body>
+</html>

@@ -5,11 +5,13 @@ import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonC
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
 import { formatHourlyRate } from '../utils';
+import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
 
 const ProcessQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   
   const [machines, setMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
@@ -479,29 +481,36 @@ const ProcessQuote = () => {
     const selectedCardIds = Object.keys(process.cardQuantities).map(id => parseInt(id));
     
     // 板卡表格列定义
-    const cardColumns = [
-      { 
-        title: 'Part Number', 
-        dataIndex: 'part_number',
-        width: '25%'
-      },
-      { 
-        title: 'Board Name', 
-        dataIndex: 'board_name',
-        width: '35%',
-        render: (text) => (
-          <span style={{ fontWeight: '500', color: '#333' }}>
-            {text}
-          </span>
-        )
-      },
-      { 
-        title: 'Unit Price', 
-        dataIndex: 'unit_price',
-        width: '20%',
-        render: (value) => formatHourlyRate(value || 0)
-      },
-      { 
+    const cardColumns = () => {
+      const columns = [
+        { 
+          title: 'Part Number', 
+          dataIndex: 'part_number',
+          width: '25%'
+        },
+        { 
+          title: 'Board Name', 
+          dataIndex: 'board_name',
+          width: user?.role === 'admin' || user?.role === 'super_admin' ? '35%' : '55%',
+          render: (text) => (
+            <span style={{ fontWeight: '500', color: '#333' }}>
+              {text}
+            </span>
+          )
+        }
+      ];
+      
+      // 只有管理员以上权限才能看到价格
+      if (user?.role === 'admin' || user?.role === 'super_admin') {
+        columns.push({ 
+          title: 'Unit Price', 
+          dataIndex: 'unit_price',
+          width: '20%',
+          render: (value) => formatHourlyRate(value || 0)
+        });
+      }
+      
+      columns.push({ 
         title: 'Quantity', 
         dataIndex: 'id',
         width: '20%',
@@ -515,8 +524,10 @@ const ProcessQuote = () => {
             placeholder="数量"
           />
         )
-      }
-    ];
+      });
+      
+      return columns;
+    };
     
     return (
       <div style={{ padding: '10px 0' }}>
@@ -525,7 +536,7 @@ const ProcessQuote = () => {
         </h5>
         <Table
           dataSource={availableCards}
-          columns={cardColumns}
+          columns={cardColumns()}
           rowKey="id"
           rowSelection={{
             type: 'checkbox',

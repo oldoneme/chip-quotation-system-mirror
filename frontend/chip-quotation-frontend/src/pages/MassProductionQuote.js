@@ -4,6 +4,7 @@ import { Select, Table, Tabs, Spin, Alert, Checkbox, Button, Card, InputNumber, 
 import StepIndicator from '../components/StepIndicator';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
+import { useAuth } from '../contexts/AuthContext';
 import {
   getMachines
 } from '../services/machines';
@@ -26,6 +27,7 @@ const MassProductionQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { state } = location;
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -631,15 +633,22 @@ const MassProductionQuote = () => {
   };
 
   // 表格列定义
-  const cardColumns = (type, machineType) => [
-    { title: 'Part Number', dataIndex: 'part_number' },
-    { title: 'Board Name', dataIndex: 'board_name' },
-    { 
-      title: 'Unit Price', 
-      dataIndex: 'unit_price',
-      render: (value) => formatNumber(value || 0)
-    },
-    { 
+  const cardColumns = (type, machineType) => {
+    const columns = [
+      { title: 'Part Number', dataIndex: 'part_number' },
+      { title: 'Board Name', dataIndex: 'board_name' },
+    ];
+    
+    // 只有管理员以上权限才能看到价格
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      columns.push({ 
+        title: 'Unit Price', 
+        dataIndex: 'unit_price',
+        render: (value) => formatNumber(value || 0)
+      });
+    }
+    
+    columns.push({ 
       title: 'Quantity', 
       render: (_, record) => (
         <InputNumber 
@@ -648,8 +657,10 @@ const MassProductionQuote = () => {
           onChange={(value) => handleCardQuantityChange(type, machineType, record.id, value)}
         />
       ) 
-    }
-  ];
+    });
+    
+    return columns;
+  };
   
   // 计算单个辅助设备的小时费率
   const calculateAuxDeviceHourlyRate = (device) => {

@@ -5,6 +5,7 @@ import StepIndicator from '../components/StepIndicator';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
 import { formatHourlyRate } from '../utils';
+import { useAuth } from '../contexts/AuthContext';
 import {
   getMachines
 } from '../services/machines';
@@ -26,6 +27,7 @@ const { TabPane } = Tabs;
 const EngineeringQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [testMachine, setTestMachine] = useState(null);
   const [handler, setHandler] = useState(null);
@@ -81,7 +83,9 @@ const EngineeringQuote = () => {
           getAuxiliaryEquipment()
         ]);
 
-        setCardTypes(cardTypesData);
+        if (isMounted) {
+          setCardTypes(cardTypesData);
+        }
 
         // 从机器中筛选出不同类型的机器
         console.log('开始筛选不同类型机器...');
@@ -148,10 +152,12 @@ const EngineeringQuote = () => {
             return isAuxMachine;
           });
           
-          setMachines(testMachines);      // 测试机
-          setHandlers(handlerMachines);   // 分选机
-          setProbers(proberMachines);     // 探针台
-          setAuxMachines(auxMachines);    // 辅助设备
+          if (isMounted) {
+            setMachines(testMachines);      // 测试机
+            setHandlers(handlerMachines);   // 分选机
+            setProbers(proberMachines);     // 探针台
+            setAuxMachines(auxMachines);    // 辅助设备
+          }
           
           console.log('筛选结果:');
           console.log('- 测试机:', testMachines.map(m => `${m.name} (ID: ${m.id})`));
@@ -163,7 +169,9 @@ const EngineeringQuote = () => {
         // 处理辅助设备数据，分为handlers和probers
         const handlers = auxEquipmentData.filter(item => item.name.includes('分选机') || item.name.includes('Handler'));
         const probers = auxEquipmentData.filter(item => item.name.includes('探针台') || item.name.includes('Prober'));
-        setAuxDevices({ handlers, probers });
+        if (isMounted) {
+          setAuxDevices({ handlers, probers });
+        }
       } catch (err) {
         console.error('详细错误信息:', err);
         console.error('错误响应:', err.response);
@@ -573,15 +581,22 @@ const EngineeringQuote = () => {
   };
 
   // 表格列定义
-  const cardColumns = (machineType) => [
-    { title: 'Part Number', dataIndex: 'part_number' },
-    { title: 'Board Name', dataIndex: 'board_name' },
-    { 
-      title: 'Unit Price', 
-      dataIndex: 'unit_price',
-      render: (value) => formatNumber(value || 0)
-    },
-    { 
+  const cardColumns = (machineType) => {
+    const columns = [
+      { title: 'Part Number', dataIndex: 'part_number' },
+      { title: 'Board Name', dataIndex: 'board_name' },
+    ];
+    
+    // 只有管理员以上权限才能看到价格
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      columns.push({ 
+        title: 'Unit Price', 
+        dataIndex: 'unit_price',
+        render: (value) => formatNumber(value || 0)
+      });
+    }
+    
+    columns.push({ 
       title: 'Quantity', 
       render: (_, record) => (
         <InputNumber 
@@ -590,8 +605,10 @@ const EngineeringQuote = () => {
           onChange={(value) => handleCardQuantityChange(machineType, record.id, value)}
         />
       ) 
-    }
-  ];
+    });
+    
+    return columns;
+  };
   
   // 计算单个辅助设备的小时费率
   const calculateAuxDeviceHourlyRate = (device) => {
