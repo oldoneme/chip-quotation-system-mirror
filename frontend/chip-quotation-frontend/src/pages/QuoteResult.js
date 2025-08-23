@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Table, Button, Card, Divider, message } from 'antd';
-import { formatNumber, formatHourlyRate } from '../utils';
+import { formatQuotePrice } from '../utils';
 import '../App.css';
 
 const QuoteResult = () => {
@@ -16,10 +16,15 @@ const QuoteResult = () => {
     { value: 'EUR', label: '欧元 (EUR)', symbol: '€' }
   ];
 
+  // 获取币种信息，兼容不同的字段名
+  const getCurrency = () => {
+    return quoteData?.quoteCurrency || quoteData?.currency || 'CNY';
+  };
+
   // 格式化价格显示（包含币种符号）
   const formatPrice = (number) => {
-    const formattedNumber = formatNumber(number);
-    const currency = quoteData?.quoteCurrency || 'CNY';
+    const currency = getCurrency();
+    const formattedNumber = formatQuotePrice(number, currency);
     if (currency === 'USD') {
       return `$${formattedNumber}`;
     } else {
@@ -27,10 +32,10 @@ const QuoteResult = () => {
     }
   };
 
-  // 格式化机时价格显示（包含币种符号，精确到个位）
+  // 格式化机时价格显示（包含币种符号，根据币种精度）
   const formatHourlyPrice = (number) => {
-    const formattedNumber = formatHourlyRate(number);
-    const currency = quoteData?.quoteCurrency || 'CNY';
+    const currency = getCurrency();
+    const formattedNumber = formatQuotePrice(number, currency);
     if (currency === 'USD') {
       return `$${formattedNumber}`;
     } else {
@@ -759,7 +764,7 @@ const QuoteResult = () => {
                         <span>月费: {currencies.find(c => c.value === quoteData.currency)?.symbol}{contract.monthlyRate}</span>
                         <span style={{ fontWeight: 'bold', color: '#52c41a' }}>
                           总价: {currencies.find(c => c.value === quoteData.currency)?.symbol}
-                          {(contract.monthlyRate * contract.duration * (1 - contract.discount / 100)).toFixed(2)}
+                          {formatQuotePrice(contract.monthlyRate * contract.duration * (1 - contract.discount / 100), quoteData.quoteCurrency || 'CNY')}
                         </span>
                       </div>
                     </div>
@@ -824,7 +829,7 @@ const QuoteResult = () => {
                     <span>最终报价：</span>
                     <span>
                       {currencies.find(c => c.value === quoteData.currency)?.symbol}
-                      {quoteData.calculatedTotals?.finalTotal?.toFixed(2) || '0.00'}
+                      {formatQuotePrice(quoteData.calculatedTotals?.finalTotal || 0, quoteData.quoteCurrency || 'CNY')}
                     </span>
                   </div>
                 </div>

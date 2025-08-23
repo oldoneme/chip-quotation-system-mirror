@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
+import { formatQuotePrice } from '../utils';
 import '../App.css';
 
 const ToolingQuote = () => {
@@ -410,7 +411,7 @@ const ToolingQuote = () => {
               <div className="form-group">
                 <label>小计</label>
                 <div className="price-display">
-                  {currencies.find(c => c.value === formData.currency)?.symbol} {item.totalPrice.toFixed(2)}
+                  {currencies.find(c => c.value === formData.currency)?.symbol} {formatQuotePrice(item.totalPrice, formData.currency)}
                 </div>
               </div>
             </div>
@@ -557,26 +558,26 @@ const ToolingQuote = () => {
           <div className="summary-item">
             <span>工装夹具费用：</span>
             <span>{currencies.find(c => c.value === formData.currency)?.symbol} 
-              {formData.toolingItems.reduce((sum, item) => sum + item.totalPrice, 0).toFixed(2)}
+              {formatQuotePrice(formData.toolingItems.reduce((sum, item) => sum + item.totalPrice, 0), formData.currency)}
             </span>
           </div>
           <div className="summary-item">
             <span>工程费用：</span>
             <span>{currencies.find(c => c.value === formData.currency)?.symbol} 
-              {Object.values(formData.engineeringFees).reduce((sum, fee) => sum + fee, 0).toFixed(2)}
+              {formatQuotePrice(Object.values(formData.engineeringFees).reduce((sum, fee) => sum + fee, 0), formData.currency)}
             </span>
           </div>
           <div className="summary-item">
             <span>量产准备费用：</span>
             <span>{currencies.find(c => c.value === formData.currency)?.symbol} 
-              {Object.values(formData.productionSetup).reduce((sum, fee) => sum + fee, 0).toFixed(2)}
+              {formatQuotePrice(Object.values(formData.productionSetup).reduce((sum, fee) => sum + fee, 0), formData.currency)}
             </span>
           </div>
           <div className="summary-item total">
             <span>总计：</span>
             <span className="summary-value">
               {currencies.find(c => c.value === formData.currency)?.symbol} 
-              {calculateTotalCost().toFixed(2)}
+              {formatQuotePrice(calculateTotalCost(), formData.currency)}
             </span>
           </div>
         </div>

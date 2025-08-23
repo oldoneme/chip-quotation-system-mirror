@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
-import { formatHourlyRate } from '../utils';
+import { formatQuotePrice } from '../utils';
 import '../App.css';
 
 const ComprehensiveQuote = () => {
@@ -482,7 +482,7 @@ const ComprehensiveQuote = () => {
                       <span className="service-name">{service.name}</span>
                       <span className="service-price">
                         {currencies.find(c => c.value === formData.currency)?.symbol}
-                        {service.unit === '小时' ? formatHourlyRate(service.basePrice) : service.basePrice}/{service.unit}
+                        {service.unit === '小时' ? formatQuotePrice(service.basePrice, formData.currency) : formatQuotePrice(service.basePrice, formData.currency)}/{service.unit}
                       </span>
                     </div>
                   </label>
@@ -677,7 +677,7 @@ const ComprehensiveQuote = () => {
                 <div className="form-group">
                   <label>小计</label>
                   <div className="price-display">
-                    {currencies.find(c => c.value === formData.currency)?.symbol} {item.totalPrice.toFixed(2)}
+                    {currencies.find(c => c.value === formData.currency)?.symbol} {formatQuotePrice(item.totalPrice, formData.currency)}
                   </div>
                 </div>
               </div>
@@ -847,17 +847,17 @@ const ComprehensiveQuote = () => {
                    formData.quoteType === 'time' ? '合约总价' : '自定义总价'}：</span>
             <span>
               {currencies.find(c => c.value === formData.currency)?.symbol} 
-              {(formData.quoteType === 'package' ? calculatePackageTotal() :
+              {formatQuotePrice((formData.quoteType === 'package' ? calculatePackageTotal() :
                 formData.quoteType === 'volume' ? calculateVolumeQuoteTotal() :
                 formData.quoteType === 'time' ? calculateTimeQuoteTotal() :
-                calculateCustomQuoteTotal()).toFixed(2)}
+                calculateCustomQuoteTotal()), formData.currency)}
             </span>
           </div>
           <div className="summary-item total">
             <span>最终报价：</span>
             <span className="summary-value">
               {currencies.find(c => c.value === formData.currency)?.symbol} 
-              {calculateFinalTotal().toFixed(2)}
+              {formatQuotePrice(calculateFinalTotal(), formData.currency)}
             </span>
           </div>
         </div>

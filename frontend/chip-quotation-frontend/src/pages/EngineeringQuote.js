@@ -4,7 +4,7 @@ import { Select, Table, Tabs, Spin, Alert, InputNumber, Form, Button, Card, Chec
 import StepIndicator from '../components/StepIndicator';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
-import { formatHourlyRate } from '../utils';
+import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getMachines
@@ -18,7 +18,6 @@ import {
 import {
   getAuxiliaryEquipment
 } from '../services/auxiliaryEquipment';
-import { formatNumber } from '../utils';
 import '../App.css';
 
 const { Option } = Select;
@@ -245,7 +244,7 @@ const EngineeringQuote = () => {
 
   // 格式化价格显示（包含币种符号）
   const formatPrice = (number) => {
-    const formattedNumber = formatNumber(number);
+    const formattedNumber = formatQuotePrice(number, quoteCurrency);
     if (quoteCurrency === 'USD') {
       return `$${formattedNumber}`;
     } else {
@@ -253,9 +252,9 @@ const EngineeringQuote = () => {
     }
   };
 
-  // 格式化机时价格显示（包含币种符号，精确到个位）
+  // 格式化机时价格显示（包含币种符号，根据币种精度）
   const formatHourlyPrice = (number) => {
-    const formattedNumber = formatHourlyRate(number);
+    const formattedNumber = formatQuotePrice(number, quoteCurrency);
     if (quoteCurrency === 'USD') {
       return `$${formattedNumber}`;
     } else {
@@ -377,7 +376,7 @@ const EngineeringQuote = () => {
   const calculateTestMachineFee = () => {
     if (!testMachine || testMachineCards.length === 0) return 0;
     
-    return testMachineCards.reduce((total, card) => {
+    const totalCost = testMachineCards.reduce((total, card) => {
       let adjustedPrice = card.unit_price / 10000;
       
       // 根据报价币种和机器币种进行转换
@@ -394,13 +393,16 @@ const EngineeringQuote = () => {
       
       return total + (adjustedPrice * testMachine.discount_rate * (card.quantity || 1));
     }, 0);
+    
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalCost, quoteCurrency);
   };
   
   // 计算分选机费用
   const calculateHandlerFee = () => {
     if (!handler || handlerCards.length === 0) return 0;
     
-    return handlerCards.reduce((total, card) => {
+    const totalCost = handlerCards.reduce((total, card) => {
       let adjustedPrice = card.unit_price / 10000;
       
       // 根据报价币种和机器币种进行转换
@@ -417,13 +419,16 @@ const EngineeringQuote = () => {
       
       return total + (adjustedPrice * handler.discount_rate * (card.quantity || 1));
     }, 0);
+    
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalCost, quoteCurrency);
   };
   
   // 计算探针台费用
   const calculateProberFee = () => {
     if (!prober || proberCards.length === 0) return 0;
     
-    return proberCards.reduce((total, card) => {
+    const totalCost = proberCards.reduce((total, card) => {
       let adjustedPrice = card.unit_price / 10000;
       
       // 根据报价币种和机器币种进行转换
@@ -440,6 +445,9 @@ const EngineeringQuote = () => {
       
       return total + (adjustedPrice * prober.discount_rate * (card.quantity || 1));
     }, 0);
+    
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalCost, quoteCurrency);
   };
   
   // 计算人员费用（用于明细显示，固定RMB）
@@ -463,7 +471,7 @@ const EngineeringQuote = () => {
   
   // 计算辅助设备费用
   const calculateAuxDeviceFee = () => {
-    return selectedAuxDevices.reduce((total, device) => {
+    const totalCost = selectedAuxDevices.reduce((total, device) => {
       // 如果是机器类型的辅助设备（有supplier信息），计算板卡费用
       if (device.supplier || device.machine_type) {
         // 查找该机器的板卡
@@ -497,6 +505,9 @@ const EngineeringQuote = () => {
         return total + hourlyRate;
       }
     }, 0);
+    
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalCost, quoteCurrency);
   };
   
   // 计算应用工程系数的机器总费用
@@ -507,7 +518,9 @@ const EngineeringQuote = () => {
     total += calculateProberFee();
     
     // 应用工程系数
-    return total * engineeringRate;
+    const totalWithRate = total * engineeringRate;
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalWithRate, quoteCurrency);
   };
   
   // 计算不应用工程系数的其他费用
@@ -516,17 +529,22 @@ const EngineeringQuote = () => {
     
     // 人员费用
     selectedPersonnel.forEach(personType => {
-      total += calculatePersonnelFee(personType);
+      total += calculatePersonnelFeeForQuote(personType);
     });
     
     total += calculateAuxDeviceFee();
     
-    return total;
+    // 根据货币类型向上取整
+    return ceilByCurrency(total, quoteCurrency);
   };
   
   // 计算总费用
   const calculateTotal = () => {
-    return calculateMachineTotalWithEngineeringRate() + calculateOtherFees();
+    const machineTotal = calculateMachineTotalWithEngineeringRate();
+    const otherTotal = calculateOtherFees();
+    const grandTotal = machineTotal + otherTotal;
+    // 根据货币类型向上取整
+    return ceilByCurrency(grandTotal, quoteCurrency);
   };
 
   const handleCardSelection = (machineType, selectedRowKeys, selectedRows) => {
@@ -592,7 +610,7 @@ const EngineeringQuote = () => {
       columns.push({ 
         title: 'Unit Price', 
         dataIndex: 'unit_price',
-        render: (value) => formatNumber(value || 0)
+        render: (value) => formatQuotePrice(value || 0, quoteCurrency)
       });
     }
     
@@ -850,18 +868,18 @@ const EngineeringQuote = () => {
                 borderBottom: index < personnelOptions.length - 1 ? '1px solid #f0f0f0' : 'none'
               }}>
                 <Checkbox value={person.type}>{person.type}</Checkbox>
-                <span>¥{formatHourlyRate(person.rate)}/小时</span>
+                <span>{formatHourlyPrice(quoteCurrency === 'USD' ? person.rate / quoteExchangeRate : person.rate)}/小时</span>
               </div>
             ))}
           </Checkbox.Group>
         </div>
         
         {selectedPersonnel.includes('工程师') && (
-          <p><strong>工程师小时费: ¥{formatHourlyRate(calculatePersonnelFee('工程师'))}</strong></p>
+          <p><strong>工程师小时费: {formatHourlyPrice(calculatePersonnelFeeForQuote('工程师'))}</strong></p>
         )}
         
         {selectedPersonnel.includes('技术员') && (
-          <p><strong>技术员小时费: ¥{formatHourlyRate(calculatePersonnelFee('技术员'))}</strong></p>
+          <p><strong>技术员小时费: {formatHourlyPrice(calculatePersonnelFeeForQuote('技术员'))}</strong></p>
         )}
       </Card>
       
@@ -924,7 +942,7 @@ const EngineeringQuote = () => {
               {selectedAuxDevices.map((device, index) => (
                 <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, paddingLeft: 20 }}>
                   <span>{device.name} ({device.supplier?.machine_type?.name || '辅助设备'})</span>
-                  <span>¥{formatHourlyRate(device.hourly_rate || 0)}/小时</span>
+                  <span>{formatHourlyPrice(quoteCurrency === 'USD' ? (device.hourly_rate || 0) / quoteExchangeRate : (device.hourly_rate || 0))}/小时</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>

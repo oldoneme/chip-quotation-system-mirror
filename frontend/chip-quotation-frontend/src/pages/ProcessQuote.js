@@ -4,7 +4,7 @@ import { Checkbox, Card, Button, Table, InputNumber } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
-import { formatHourlyRate } from '../utils';
+import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
 
@@ -288,7 +288,8 @@ const ProcessQuote = () => {
       }
     });
     
-    return cardCost;
+    // 根据货币类型向上取整
+    return ceilByCurrency(cardCost, formData.currency);
   };
 
   // 计算总成本（包含人工成本和板卡成本）
@@ -311,7 +312,8 @@ const ProcessQuote = () => {
       }, 0);
     }
     
-    return total;
+    // 根据货币类型向上取整
+    return ceilByCurrency(total, formData.currency);
   };
 
   const calculateTotalProjectCost = () => {
@@ -352,12 +354,13 @@ const ProcessQuote = () => {
   // 格式化价格显示
   const formatPrice = (number) => {
     const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
-    return `${symbol}${number.toFixed(4)}`;
+    const formattedNumber = formatQuotePrice(number, formData.currency);
+    return `${symbol}${formattedNumber}`;
   };
 
-  // 格式化机时价格显示（包含币种符号，精确到个位）
+  // 格式化机时价格显示（包含币种符号，根据币种精度）
   const formatHourlyPrice = (number) => {
-    const formattedNumber = formatHourlyRate(number);
+    const formattedNumber = formatQuotePrice(number, formData.currency);
     const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
     return `${symbol}${formattedNumber}`;
   };
@@ -506,7 +509,7 @@ const ProcessQuote = () => {
           title: 'Unit Price', 
           dataIndex: 'unit_price',
           width: '20%',
-          render: (value) => formatHourlyRate(value || 0)
+          render: (value) => formatQuotePrice(value || 0, formData.currency)
         });
       }
       
