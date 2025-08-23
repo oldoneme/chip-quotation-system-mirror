@@ -8,6 +8,8 @@ import random
 import xml.etree.ElementTree as ET
 import subprocess
 import datetime
+import pathlib
+import re
 from typing import Optional
 from urllib.parse import urlencode, urlunparse
 
@@ -48,34 +50,26 @@ from pydantic import ValidationError
 from Crypto.Cipher import AES
 from starlette.requests import Request as StarletteRequest
 
-# 3) HTML导航识别工具函数
-HTML_EXTS = {".html", ""}
+# 静态目录定位
+PUBLIC_DIR = pathlib.Path(os.path.join(os.path.dirname(__file__), "..", "static")).resolve()
+INDEX_FILE = PUBLIC_DIR / "index.html"
 
-def is_html_navigation(req: StarletteRequest) -> bool:
-    """
-    判定是否是 HTML 导航请求：
-    - Accept 含 text/html 或 mode==navigate
-    - 路径没有扩展名或以 .html 结尾
-    - 排除典型 API/静态资源/管理页面前缀
-    """
+# 企业微信 UA 检测
+WEWORK_UA_KEYS = ("wxwork", "wecom", "micromessenger")
+
+def is_wework(req) -> bool:
+    """检测是否是企业微信 WebView"""
+    ua = (req.headers.get("user-agent") or "").lower()
+    return any(k in ua for k in WEWORK_UA_KEYS)
+
+def is_html_nav(req) -> bool:
+    """判断是否为HTML导航请求"""
     p = req.url.path
-    # 扩展名
-    import os
-    ext = os.path.splitext(p)[1].lower()
-
-    # 排除不应该重定向的路径
-    excluded_paths = [
-        "/static/", "/assets/", "/api/", "/__", 
-        "/admin/", "/auth/", "/wecom/", "/dashboard", "/test-"
-    ]
-    
-    if any(p.startswith(path) for path in excluded_paths):
+    if p.startswith("/static/") or p.startswith("/assets/") or p.startswith("/api/") or p.startswith("/wecom/"):
         return False
-
     accept = req.headers.get("accept", "")
-    if "text/html" in accept or ext in HTML_EXTS or p == "/":
-        return True
-    return False
+    has_ext = pathlib.Path(p).suffix != ""
+    return ("text/html" in accept) or (p == "/") or (not has_ext) or p.endswith(".html")
 from app.database import engine, Base
 from app.api.v1.api import api_router
 from app.auth_routes import router as auth_router
@@ -120,71 +114,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 4) URL版本化强制重定向中间件
+VERSION_PREFIX = f"/v/{APP_VERSION}"
+
+# 强制路径版本化 + 302 重定向 + Clear-Site-Data 中间件
 @app.middleware("http")
-async def force_url_version_and_cache_headers(request: Request, call_next):
+async def force_versioned_path_and_cache_headers(request: Request, call_next):
     try:
-        if is_html_navigation(request):
-            # 仅对 HTML 导航请求强制 URL 版本化
-            q = dict(request.query_params)
-            current = q.get("v", "")
-            if current != APP_VERSION:
-                # 生成带 v=<APP_VERSION> 的重定向 URL，保留其它参数
-                scheme = request.url.scheme
-                netloc = request.url.netloc
-                path = request.url.path
-                params = ""
-                q.update({"v": APP_VERSION})
-                query = urlencode(q, doseq=True)
-                fragment = ""
-                new_url = urlunparse((scheme, netloc, path, params, query, fragment))
-                print(f"🔄 URL版本化重定向: {request.url} → {new_url}")
-                
-                # 302 临时跳转（不要 301，避免客户端死记）
-                resp = RedirectResponse(url=new_url, status_code=302)
-                # 302 也加 no-store，以防客户端缓存重定向
+        p = request.url.path
+
+        # 对 HTML 导航做路径版本化：如果不在 /v/<APP_VERSION>/ 下，或版本不匹配 → 302
+        if is_html_nav(request):
+            m = re.match(r"^/v/([^/]+)(/.*)?$", p)
+            if not m or m.group(1) != APP_VERSION:
+                rest = p
+                if m:
+                    rest = m.group(2) or "/"
+                scheme, netloc = request.url.scheme, request.url.netloc
+                q = dict(request.query_params)
+                new_path = (f"{VERSION_PREFIX}" + (rest if rest.startswith("/") else f"/{rest}")).replace("//","/")
+                new_url = urlunparse((scheme, netloc, new_path, "", urlencode(q, doseq=True), ""))
+                resp = RedirectResponse(new_url, status_code=302)
+                # 避免 302 被缓存
                 resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
                 resp.headers["Pragma"] = "no-cache"
                 resp.headers["Expires"] = "0"
+                if is_wework(request):
+                    # 一次性清 webview 本地 cache/storage（不清 cookie，避免掉登录）
+                    resp.headers["Clear-Site-Data"] = '"cache", "storage"'
                 return resp
 
-        # 正常链路
-        response = await call_next(request)
+        resp = await call_next(request)
 
-        # 对 HTML 响应强制 no-store
-        if is_html_navigation(request):
-            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-            response.headers["X-Content-Type"] = "HTML-NoCache"
+        # HTML 一律 no-store；静态文件长缓存
+        if is_html_nav(request):
+            resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers["Expires"] = "0"
+            if is_wework(request):
+                resp.headers.setdefault("Clear-Site-Data", '"cache", "storage"')
+        else:
+            path = request.url.path
+            if (path.startswith("/static/") or path.startswith("/assets/")) and (path.endswith(".js") or path.endswith(".css")):
+                resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
 
-        # 对静态资源长缓存（按你项目路径调整前缀）
-        p = request.url.path
-        if (p.startswith("/static/") or p.startswith("/assets/")) and (p.endswith(".js") or p.endswith(".css")):
-            # CRA 的 hash 文件名即可放心长缓存
-            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-            response.headers["X-Content-Type"] = "Static-LongCache"
-        elif p.startswith("/static/"):
-            response.headers["Cache-Control"] = "public, max-age=86400"
-            response.headers["X-Content-Type"] = "Static-MediumCache"
-        
-        # API接口完全禁用缓存
-        if p.startswith("/api/") or p.startswith("/auth/") or p.startswith("/admin/"):
-            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-
-        # 添加版本标识
-        response.headers["X-App-Version"] = APP_VERSION
-        response.headers["X-Cache-Strategy"] = "URL-Version-Redirect"
-        return response
-        
-    except Exception as e:
-        print(f"❌ 中间件异常: {e}")
-        # 出错也不要让缓存介入
-        resp = Response("Internal Error", status_code=500)
-        resp.headers["Cache-Control"] = "no-store"
         return resp
+    except Exception:
+        r = Response("Internal Error", status_code=500)
+        r.headers["Cache-Control"] = "no-store"
+        return r
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
@@ -363,12 +340,31 @@ async def wecom_callback_event(
 async def test_route():
     return {"message": "Test route works!"}
 
-# 5) 显式HTML路由确保no-store
-PUBLIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+# 版本化路由：/v/<ver>/* 始终返回 index.html（由前端路由接管）
+@app.get("/v/{ver}/")
+@app.get("/v/{ver}/{path:path}")
+def versioned_index(ver: str, path: str = ""):
+    fp = INDEX_FILE
+    if not fp.exists():
+        return Response("index.html not found", status_code=404)
+    resp = FileResponse(str(fp), media_type="text/html; charset=utf-8")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
+# launch 路由：企业微信"主页 URL"可配置为 /launch
+@app.get("/launch")
+def launch():
+    url = f"{VERSION_PREFIX}/"
+    resp = RedirectResponse(url, status_code=302)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+# 保留原有的根路由作为兼容
 @app.get("/")
 async def root_html():
-    fp = os.path.join(PUBLIC_DIR, "index.html")
+    fp = str(INDEX_FILE)
     resp = FileResponse(fp, media_type="text/html; charset=utf-8")
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
