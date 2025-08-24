@@ -180,13 +180,33 @@ const QuoteResult = () => {
   const calculateProcessCardCost = (process, cardTypes) => {
     if (!process.machineData || !process.cardQuantities || !cardTypes) return 0;
     
+    const quoteCurrency = quoteData.currency || 'CNY';
+    const quoteExchangeRate = quoteData.exchangeRate || 7.2;
+    console.log('QuoteResult calculateProcessCardCost - quoteCurrency:', quoteCurrency);
+    console.log('QuoteResult calculateProcessCardCost - quoteExchangeRate:', quoteExchangeRate);
+    console.log('QuoteResult calculateProcessCardCost - process:', process);
+    console.log('QuoteResult calculateProcessCardCost - machine exchange_rate:', process.machineData?.exchange_rate);
+    
     let cardCost = 0;
     Object.entries(process.cardQuantities).forEach(([cardId, quantity]) => {
       const card = cardTypes.find(c => c.id === parseInt(cardId));
       if (card && quantity > 0) {
-        // 板卡单价除以10000（从数据库存储格式转换），再乘以数量，再除以UPH得到单颗成本
-        const cardUnitPrice = (card.unit_price || 0) / 10000;
-        const cardHourlyCost = cardUnitPrice * quantity;
+        // 板卡单价除以10000，然后按照工程机时的逻辑进行币种转换
+        let adjustedPrice = (card.unit_price || 0) / 10000;
+        
+        // 根据报价币种和机器币种进行转换（参考EngineeringQuote.js逻辑）
+        if (quoteCurrency === 'USD') {
+          if (process.machineData.currency === 'CNY' || process.machineData.currency === 'RMB') {
+            // RMB机器转USD：除以报价汇率
+            adjustedPrice = adjustedPrice / quoteExchangeRate;
+          }
+          // USD机器：不做汇率转换，直接使用unit_price
+        } else {
+          // 报价币种是CNY，保持原逻辑
+          adjustedPrice = adjustedPrice * (process.machineData.exchange_rate || 1.0);
+        }
+        
+        const cardHourlyCost = adjustedPrice * (process.machineData.discount_rate || 1.0) * quantity;
         const cardUnitCost = process.uph > 0 ? cardHourlyCost / process.uph : 0;
         cardCost += cardUnitCost;
       }
