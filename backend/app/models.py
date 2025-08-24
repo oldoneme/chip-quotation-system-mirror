@@ -90,8 +90,18 @@ class Quotation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     details = Column(String)  # JSON string for detailed breakdown
     
+    # Permission management fields
+    created_by = Column(Integer, ForeignKey("users.id"))  # 创建者
+    status = Column(String, default="pending")  # 状态: pending, approved, rejected, completed
+    priority = Column(String, default="normal")  # 优先级: low, normal, high, urgent
+    reviewed_by = Column(Integer, ForeignKey("users.id"))  # 审核者
+    reviewed_at = Column(DateTime)  # 审核时间
+    review_comment = Column(Text)  # 审核备注
+    
     # Relationships
     machine = relationship("Machine")
+    creator = relationship("User", foreign_keys=[created_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
 
 
 # 用户认证相关模型
@@ -106,7 +116,7 @@ class User(Base):
     email = Column(String)  # 邮箱
     department = Column(String)  # 部门
     position = Column(String)  # 职位
-    role = Column(String, default="user")  # 角色: admin, manager, user
+    role = Column(String, default="user")  # 角色: super_admin, admin, manager, user
     is_active = Column(Boolean, default=True)  # 是否激活
     avatar = Column(String)  # 头像URL
     
@@ -153,3 +163,17 @@ class Department(Base):
     is_allowed = Column(Boolean, default=False)  # 是否允许访问系统
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class OperationLog(Base):
+    """操作日志模型"""
+    __tablename__ = "operation_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    operation = Column(String, index=True)  # 操作类型
+    details = Column(Text)  # 操作详情
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    
+    # Relationships
+    user = relationship("User")

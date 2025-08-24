@@ -8,7 +8,11 @@ from .endpoints import (
     quotations,
     hierarchical_data,
     suppliers,
-    machine_types
+    machine_types,
+    users,
+    operation_logs,
+    statistics,
+    confirmations
 )
 
 api_router = APIRouter()
@@ -23,3 +27,7 @@ api_router.include_router(auxiliary_equipment.router, prefix="", tags=["auxiliar
 api_router.include_router(personnel.router, prefix="", tags=["personnel"])
 api_router.include_router(quotations.router, prefix="", tags=["quotations"])
 api_router.include_router(hierarchical_data.router, prefix="", tags=["hierarchical"])
+api_router.include_router(users.router, prefix="", tags=["users"])
+api_router.include_router(operation_logs.router, prefix="", tags=["operation-logs"])
+api_router.include_router(statistics.router, prefix="", tags=["statistics"])
+api_router.include_router(confirmations.router, prefix="", tags=["confirmations"])

@@ -27,3 +27,54 @@ export const formatHourlyRate = (num) => {
   if (num === null || num === undefined) return '0';
   return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
+
+/**
+ * 根据货币类型进行向上取整的价格格式化
+ * CNY: 向上取整到个位
+ * USD: 向上取整到百分位（只有当千分位及以下存在时才向上取整）
+ * @param {number} num - 需要格式化的数字
+ * @param {string} currency - 货币类型 'CNY' 或 'USD'
+ * @returns {number} 向上取整后的数字
+ */
+export const ceilByCurrency = (num, currency) => {
+  if (num === null || num === undefined) return 0;
+  
+  if (currency === 'USD') {
+    // USD: 检查是否有千分位及以下的数值
+    const rounded = Math.round(num * 100) / 100;  // 四舍五入到百分位
+    const hasDecimalsBelow = Math.abs(num - rounded) > 0.000001; // 检查是否有千分位以下的数值
+    
+    if (hasDecimalsBelow) {
+      // 有千分位及以下数值时才向上取整到百分位
+      return Math.ceil(num * 100) / 100;
+    } else {
+      // 无千分位及以下数值时保持原值（精确到百分位）
+      return rounded;
+    }
+  } else {
+    // CNY: 向上取整到个位
+    return Math.ceil(num);
+  }
+};
+
+/**
+ * 根据货币类型格式化报价价格（向上取整）
+ * CNY: 向上取整到个位，无小数位
+ * USD: 向上取整到百分位，两位小数
+ * @param {number} num - 需要格式化的数字
+ * @param {string} currency - 货币类型 'CNY' 或 'USD'
+ * @returns {string} 格式化后的字符串
+ */
+export const formatQuotePrice = (num, currency) => {
+  if (num === null || num === undefined) return '0';
+  
+  const ceiledNum = ceilByCurrency(num, currency);
+  
+  if (currency === 'USD') {
+    // USD: 显示两位小数
+    return ceiledNum.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  } else {
+    // CNY: 显示整数
+    return ceiledNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+};

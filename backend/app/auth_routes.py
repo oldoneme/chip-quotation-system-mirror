@@ -13,6 +13,7 @@ from .database import get_db
 from .wecom_auth import AuthService, WeComOAuth
 from .auth_schemas import UserResponse, LoginResponse
 from .models import User
+from .middleware.session_manager import is_session_invalidated
 
 router = APIRouter()
 
@@ -29,9 +30,27 @@ def get_current_user(
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    user = auth_service.get_user_by_session_token(session_token)
+    # 获取会话对象以检查登录时间
+    session = auth_service.get_session_by_token(session_token)
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    user = session.user
     if not user:
         raise HTTPException(status_code=401, detail="Invalid session")
+    
+    # 方案2：实时获取最新用户信息（角色更改立即生效）
+    # 重新从数据库获取最新的用户信息，确保角色和状态是最新的
+    fresh_user = auth_service.db.query(User).filter(User.id == user.id).first()
+    if fresh_user:
+        user = fresh_user
+    
+    # 方案1：角色更改需要重新登录（已禁用）
+    # 检查会话是否已失效（角色变更后需要重新登录）
+    # if is_session_invalidated(user.userid, session.created_at):
+    #     # 使当前会话失效
+    #     auth_service.invalidate_session(session_token)
+    #     raise HTTPException(status_code=401, detail="Session invalidated due to role change. Please login again.")
     
     # 检查权限
     if not auth_service.check_user_permission(user):
@@ -48,9 +67,25 @@ def get_current_user_optional(
     if not session_token:
         return None
     
-    user = auth_service.get_user_by_session_token(session_token)
+    # 获取会话对象以检查登录时间
+    session = auth_service.get_session_by_token(session_token)
+    if not session:
+        return None
+    
+    user = session.user
     if not user:
         return None
+    
+    # 实时获取最新用户信息（角色更改立即生效）
+    fresh_user = auth_service.db.query(User).filter(User.id == user.id).first()
+    if fresh_user:
+        user = fresh_user
+    
+    # 已禁用：检查会话是否已失效（角色变更后需要重新登录）
+    # if is_session_invalidated(user.userid, session.created_at):
+    #     # 使当前会话失效
+    #     auth_service.invalidate_session(session_token)
+    #     return None
     
     # 检查权限
     if not auth_service.check_user_permission(user):
@@ -64,6 +99,7 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """获取当前用户信息"""
+    
     # 解析部门信息
     try:
         department_ids = json.loads(current_user.department_ids or "[]")
@@ -72,7 +108,8 @@ async def get_current_user_info(
         department_ids = []
         is_leader_in_dept = []
     
-    return UserResponse(
+    
+    response_data = UserResponse(
         id=current_user.id,
         userid=current_user.userid,
         name=current_user.name,
@@ -89,6 +126,8 @@ async def get_current_user_info(
         created_at=current_user.created_at,
         last_login=current_user.last_login
     )
+    
+    return response_data
 
 
 @router.get("/auth/login")
@@ -111,7 +150,7 @@ async def login(
     # 生成状态参数（包含环境信息）
     state_data = {
         "timestamp": datetime.now().isoformat(),
-        "redirect_url": redirect_url or "/",
+        "redirect_url": redirect_url or "/",  # 默认跳转到首页
         "is_mobile": is_mobile,
         "is_wecom": is_wecom,
         "user_agent": user_agent[:100]  # 截取前100个字符避免太长
@@ -120,10 +159,6 @@ async def login(
     
     # 获取授权URL
     auth_url = wecom.get_authorize_url(state)
-    
-    # 移动端添加特殊日志
-    if is_mobile:
-        print(f"📱 移动端登录请求: {user_agent[:50]}...")
     
     return RedirectResponse(url=auth_url, status_code=302)
 
@@ -142,7 +177,7 @@ async def oauth_callback(
     
     try:
         # 解析状态参数
-        redirect_url = "/"
+        redirect_url = "/"  # 默认跳转到首页
         if state:
             try:
                 state_data = json.loads(state)
@@ -237,8 +272,9 @@ async def sync_departments(
     auth_service: AuthService = Depends(get_auth_service)
 ):
     """同步企业微信部门信息（管理员专用）"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    # 检查管理员权限
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     
     try:
         count = auth_service.wecom.sync_departments(auth_service.db)
@@ -247,14 +283,15 @@ async def sync_departments(
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
 
-@router.get("/admin/users")
-async def list_users(
+@router.get("/admin/wecom-users")
+async def list_wecom_users(
     current_user: User = Depends(get_current_user),
     auth_service: AuthService = Depends(get_auth_service)
 ):
-    """获取用户列表（管理员专用）"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """获取用户列表（企业微信管理员专用）"""
+    # 检查管理员权限
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     
     users = auth_service.db.query(User).all()
     return [

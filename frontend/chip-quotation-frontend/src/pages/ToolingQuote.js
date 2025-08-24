@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
+import { formatQuotePrice } from '../utils';
 import '../App.css';
 
 const ToolingQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isMounted, setIsMounted] = useState(false);
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -79,8 +81,7 @@ const ToolingQuote = () => {
 
   const currencies = [
     { value: 'CNY', label: '人民币 (CNY)', symbol: '￥' },
-    { value: 'USD', label: '美元 (USD)', symbol: '$' },
-    { value: 'EUR', label: '欧元 (EUR)', symbol: '€' }
+    { value: 'USD', label: '美元 (USD)', symbol: '$' }
   ];
 
   const paymentTermOptions = [
@@ -91,13 +92,14 @@ const ToolingQuote = () => {
     { value: 'cod', label: '货到付款' }
   ];
 
-  // 状态保存和恢复
+  // 组件挂载和状态管理
   useEffect(() => {
+    // 标记组件已挂载
+    setIsMounted(true);
+    
     // 检查是否从结果页返回
     const isFromResultPage = location.state?.fromResultPage;
-    
     if (isFromResultPage) {
-      // 从结果页返回时，恢复之前保存的状态
       const savedState = sessionStorage.getItem('toolingQuoteState');
       if (savedState) {
         try {
@@ -109,16 +111,17 @@ const ToolingQuote = () => {
         }
       }
     } else {
-      // 正常进入页面时清空之前的状态
       sessionStorage.removeItem('toolingQuoteState');
       console.log('开始全新工装夹具报价流程');
     }
   }, [location.state?.fromResultPage]);
 
-  // 保存状态到sessionStorage
+  // 保存状态到sessionStorage（只有在已挂载且不是从结果页面返回时才保存）
   useEffect(() => {
-    sessionStorage.setItem('toolingQuoteState', JSON.stringify(formData));
-  }, [formData]);
+    if (isMounted && !location.state?.fromResultPage) {
+      sessionStorage.setItem('toolingQuoteState', JSON.stringify(formData));
+    }
+  }, [formData, isMounted, location.state?.fromResultPage]);
 
   const addToolingItem = () => {
     const newItem = {
@@ -215,7 +218,13 @@ const ToolingQuote = () => {
   };
 
   const handleBack = () => {
-    navigate('/quote-type-selection');
+    // 保持当前状态并返回报价类型选择页面
+    navigate('/quote-type-selection', { 
+      state: { 
+        preserveState: true,
+        pageType: 'tooling-quote' 
+      } 
+    });
   };
 
   return (
@@ -410,7 +419,7 @@ const ToolingQuote = () => {
               <div className="form-group">
                 <label>小计</label>
                 <div className="price-display">
-                  {currencies.find(c => c.value === formData.currency)?.symbol} {item.totalPrice.toFixed(2)}
+                  {currencies.find(c => c.value === formData.currency)?.symbol} {formatQuotePrice(item.totalPrice, formData.currency)}
                 </div>
               </div>
             </div>
@@ -557,26 +566,26 @@ const ToolingQuote = () => {
           <div className="summary-item">
             <span>工装夹具费用：</span>
             <span>{currencies.find(c => c.value === formData.currency)?.symbol} 
-              {formData.toolingItems.reduce((sum, item) => sum + item.totalPrice, 0).toFixed(2)}
+              {formatQuotePrice(formData.toolingItems.reduce((sum, item) => sum + item.totalPrice, 0), formData.currency)}
             </span>
           </div>
           <div className="summary-item">
             <span>工程费用：</span>
             <span>{currencies.find(c => c.value === formData.currency)?.symbol} 
-              {Object.values(formData.engineeringFees).reduce((sum, fee) => sum + fee, 0).toFixed(2)}
+              {formatQuotePrice(Object.values(formData.engineeringFees).reduce((sum, fee) => sum + fee, 0), formData.currency)}
             </span>
           </div>
           <div className="summary-item">
             <span>量产准备费用：</span>
             <span>{currencies.find(c => c.value === formData.currency)?.symbol} 
-              {Object.values(formData.productionSetup).reduce((sum, fee) => sum + fee, 0).toFixed(2)}
+              {formatQuotePrice(Object.values(formData.productionSetup).reduce((sum, fee) => sum + fee, 0), formData.currency)}
             </span>
           </div>
           <div className="summary-item total">
             <span>总计：</span>
             <span className="summary-value">
               {currencies.find(c => c.value === formData.currency)?.symbol} 
-              {calculateTotalCost().toFixed(2)}
+              {formatQuotePrice(calculateTotalCost(), formData.currency)}
             </span>
           </div>
         </div>

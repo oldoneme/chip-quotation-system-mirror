@@ -4,12 +4,14 @@ import { Table, InputNumber } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
-import { formatNumber, formatHourlyRate } from '../utils';
+import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
+import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
 
 const InquiryQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -34,6 +36,7 @@ const InquiryQuote = () => {
       }
     ],
     currency: 'CNY',
+    exchangeRate: 7.2,  // 添加汇率字段
     inquiryFactor: 1.5,
     remarks: ''
   });
@@ -48,6 +51,7 @@ const InquiryQuote = () => {
   const [backendMachines, setBackendMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
   const [persistedCardQuantities, setPersistedCardQuantities] = useState({});
+  const [isMounted, setIsMounted] = useState(false);
 
   const machineCategories = [
     { value: 'tester', label: '测试机' },
@@ -57,45 +61,10 @@ const InquiryQuote = () => {
 
   const currencies = [
     { value: 'CNY', label: '人民币 (CNY)', symbol: '￥' },
-    { value: 'USD', label: '美元 (USD)', symbol: '$' },
-    { value: 'EUR', label: '欧元 (EUR)', symbol: '€' }
+    { value: 'USD', label: '美元 (USD)', symbol: '$' }
   ];
 
-  // 状态保存和恢复
-  useEffect(() => {
-    // 检查是否从结果页返回
-    const isFromResultPage = location.state?.fromResultPage;
-    
-    if (isFromResultPage) {
-      // 从结果页返回时，恢复之前保存的状态
-      const savedState = sessionStorage.getItem('inquiryQuoteState');
-      if (savedState) {
-        try {
-          const parsedState = JSON.parse(savedState);
-          console.log('从 sessionStorage 恢复询价报价状态:', parsedState);
-          setFormData(parsedState.formData);
-          setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
-        } catch (error) {
-          console.error('解析保存状态时出错:', error);
-        }
-      }
-    } else {
-      // 正常进入页面时清空之前的状态
-      sessionStorage.removeItem('inquiryQuoteState');
-      console.log('开始全新询价报价流程');
-    }
-  }, [location.state?.fromResultPage]);
-
-  // 保存状态到sessionStorage
-  useEffect(() => {
-    const stateToSave = {
-      formData,
-      persistedCardQuantities
-    };
-    sessionStorage.setItem('inquiryQuoteState', JSON.stringify(stateToSave));
-  }, [formData, persistedCardQuantities]);
-
-  // 从后端获取机器和板卡数据
+  // 从后端获取机器和板卡数据，然后处理状态恢复
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -140,6 +109,27 @@ const InquiryQuote = () => {
         });
         
         setAvailableMachines(categorizedMachines);
+        setIsMounted(true);
+        
+        // 数据加载完成后，检查是否需要恢复状态
+        const isFromResultPage = location.state?.fromResultPage;
+        if (isFromResultPage) {
+          const savedState = sessionStorage.getItem('inquiryQuoteState');
+          if (savedState) {
+            try {
+              const parsedState = JSON.parse(savedState);
+              console.log('从 sessionStorage 恢复询价报价状态:', parsedState);
+              setFormData(parsedState.formData);
+              setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
+            } catch (error) {
+              console.error('解析保存状态时出错:', error);
+            }
+          }
+        } else {
+          sessionStorage.removeItem('inquiryQuoteState');
+          console.log('开始全新询价报价流程');
+        }
+        
       } catch (error) {
         console.error('获取数据失败:', error);
       } finally {
@@ -148,7 +138,19 @@ const InquiryQuote = () => {
     };
 
     fetchData();
-  }, []);
+  }, [location.state?.fromResultPage]);
+
+  // 保存状态到sessionStorage（只有在已挂载且不是从结果页面返回时才保存）
+  useEffect(() => {
+    if (isMounted && !location.state?.fromResultPage) {
+      const stateToSave = {
+        formData,
+        persistedCardQuantities
+      };
+      sessionStorage.setItem('inquiryQuoteState', JSON.stringify(stateToSave));
+    }
+  }, [formData, persistedCardQuantities, isMounted, location.state?.fromResultPage]);
+  
 
   // 获取机器类型名称的辅助函数
   const getMachineTypeName = (machine) => {
@@ -233,7 +235,8 @@ const InquiryQuote = () => {
       machines: prev.machines.map(machine => {
         if (machine.id === machineId) {
           const selectedCards = cardTypes.filter(card => selectedCardIds.includes(card.id));
-          const hourlyRate = calculateMachineHourlyRate(machine.machineData, selectedCards);
+          // 使用当前的formData来计算，确保使用最新的币种和汇率
+          const hourlyRate = calculateMachineHourlyRateForMachine(machine.machineData, selectedCards, prev.currency, prev.exchangeRate, prev.inquiryFactor, persistedCardQuantities);
           
           return {
             ...machine,
@@ -244,6 +247,45 @@ const InquiryQuote = () => {
         return machine;
       })
     }));
+  };
+  
+  // 新增：为特定机器计算费率的辅助函数
+  const calculateMachineHourlyRateForMachine = (machineData, selectedCards, currency, exchangeRate, inquiryFactor, quantities = null) => {
+    if (!machineData || !selectedCards || selectedCards.length === 0) {
+      return 0;
+    }
+
+    // 使用传入的quantities或全局的persistedCardQuantities
+    const cardQuantities = quantities || persistedCardQuantities;
+
+    const totalCardCost = selectedCards.reduce((sum, card) => {
+      const quantity = cardQuantities[`${machineData.id}_${card.id}`] || 1;
+      let adjustedPrice = card.unit_price / 10000; // 转换为万元
+      
+      // 根据报价币种和机器币种进行转换
+      if (currency === 'USD') {
+        if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
+          // CNY机器转USD：使用报价汇率
+          adjustedPrice = adjustedPrice / exchangeRate;
+        }
+        // USD机器：价格已经是USD，不需要转换
+      } else {
+        // 报价币种是CNY
+        if (machineData.currency === 'USD') {
+          // USD机器转CNY：使用机器的汇率
+          adjustedPrice = adjustedPrice * (machineData.exchange_rate || 7.2);
+        }
+        // CNY机器：价格已经是CNY，不需要转换
+      }
+      
+      // 应用折扣率和数量
+      return sum + (adjustedPrice * (machineData.discount_rate || 1.0) * quantity);
+    }, 0);
+
+    // 应用询价系数
+    const finalCost = totalCardCost * inquiryFactor;
+    // 根据货币类型向上取整
+    return ceilByCurrency(finalCost, currency);
   };
 
   // 处理板卡数量变化
@@ -266,7 +308,14 @@ const InquiryQuote = () => {
       ...prev,
       machines: prev.machines.map(machine => {
         if (machine.id === machineId) {
-          const hourlyRate = calculateMachineHourlyRateWithQuantities(machine.machineData, machine.selectedCards, newPersistedCardQuantities);
+          const hourlyRate = calculateMachineHourlyRateForMachine(
+            machine.machineData, 
+            machine.selectedCards, 
+            prev.currency, 
+            prev.exchangeRate, 
+            prev.inquiryFactor, 
+            newPersistedCardQuantities
+          );
           return {
             ...machine,
             hourlyRate: hourlyRate
@@ -279,7 +328,14 @@ const InquiryQuote = () => {
 
   // 计算机器小时费率（基于选中的板卡）- 使用当前状态的数量
   const calculateMachineHourlyRate = (machineData, selectedCards) => {
-    return calculateMachineHourlyRateWithQuantities(machineData, selectedCards, persistedCardQuantities);
+    return calculateMachineHourlyRateForMachine(
+      machineData, 
+      selectedCards, 
+      formData.currency, 
+      formData.exchangeRate, 
+      formData.inquiryFactor, 
+      persistedCardQuantities
+    );
   };
 
   // 计算机器小时费率（基于选中的板卡）- 可指定数量状态
@@ -292,34 +348,42 @@ const InquiryQuote = () => {
       const quantity = quantities[`${machineData.id}_${card.id}`] || 1;
       let adjustedPrice = card.unit_price / 10000; // 转换为万元
       
-      // 根据币种转换
+      // 根据报价币种和机器币种进行转换
       if (formData.currency === 'USD') {
-        if (machineData.currency === 'CNY') {
-          adjustedPrice = adjustedPrice / (machineData.exchange_rate || 7.2);
+        if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
+          // CNY机器转USD：使用报价汇率
+          adjustedPrice = adjustedPrice / formData.exchangeRate;
         }
+        // USD机器：价格已经是USD，不需要转换
       } else {
+        // 报价币种是CNY
         if (machineData.currency === 'USD') {
+          // USD机器转CNY：使用机器的汇率
           adjustedPrice = adjustedPrice * (machineData.exchange_rate || 7.2);
         }
+        // CNY机器：价格已经是CNY，不需要转换
       }
       
+      // 应用折扣率和数量
       return sum + (adjustedPrice * (machineData.discount_rate || 1.0) * quantity);
     }, 0);
 
-    // 应用询价系数
-    return totalCardCost * formData.inquiryFactor;
+    // 应用询价系数（类似工程系数）
+    const finalCost = totalCardCost * formData.inquiryFactor;
+    // 根据货币类型向上取整
+    return ceilByCurrency(finalCost, formData.currency);
   };
 
   // 格式化价格显示
   const formatPrice = (number) => {
-    const formattedNumber = formatNumber(number);
+    const formattedNumber = formatQuotePrice(number, formData.currency);
     const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
     return `${symbol}${formattedNumber}`;
   };
 
-  // 格式化机时价格显示（包含币种符号，精确到个位）
+  // 格式化机时价格显示（包含币种符号，根据币种精度）
   const formatHourlyPrice = (number) => {
-    const formattedNumber = formatHourlyRate(number);
+    const formattedNumber = formatQuotePrice(number, formData.currency);
     const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
     return `${symbol}${formattedNumber}`;
   };
@@ -330,25 +394,33 @@ const InquiryQuote = () => {
     const machine = formData.machines.find(m => m.id === machineId);
     const realMachineId = machine?.machineData?.id || machineId;
     
-    return [
+    const columns = [
       { title: 'Part Number', dataIndex: 'part_number' },
       { title: 'Board Name', dataIndex: 'board_name' },
-      { 
+    ];
+    
+    // 只有管理员以上权限才能看到价格
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      columns.push({ 
         title: 'Unit Price', 
         dataIndex: 'unit_price',
-        render: (value) => formatNumber(value || 0)
-      },
-      { 
-        title: 'Quantity', 
-        render: (_, record) => (
-          <InputNumber 
-            min={1} 
-            value={persistedCardQuantities[`${realMachineId}_${record.id}`] || 1}
-            onChange={(value) => handleCardQuantityChange(machineId, record.id, value)}
+        render: (value) => formatQuotePrice(value || 0, formData.currency)
+      });
+    }
+    
+    columns.push({ 
+      title: 'Quantity', 
+      render: (_, record) => (
+        <InputNumber 
+          min={1} 
+          value={persistedCardQuantities[`${realMachineId}_${record.id}`] || 1}
+          onChange={(value) => handleCardQuantityChange(machineId, record.id, value)}
           />
         ) 
       }
-    ];
+    );
+    
+    return columns;
   };
 
   const handleInputChange = (section, field, value) => {
@@ -374,6 +446,7 @@ const InquiryQuote = () => {
       totalHourlyRate: totalRate,
       inquiryFactor: formData.inquiryFactor,
       currency: formData.currency,
+      exchangeRate: formData.exchangeRate,  // 添加汇率
       remarks: formData.remarks,
       generatedAt: new Date().toISOString(),
       items: [
@@ -381,7 +454,7 @@ const InquiryQuote = () => {
           category: '询价设备配置',
           items: formData.machines.map(machine => ({
             name: `${machine.model || '未选择'} (${machineCategories.find(c => c.value === machine.category)?.label || machine.category})`,
-            specification: `机时费率: ${currencies.find(c => c.value === formData.currency)?.symbol}${machine.hourlyRate}/小时`,
+            specification: `机时费率: ${formatHourlyPrice(machine.hourlyRate)}/小时`,
             quantity: 1,
             unit: '台',
             unitPrice: machine.hourlyRate,
@@ -397,7 +470,13 @@ const InquiryQuote = () => {
   };
 
   const handleBack = () => {
-    navigate('/quote-type-selection');
+    // 保持当前状态并返回报价类型选择页面
+    navigate('/quote-type-selection', { 
+      state: { 
+        preserveState: true,
+        pageType: 'inquiry-quote' 
+      } 
+    });
   };
 
   return (
@@ -602,7 +681,27 @@ const InquiryQuote = () => {
             <label>报价货币 *</label>
             <select
               value={formData.currency}
-              onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
+              onChange={(e) => {
+                const newCurrency = e.target.value;
+                setFormData(prev => ({
+                  ...prev,
+                  currency: newCurrency,
+                  machines: prev.machines.map(machine => {
+                    if (machine.machineData && machine.selectedCards.length > 0) {
+                      const hourlyRate = calculateMachineHourlyRateForMachine(
+                        machine.machineData,
+                        machine.selectedCards,
+                        newCurrency,
+                        prev.exchangeRate,
+                        prev.inquiryFactor,
+                        persistedCardQuantities
+                      );
+                      return { ...machine, hourlyRate };
+                    }
+                    return machine;
+                  })
+                }));
+              }}
               required
             >
               {currencies.map(currency => (
@@ -612,12 +711,69 @@ const InquiryQuote = () => {
               ))}
             </select>
           </div>
+          {formData.currency === 'USD' && (
+            <div className="form-group">
+              <label>汇率 (1 USD = ? CNY)</label>
+              <input
+                type="number"
+                value={formData.exchangeRate}
+                onChange={(e) => {
+                  const newExchangeRate = parseFloat(e.target.value) || 7.2;
+                  setFormData(prev => ({
+                    ...prev,
+                    exchangeRate: newExchangeRate,
+                    machines: prev.machines.map(machine => {
+                      if (machine.machineData && machine.selectedCards.length > 0) {
+                        const hourlyRate = calculateMachineHourlyRateForMachine(
+                          machine.machineData,
+                          machine.selectedCards,
+                          prev.currency,
+                          newExchangeRate,
+                          prev.inquiryFactor,
+                          persistedCardQuantities
+                        );
+                        return { ...machine, hourlyRate };
+                      }
+                      return machine;
+                    })
+                  }));
+                }}
+                min="6.0"
+                max="8.0"
+                step="0.01"
+                placeholder="7.2"
+              />
+              <small className="help-text">
+                用于将CNY价格转换为USD
+              </small>
+            </div>
+          )}
           <div className="form-group">
             <label>询价系数</label>
             <input
               type="number"
               value={formData.inquiryFactor}
-              onChange={(e) => setFormData(prev => ({ ...prev, inquiryFactor: parseFloat(e.target.value) || 1.5 }))}
+              onChange={(e) => {
+                const newInquiryFactor = parseFloat(e.target.value) || 1.5;
+                setFormData(prev => ({
+                  ...prev,
+                  inquiryFactor: newInquiryFactor,
+                  machines: prev.machines.map(machine => {
+                    if (machine.machineData && machine.selectedCards.length > 0) {
+                      const hourlyRate = calculateMachineHourlyRateForMachine(
+                        machine.machineData,
+                        machine.selectedCards,
+                        prev.currency,
+                        prev.exchangeRate,
+                        newInquiryFactor,
+                        persistedCardQuantities
+                      );
+                      return { ...machine, hourlyRate };
+                    }
+                    return machine;
+                  })
+                }));
+              }}
               min="1.0"
               max="3.0"
               step="0.1"

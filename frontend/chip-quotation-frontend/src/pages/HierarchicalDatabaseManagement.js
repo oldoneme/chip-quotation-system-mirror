@@ -28,12 +28,14 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { formatNumber } from '../utils';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
 
 const { TabPane } = Tabs;
 
 const HierarchicalDatabaseManagement = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [hierarchicalData, setHierarchicalData] = useState([]);
   const [activeMachineTypeId, setActiveMachineTypeId] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
@@ -69,11 +71,9 @@ const HierarchicalDatabaseManagement = () => {
     try {
       // 获取层级数据
       const hierarchicalDataResponse = await api.get('/hierarchical/machine-types');
-      console.log('Data fetched from API:', hierarchicalDataResponse.data);
       
       // 强制更新状态
       setHierarchicalData(prevData => {
-        console.log('Hierarchical data updated');
         return [...hierarchicalDataResponse.data]; // 创建新数组确保状态更新
       });
       
@@ -118,7 +118,6 @@ const HierarchicalDatabaseManagement = () => {
         }, 100);
       }
       
-      console.log('Data fetched successfully:', hierarchicalDataResponse.data);
     } catch (error) {
       console.error('获取层级数据失败:', error);
       message.error('获取数据失败: ' + error.message);
@@ -127,7 +126,6 @@ const HierarchicalDatabaseManagement = () => {
 
   // 强制刷新数据的函数
   const forceRefreshData = () => {
-    console.log('Forcing data refresh...');
     setDataVersion(prev => prev + 1); // 增加版本号以触发重新获取数据
   };
 
@@ -157,8 +155,6 @@ const HierarchicalDatabaseManagement = () => {
       const response = await api.post('/machine-types/', values);
       message.success('创建成功');
       setAddMachineTypeModalVisible(false);
-      console.log('Machine type created, forcing data refresh...');
-      console.log('API response:', response.data);
       forceRefreshData(); // 使用新的强制刷新机制
     } catch (error) {
       console.error('创建机器类型失败:', error);
@@ -195,8 +191,6 @@ const HierarchicalDatabaseManagement = () => {
         message.success('创建成功');
       }
       setSupplierModalVisible(false);
-      console.log('Supplier saved, forcing data refresh...');
-      console.log('API response:', response.data);
       forceRefreshData(); // 使用新的强制刷新机制
     } catch (error) {
       console.error('保存供应商失败:', error);
@@ -251,8 +245,6 @@ const HierarchicalDatabaseManagement = () => {
         message.success('创建成功');
       }
       setMachineModalVisible(false);
-      console.log('Machine saved, forcing data refresh...');
-      console.log('API response:', response.data);
       
       // 立即刷新数据
       forceRefreshData();
@@ -291,8 +283,6 @@ const HierarchicalDatabaseManagement = () => {
         message.success('创建成功');
       }
       setCardConfigModalVisible(false);
-      console.log('Card config saved, forcing data refresh...');
-      console.log('API response:', response.data);
       forceRefreshData(); // 使用新的强制刷新机制
     } catch (error) {
       console.error('保存板卡配置失败:', error);
@@ -302,17 +292,13 @@ const HierarchicalDatabaseManagement = () => {
 
   // 删除操作
   const handleDeleteMachineType = async (id) => {
-    console.log('handleDeleteMachineType called with id:', id);
     
     ConfirmDialog.showDeleteConfirm({
       title: '确认删除机器类型',
       content: '您确定要删除这个机器类型吗？删除后将同时删除相关的供应商、测试机和板卡配置数据，此操作不可恢复。',
       onOk: async () => {
-        console.log('确认删除机器类型，开始执行删除操作...');
         try {
-          console.log('调用机器类型删除 API...');
           const response = await api.delete(`/machine-types/${id}`);
-          console.log('删除API响应:', response.data);
           message.success('删除成功');
           
           // 如果删除的是当前选中的机器类型，需要重新设置选中项
@@ -339,23 +325,18 @@ const HierarchicalDatabaseManagement = () => {
         }
       },
       onCancel: () => {
-        console.log('用户取消删除机器类型操作');
       }
     });
   };
 
   const handleDeleteSupplier = async (id) => {
-    console.log('handleDeleteSupplier called with id:', id);
     
     ConfirmDialog.showDeleteConfirm({
       title: '确认删除供应商',
       content: '您确定要删除这个供应商吗？删除后将同时删除相关的测试机和板卡配置数据，此操作不可恢复。',
       onOk: async () => {
-        console.log('确认删除供应商，开始执行删除操作...');
         try {
-          console.log('调用供应商删除 API...');
           const response = await api.delete(`/suppliers/${id}`);
-          console.log('删除API响应:', response.data);
           message.success('删除成功');
           forceRefreshData(); // 使用新的强制刷新机制
         } catch (error) {
@@ -364,23 +345,18 @@ const HierarchicalDatabaseManagement = () => {
         }
       },
       onCancel: () => {
-        console.log('用户取消删除供应商操作');
       }
     });
   };
 
   const handleDeleteMachine = async (id) => {
-    console.log('handleDeleteMachine called with id:', id);
     
     ConfirmDialog.showDeleteConfirm({
       title: '确认删除测试机',
       content: '您确定要删除这台测试机吗？删除后将同时删除相关的板卡配置数据，此操作不可恢复。',
       onOk: async () => {
-        console.log('确认删除测试机，开始执行删除操作...');
         try {
-          console.log('调用测试机删除 API...');
           const response = await api.delete(`/machines/${id}`);
-          console.log('删除API响应:', response.data);
           message.success('删除成功');
           forceRefreshData(); // 使用新的强制刷新机制
         } catch (error) {
@@ -389,23 +365,18 @@ const HierarchicalDatabaseManagement = () => {
         }
       },
       onCancel: () => {
-        console.log('用户取消删除测试机操作');
       }
     });
   };
 
   const handleDeleteCardConfig = async (id) => {
-    console.log('handleDeleteCardConfig called with id:', id);
     
     ConfirmDialog.showDeleteConfirm({
       title: '确认删除板卡配置',
       content: '您确定要删除这个板卡配置吗？此操作不可恢复。',
       onOk: async () => {
-        console.log('确认删除板卡配置，开始执行删除操作...');
         try {
-          console.log('调用板卡配置删除 API...');
           const response = await api.delete(`/card-configs/${id}`);
-          console.log('删除API响应:', response.data);
           message.success('删除成功');
           forceRefreshData(); // 使用新的强制刷新机制
         } catch (error) {
@@ -414,7 +385,6 @@ const HierarchicalDatabaseManagement = () => {
         }
       },
       onCancel: () => {
-        console.log('用户取消删除板卡配置操作');
       }
     });
   };
@@ -498,6 +468,20 @@ const HierarchicalDatabaseManagement = () => {
   };
 
   const currentMachineType = getCurrentMachineType();
+
+  // 权限检查
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+    return (
+      <div style={{ textAlign: 'center', padding: '50px' }}>
+        <h2>权限不足</h2>
+        <p>抱歉，您没有访问数据库管理的权限。只有管理员和超级管理员可以访问此功能。</p>
+        <p>当前用户角色: {user?.role || '未知'}</p>
+        <Button type="primary" onClick={() => navigate('/')}>
+          返回首页
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="hierarchical-database-management">

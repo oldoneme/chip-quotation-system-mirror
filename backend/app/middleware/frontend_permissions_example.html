@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端权限控制示例</title>
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .permission-disabled {
+            opacity: 0.5;
+            cursor: not-allowed !important;
+            background-color: #f5f5f5 !important;
+        }
+        .role-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .role-super_admin { background-color: #ff4757; color: white; }
+        .role-admin { background-color: #ff6b35; color: white; }
+        .role-manager { background-color: #ffc048; color: black; }
+        .role-user { background-color: #26de81; color: white; }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>前端权限控制系统示例</h1>
+        
+        <!-- 用户角色选择 -->
+        <div class="section">
+            <h2>当前用户角色</h2>
+            <p>当前角色: <span id="current-role" class="role-badge">未登录</span></p>
+            <p>切换角色测试权限：</p>
+            <button onclick="switchRole('super_admin')">超级管理员</button>
+            <button onclick="switchRole('admin')">管理员</button>
+            <button onclick="switchRole('manager')">销售经理</button>
+            <button onclick="switchRole('user')">一般用户</button>
+        </div>
+        
+        <!-- 基于权限的元素显示/隐藏 -->
+        <div class="section">
+            <h2>基于权限的UI控制</h2>
+            
+            <h3>用户管理功能</h3>
+            <div data-permission="user:view_all">
+                <button>查看所有用户</button>
+            </div>
+            <div data-permission="user:create">
+                <button>创建新用户</button>
+            </div>
+            <div data-permission="user:edit_all">
+                <button>编辑用户信息</button>
+            </div>
+            <div data-permission="user:delete">
+                <button>删除用户</button>
+            </div>
+            <div data-permission="user:change_role">
+                <button>修改用户角色</button>
+            </div>
+            
+            <h3>报价管理功能</h3>
+            <div data-permission="quotation:view_all">
+                <button>查看所有报价</button>
+            </div>
+            <div data-permission="quotation:create">
+                <button>创建报价</button>
+            </div>
+            <div data-permission="quotation:approve_reject">
+                <button>审核报价</button>
+            </div>
+            <div data-permission="quotation:delete">
+                <button>删除报价</button>
+            </div>
+            <div data-permission="quotation:export">
+                <button>导出报价数据</button>
+            </div>
+            
+            <h3>系统管理功能</h3>
+            <div data-permission="system:admin_panel">
+                <button>系统管理面板</button>
+            </div>
+            <div data-permission="logs:view_all">
+                <button>查看系统日志</button>
+            </div>
+            <div data-permission="statistics:system_dashboard">
+                <button>系统统计仪表盘</button>
+            </div>
+        </div>
+        
+        <!-- 基于角色的元素显示/隐藏 -->
+        <div class="section">
+            <h2>基于角色的UI控制</h2>
+            
+            <div data-role="super_admin">
+                <h3 style="color: #ff4757;">超级管理员专用功能</h3>
+                <button>系统备份恢复</button>
+                <button>全局配置管理</button>
+            </div>
+            
+            <div data-role="admin,super_admin">
+                <h3 style="color: #ff6b35;">管理员及以上功能</h3>
+                <button>用户管理</button>
+                <button>数据导出</button>
+            </div>
+            
+            <div data-min-role="manager">
+                <h3 style="color: #ffc048;">销售经理及以上功能</h3>
+                <button>报价审核</button>
+                <button>团队统计</button>
+            </div>
+            
+            <div data-min-role="user">
+                <h3 style="color: #26de81;">所有用户功能</h3>
+                <button>个人信息</button>
+                <button>创建报价</button>
+            </div>
+        </div>
+        
+        <!-- API调用权限测试 -->
+        <div class="section">
+            <h2>API调用权限测试</h2>
+            <button onclick="testAPICall('/api/v1/users', 'GET')">GET /api/v1/users</button>
+            <button onclick="testAPICall('/api/v1/users', 'POST')">POST /api/v1/users</button>
+            <button onclick="testAPICall('/api/v1/quotations', 'GET')">GET /api/v1/quotations</button>
+            <button onclick="testAPICall('/api/v1/quotations', 'DELETE')">DELETE /api/v1/quotations</button>
+            <button onclick="testAPICall('/api/v1/statistics', 'GET')">GET /api/v1/statistics</button>
+            <div id="api-test-result"></div>
+        </div>
+        
+        <!-- 动态权限检查 -->
+        <div class="section">
+            <h2>动态权限检查示例</h2>
+            <button onclick="checkQuotationPermissions()">检查报价操作权限</button>
+            <button onclick="checkUserManagementPermissions()">检查用户管理权限</button>
+            <div id="permission-check-result"></div>
+        </div>
+    </div>
+
+    <script src="frontend_permissions.js"></script>
+    <script>
+        // 模拟用户数据
+        const mockUsers = {
+            'super_admin': { id: 1, name: '系统管理员', role: 'super_admin' },
+            'admin': { id: 2, name: '管理员', role: 'admin' },
+            'manager': { id: 3, name: '销售经理', role: 'manager' },
+            'user': { id: 4, name: '普通用户', role: 'user' }
+        };
+        
+        // 模拟报价数据
+        const mockQuotation = {
+            id: 1,
+            created_by: 4,
+            status: 'pending',
+            total: 1000
+        };
+        
+        /**
+         * 切换用户角色
+         */
+        function switchRole(role) {
+            const user = mockUsers[role];
+            if (user) {
+                // 初始化权限检查器
+                permissionChecker.initUser(user);
+                
+                // 更新UI显示
+                const roleElement = document.getElementById('current-role');
+                roleElement.textContent = user.name + ' (' + role + ')';
+                roleElement.className = `role-badge role-${role}`;
+                
+                // 重新初始化页面权限
+                uiController.initPagePermissions();
+                
+                console.log(`已切换到 ${user.name} (${role})`);
+            }
+        }
+        
+        /**
+         * 测试API调用权限
+         */
+        function testAPICall(endpoint, method) {
+            const canCall = apiController.canCallAPI(endpoint, method);
+            const resultDiv = document.getElementById('api-test-result');
+            
+            const result = canCall ? 
+                `✅ 允许调用 ${method} ${endpoint}` : 
+                `❌ 权限不足，无法调用 ${method} ${endpoint}`;
+                
+            resultDiv.innerHTML = `<p style="color: ${canCall ? 'green' : 'red'}">${result}</p>`;
+        }
+        
+        /**
+         * 检查报价操作权限
+         */
+        function checkQuotationPermissions() {
+            const resultDiv = document.getElementById('permission-check-result');
+            const results = [];
+            
+            results.push(`查看报价: ${permissionChecker.canViewQuotation(mockQuotation) ? '✅' : '❌'}`);
+            results.push(`编辑报价: ${permissionChecker.canEditQuotation(mockQuotation) ? '✅' : '❌'}`);
+            results.push(`删除报价权限: ${permissionChecker.hasPermission('quotation:delete') ? '✅' : '❌'}`);
+            results.push(`审核报价权限: ${permissionChecker.hasPermission('quotation:approve_reject') ? '✅' : '❌'}`);
+            
+            resultDiv.innerHTML = '<h4>报价权限检查结果:</h4>' + results.map(r => `<p>${r}</p>`).join('');
+        }
+        
+        /**
+         * 检查用户管理权限
+         */
+        function checkUserManagementPermissions() {
+            const resultDiv = document.getElementById('permission-check-result');
+            const results = [];
+            
+            // 测试管理不同角色用户的权限
+            Object.entries(mockUsers).forEach(([role, user]) => {
+                const canManage = permissionChecker.canManageUser(user);
+                results.push(`管理${user.name}(${role}): ${canManage ? '✅' : '❌'}`);
+            });
+            
+            resultDiv.innerHTML = '<h4>用户管理权限检查结果:</h4>' + results.map(r => `<p>${r}</p>`).join('');
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 默认以管理员身份登录
+            switchRole('admin');
+            
+            console.log('前端权限控制系统已初始化');
+            console.log('权限检查器:', permissionChecker);
+            console.log('UI控制器:', uiController);
+            console.log('API控制器:', apiController);
+        });
+    </script>
+</body>
+</html>

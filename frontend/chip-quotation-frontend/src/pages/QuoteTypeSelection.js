@@ -1,10 +1,37 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import '../App.css';
 
 const QuoteTypeSelection = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // 检查是否需要保持状态并直接返回到对应页面
+  useEffect(() => {
+    const preserveState = location.state?.preserveState;
+    const pageType = location.state?.pageType;
+    
+    if (preserveState && pageType) {
+      // 如果需要保持状态，直接导航到对应页面，传递保持状态标志
+      switch (pageType) {
+        case 'inquiry-quote':
+          navigate('/inquiry-quote', { state: { fromResultPage: true } });
+          break;
+        case 'tooling-quote':
+          navigate('/tooling-quote', { state: { fromResultPage: true } });
+          break;
+        case 'process-quote':
+          navigate('/process-quote', { state: { fromResultPage: true } });
+          break;
+        case 'comprehensive-quote':
+          navigate('/comprehensive-quote', { state: { fromResultPage: true } });
+          break;
+        default:
+          break;
+      }
+    }
+  }, [location.state, navigate]);
 
   const handleInquiryQuote = () => {
     navigate('/inquiry-quote');

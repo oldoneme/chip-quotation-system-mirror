@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, Button, Dropdown, Avatar, Space, Drawer } from 'antd';
-import { HomeOutlined, DatabaseOutlined, CalculatorOutlined, BarChartOutlined, SearchOutlined, SettingOutlined, UnorderedListOutlined, AppstoreOutlined, ToolOutlined, UserOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
+import { HomeOutlined, DatabaseOutlined, CalculatorOutlined, BarChartOutlined, SearchOutlined, SettingOutlined, UnorderedListOutlined, ToolOutlined, UserOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import HelpModal from './HelpModal';
 
@@ -23,48 +23,61 @@ const Navigation = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
-  const menuItems = [
-    {
-      key: '/',
-      icon: <HomeOutlined />,
-      label: '首页',
-    },
-    {
-      key: '/inquiry-quote',
-      icon: <SearchOutlined />,
-      label: '询价报价',
-    },
-    {
-      key: '/tooling-quote',
-      icon: <ToolOutlined />,
-      label: '工装夹具报价',
-    },
-    {
-      key: '/engineering-quote',
-      icon: <CalculatorOutlined />,
-      label: '工程机时报价',
-    },
-    {
-      key: '/mass-production-quote',
-      icon: <BarChartOutlined />,
-      label: '量产机时报价',
-    },
-    {
-      key: '/process-quote',
-      icon: <UnorderedListOutlined />,
-      label: '量产工序报价',
-    },
-    {
-      key: '/comprehensive-quote',
-      icon: <SettingOutlined />,
-      label: '综合报价',
-    },
-    {
-      key: '/hierarchical-database-management',
-      icon: <DatabaseOutlined />,
-      label: '数据库管理',
-    },
-  ];
+  // 根据用户角色过滤菜单项
+  const menuItems = React.useMemo(() => {
+    // 基础菜单项
+    const baseMenuItems = [
+      {
+        key: '/',
+        icon: <HomeOutlined />,
+        label: '首页',
+      },
+      {
+        key: '/inquiry-quote',
+        icon: <SearchOutlined />,
+        label: '询价报价',
+      },
+      {
+        key: '/tooling-quote',
+        icon: <ToolOutlined />,
+        label: '工装夹具报价',
+      },
+      {
+        key: '/engineering-quote',
+        icon: <CalculatorOutlined />,
+        label: '工程机时报价',
+      },
+      {
+        key: '/mass-production-quote',
+        icon: <BarChartOutlined />,
+        label: '量产机时报价',
+      },
+      {
+        key: '/process-quote',
+        icon: <UnorderedListOutlined />,
+        label: '量产工序报价',
+      },
+      {
+        key: '/comprehensive-quote',
+        icon: <SettingOutlined />,
+        label: '综合报价',
+      },
+    ];
+
+    let items = [...baseMenuItems];
+    
+    // 只有管理员和超级管理员能看到数据库管理
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      items.push({
+        key: '/hierarchical-database-management',
+        icon: <DatabaseOutlined />,
+        label: '数据库管理',
+      });
+    }
+    
+    
+    return items;
+  }, [user?.role]);
 
   const handleMenuClick = ({ key }) => {
     navigate(key);
@@ -75,7 +88,11 @@ const Navigation = () => {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: `${user?.name || '用户'} (${user?.role === 'admin' ? '管理员' : '普通用户'})`,
+      label: `${user?.name || '用户'} (${
+        user?.role === 'super_admin' ? '超级管理员' : 
+        user?.role === 'admin' ? '管理员' : 
+        user?.role === 'manager' ? '经理' : '普通用户'
+      })`,
     },
     {
       type: 'divider',
@@ -176,7 +193,9 @@ const Navigation = () => {
                     opacity: 0.8,
                     whiteSpace: 'nowrap'
                   }}>
-                    {user?.role === 'admin' ? '管理员' : '普通用户'}
+                    {user?.role === 'super_admin' ? '超级管理员' : 
+                     user?.role === 'admin' ? '管理员' : 
+                     user?.role === 'manager' ? '经理' : '普通用户'}
                   </span>
                 </div>
               </div>
@@ -220,7 +239,9 @@ const Navigation = () => {
             />
             <div style={{ fontWeight: 'bold' }}>{user?.name || '用户'}</div>
             <div style={{ fontSize: '12px', color: '#666' }}>
-              {user?.role === 'admin' ? '管理员' : '普通用户'}
+              {user?.role === 'super_admin' ? '超级管理员' : 
+               user?.role === 'admin' ? '管理员' : 
+               user?.role === 'manager' ? '经理' : '普通用户'}
             </div>
             {sessionStorage.getItem('wework_authenticated') === 'true' && (
               <div style={{ fontSize: '12px', color: '#1890ff', marginTop: '4px' }}>

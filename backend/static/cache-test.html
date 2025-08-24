@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>企业微信缓存解决方案测试</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        .success { color: #28a745; font-weight: bold; }
+        .info { background: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .version { background: #f8f9fa; padding: 10px; border-left: 4px solid #007bff; margin: 15px 0; }
+        ul { list-style-type: none; padding: 0; }
+        li { margin: 8px 0; padding: 8px; background: #f8f9fa; border-radius: 3px; }
+        li::before { content: "✅ "; color: #28a745; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🚀 企业微信缓存解决方案 - 部署成功</h1>
+    
+    <div class="version">
+        <strong>当前版本:</strong> <span id="version">加载中...</span><br>
+        <strong>构建时间:</strong> <span id="buildTime">加载中...</span><br>
+        <strong>页面加载时间:</strong> <script>document.write(new Date().toLocaleString('zh-CN'));</script>
+    </div>
+
+    <div class="info">
+        <h3>🎯 解决方案特性</h3>
+        <ul>
+            <li>路径版本化 (/v/95f66d8/) 强制缓存破坏</li>
+            <li>HTML页面 no-store 缓存头</li>
+            <li>企业微信UA检测 + Clear-Site-Data头</li>
+            <li>静态资源长缓存 (31536000秒)</li>
+            <li>API路径版本化豁免</li>
+            <li>自动重定向到最新版本</li>
+        </ul>
+    </div>
+
+    <h3>🧪 测试结果</h3>
+    <ul>
+        <li>版本化路径访问正常 (200 OK)</li>
+        <li>根路径自动重定向到版本化路径</li>
+        <li>企业微信UA触发Clear-Site-Data头</li>
+        <li>静态文件设置长缓存头</li>
+        <li>API路径不受重定向影响</li>
+        <li>生产环境 https://wecom-dev.chipinfos.com.cn/ 正常工作</li>
+    </ul>
+
+    <div class="info">
+        <h3>📝 使用说明</h3>
+        <p><strong>对于企业微信用户:</strong> 应用会自动清除缓存并显示最新内容</p>
+        <p><strong>对于开发者:</strong> 每次部署会生成新的版本号，强制更新所有用户的缓存</p>
+        <p><strong>版本端点:</strong> <a href="/__version" target="_blank">/__version</a> 可检查当前版本信息</p>
+    </div>
+
+    <p>
+        <a href="/" style="display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">🏠 返回主应用</a>
+        <a href="/v/95f66d8/" style="display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; margin-left: 10px;">🔗 访问版本化路径</a>
+    </p>
+
+    <script>
+        // 获取版本信息
+        fetch('/__version')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('version').textContent = data.version;
+                document.getElementById('buildTime').textContent = new Date(data.buildTime).toLocaleString('zh-CN');
+            })
+            .catch(error => {
+                document.getElementById('version').textContent = '获取失败';
+                document.getElementById('buildTime').textContent = '获取失败';
+            });
+    </script>
+</body>
+</html>

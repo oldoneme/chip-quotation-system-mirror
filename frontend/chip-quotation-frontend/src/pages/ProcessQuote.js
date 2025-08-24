@@ -4,16 +4,19 @@ import { Checkbox, Card, Button, Table, InputNumber } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
-import { formatHourlyRate } from '../utils';
+import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
+import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
 
 const ProcessQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   
   const [machines, setMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
 
   const [formData, setFormData] = useState({
     customerInfo: {
@@ -35,7 +38,7 @@ const ProcessQuote = () => {
         machine: '',
         machineData: null,
         cardQuantities: {},
-        uph: 0,
+        uph: 1000,
         unitCost: 0
       }
     ],
@@ -46,16 +49,17 @@ const ProcessQuote = () => {
         machine: '',
         machineData: null,
         cardQuantities: {},
-        uph: 0,
+        uph: 1000,
         unitCost: 0
       }
     ],
     pricing: {
-      laborCostPerHour: 50,
-      overheadRate: 0.3,
-      profitMargin: 0.15
+      laborCostPerHour: 0,
+      overheadRate: 0,
+      profitMargin: 0
     },
     currency: 'CNY',
+    exchangeRate: 7.2,
     remarks: ''
   });
 
@@ -87,8 +91,7 @@ const ProcessQuote = () => {
 
   const currencies = [
     { value: 'CNY', label: '人民币 (CNY)', symbol: '￥' },
-    { value: 'USD', label: '美元 (USD)', symbol: '$' },
-    { value: 'EUR', label: '欧元 (EUR)', symbol: '€' }
+    { value: 'USD', label: '美元 (USD)', symbol: '$' }
   ];
 
   // 获取机器和板卡数据
@@ -102,6 +105,29 @@ const ProcessQuote = () => {
         ]);
         setMachines(machinesData);
         setCardTypes(cardTypesData);
+        setIsMounted(true);
+        
+        // 检查是否从结果页返回
+        const isFromResultPage = location.state?.fromResultPage;
+        
+        if (isFromResultPage) {
+          // 从结果页返回时，恢复之前保存的状态
+          const savedState = sessionStorage.getItem('processQuoteState');
+          if (savedState) {
+            try {
+              const parsedState = JSON.parse(savedState);
+              console.log('从 sessionStorage 恢复工序报价状态:', parsedState);
+              setFormData(parsedState);
+            } catch (error) {
+              console.error('恢复状态失败:', error);
+            }
+          }
+        } else {
+          // 正常进入页面时清空之前的状态
+          sessionStorage.removeItem('processQuoteState');
+          console.log('开始全新工序报价流程');
+        }
+        
       } catch (error) {
         console.error('获取数据失败:', error);
       } finally {
@@ -110,32 +136,15 @@ const ProcessQuote = () => {
     };
 
     fetchData();
-  }, []);
-
-  // 状态保存和恢复
-  useEffect(() => {
-    const isFromResultPage = location.state?.fromResultPage;
-    
-    if (isFromResultPage) {
-      const savedState = sessionStorage.getItem('processQuoteState');
-      if (savedState) {
-        try {
-          const parsedState = JSON.parse(savedState);
-          console.log('从 sessionStorage 恢复工序报价状态:', parsedState);
-          setFormData(parsedState);
-        } catch (error) {
-          console.error('解析保存状态时出错:', error);
-        }
-      }
-    } else {
-      sessionStorage.removeItem('processQuoteState');
-      console.log('开始全新工序报价流程');
-    }
   }, [location.state?.fromResultPage]);
 
+
+  // 状态保存 - 仅在组件挂载完成后保存
   useEffect(() => {
-    sessionStorage.setItem('processQuoteState', JSON.stringify(formData));
-  }, [formData]);
+    if (isMounted && !loading) {
+      sessionStorage.setItem('processQuoteState', JSON.stringify(formData));
+    }
+  }, [formData, isMounted, loading]);
 
   // 处理测试类型变化
   const handleProductionTypeChange = (checkedValues) => {
@@ -154,7 +163,7 @@ const ProcessQuote = () => {
       machine: '',
       machineData: null,
       cardQuantities: {},
-      uph: 0,
+      uph: 1000,
       unitCost: 0
     };
     
@@ -177,6 +186,7 @@ const ProcessQuote = () => {
 
   // 更新工序
   const updateProcess = (type, processId, field, value) => {
+    console.log('updateProcess called:', { type, processId, field, value });
     const processKey = type === 'cp' ? 'cpProcesses' : 'ftProcesses';
     setFormData(prev => ({
       ...prev,
@@ -198,14 +208,9 @@ const ProcessQuote = () => {
             updatedProcess.cardQuantities = {};
           }
           
-          // 自动计算单位成本
-          if (field === 'uph' && updatedProcess.uph > 0) {
-            const hourlyRate = prev.pricing.laborCostPerHour;
-            const overhead = hourlyRate * prev.pricing.overheadRate;
-            const totalHourlyRate = hourlyRate + overhead;
-            const profit = totalHourlyRate * prev.pricing.profitMargin;
-            const unitCost = (totalHourlyRate + profit) / updatedProcess.uph;
-            updatedProcess.unitCost = Math.round(unitCost * 10000) / 10000; // 保留4位小数
+          // 人工成本设置为0，不进行自动计算
+          if (field === 'uph') {
+            updatedProcess.unitCost = 0; // 人工成本设为0
           }
           
           return updatedProcess;
@@ -270,46 +275,80 @@ const ProcessQuote = () => {
     }, 0);
   };
 
-  // 计算单个工序的板卡成本
-  const calculateProcessCardCost = (process) => {
-    if (!process.machineData || !process.cardQuantities) return 0;
+  // 计算单个工序的机器费用（包括板卡成本）
+  const calculateProcessMachineCost = (process) => {
+    if (!process.machineData || !process.cardQuantities) {
+      console.log('calculateProcessMachineCost: No machine data or card quantities', { machineData: process.machineData, cardQuantities: process.cardQuantities });
+      return 0;
+    }
     
-    let cardCost = 0;
+    console.log('calculateProcessMachineCost for process:', process.name, 'Machine:', process.machine, 'UPH:', process.uph);
+    console.log('Card quantities:', process.cardQuantities);
+    
+    let totalCost = 0;
     Object.entries(process.cardQuantities).forEach(([cardId, quantity]) => {
       const card = cardTypes.find(c => c.id === parseInt(cardId));
       if (card && quantity > 0) {
-        // 板卡单价除以10000（从数据库存储格式转换），再乘以数量，再除以UPH得到单颗成本
-        const cardUnitPrice = (card.unit_price || 0) / 10000;
-        const cardHourlyCost = cardUnitPrice * quantity;
-        const cardUnitCost = process.uph > 0 ? cardHourlyCost / process.uph : 0;
-        cardCost += cardUnitCost;
+        console.log(`Processing card ${card.part_number}: price=${card.unit_price}, quantity=${quantity}`);
+        
+        // 计算调整后的板卡价格，参考工程机时的计算逻辑
+        let adjustedPrice = (card.unit_price || 0) / 10000;
+        console.log(`Adjusted price after /10000: ${adjustedPrice}`);
+        
+        // 根据报价币种和机器币种进行转换（参考EngineeringQuote.js逻辑）
+        if (formData.currency === 'USD') {
+          if (process.machineData.currency === 'CNY' || process.machineData.currency === 'RMB') {
+            // RMB机器转USD：除以报价汇率
+            adjustedPrice = adjustedPrice / formData.exchangeRate;
+            console.log(`Converted CNY to USD: ${adjustedPrice} (rate: ${formData.exchangeRate})`);
+          }
+          // USD机器：不做汇率转换，直接使用unit_price
+        } else {
+          // 报价币种是CNY，保持原逻辑
+          adjustedPrice = adjustedPrice * (process.machineData.exchange_rate || 1.0);
+          console.log(`Applied exchange rate: ${adjustedPrice} (rate: ${process.machineData.exchange_rate})`);
+        }
+        
+        // 应用折扣率和数量，然后除以UPH得到单颗成本
+        const hourlyCost = adjustedPrice * (process.machineData.discount_rate || 1.0) * quantity;
+        console.log(`Hourly cost: ${adjustedPrice} * ${process.machineData.discount_rate} * ${quantity} = ${hourlyCost}`);
+        
+        if (process.uph > 0) {
+          const unitCost = hourlyCost / process.uph;
+          console.log(`Unit cost: ${hourlyCost} / ${process.uph} = ${unitCost}`);
+          totalCost += unitCost;
+        } else {
+          console.log('UPH is 0 or undefined, unit cost = 0');
+        }
       }
     });
     
-    return cardCost;
+    console.log(`Total machine cost for ${process.name}: ${totalCost}`);
+    return totalCost;
   };
 
-  // 计算总成本（包含人工成本和板卡成本）
+  // 计算总成本（人工成本 + 机器成本）
   const calculateTotalUnitCost = () => {
     let total = 0;
     
     if (formData.selectedTypes.includes('cp')) {
       total += formData.cpProcesses.reduce((sum, process) => {
-        const laborCost = process.unitCost || 0;
-        const cardCost = calculateProcessCardCost(process);
-        return sum + laborCost + cardCost;
+        const laborCost = process.unitCost || 0; // 人工成本（现在为0）
+        const machineCost = calculateProcessMachineCost(process); // 机器成本
+        return sum + laborCost + machineCost;
       }, 0);
     }
     
     if (formData.selectedTypes.includes('ft')) {
       total += formData.ftProcesses.reduce((sum, process) => {
-        const laborCost = process.unitCost || 0;
-        const cardCost = calculateProcessCardCost(process);
-        return sum + laborCost + cardCost;
+        const laborCost = process.unitCost || 0; // 人工成本（现在为0）
+        const machineCost = calculateProcessMachineCost(process); // 机器成本
+        return sum + laborCost + machineCost;
       }, 0);
     }
     
-    return total;
+    // 根据货币类型向上取整
+    return ceilByCurrency(total, formData.currency);
   };
 
   const calculateTotalProjectCost = () => {
@@ -339,23 +378,48 @@ const ProcessQuote = () => {
       totalProjectCost: calculateTotalProjectCost(),
       generatedAt: new Date().toISOString()
     };
+    
+    console.log('ProcessQuote handleSubmit - quoteData:', quoteData);
+    console.log('ProcessQuote handleSubmit - currency:', quoteData.currency);
+    console.log('ProcessQuote handleSubmit - exchangeRate:', quoteData.exchangeRate);
 
     navigate('/quote-result', { state: quoteData });
   };
 
   const handleBack = () => {
-    navigate('/quote-type-selection');
+    console.log('ProcessQuote handleBack called');
+    console.log('Current formData before back:', formData);
+    
+    // 保持当前状态并返回报价类型选择页面
+    navigate('/quote-type-selection', { 
+      state: { 
+        preserveState: true,
+        pageType: 'process-quote' 
+      } 
+    });
   };
 
   // 格式化价格显示
   const formatPrice = (number) => {
     const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
-    return `${symbol}${number.toFixed(4)}`;
+    const formattedNumber = formatQuotePrice(number, formData.currency);
+    return `${symbol}${formattedNumber}`;
   };
 
-  // 格式化机时价格显示（包含币种符号，精确到个位）
+  // 格式化单颗费用显示（4位小数，万分位向上取整）- v2.0
+  const formatUnitPrice = (number) => {
+    const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
+    if (number === null || number === undefined || number === 0) return `${symbol}0.0000`;
+    
+    // 万分位向上取整：乘以10000，向上取整，再除以10000
+    const ceiledToFourDecimals = Math.ceil(number * 10000) / 10000;
+    const formatted = ceiledToFourDecimals.toFixed(4);
+    return `${symbol}${formatted}`;
+  };
+
+  // 格式化机时价格显示（包含币种符号，根据币种精度）
   const formatHourlyPrice = (number) => {
-    const formattedNumber = formatHourlyRate(number);
+    const formattedNumber = formatQuotePrice(number, formData.currency);
     const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
     return `${symbol}${formattedNumber}`;
   };
@@ -411,19 +475,19 @@ const ProcessQuote = () => {
       )
     },
     {
-      title: '单位成本',
+      title: '单颗费用',
       dataIndex: 'unitCost',
       render: (unitCost, record) => {
         const laborCost = unitCost || 0;
-        const cardCost = calculateProcessCardCost(record);
-        const totalCost = laborCost + cardCost;
+        const machineCost = calculateProcessMachineCost(record);
+        const totalCost = laborCost + machineCost;
         return (
           <div>
-            <div>{formatPrice(totalCost)}</div>
-            {cardCost > 0 && (
+            <div>{formatUnitPrice(totalCost)}</div>
+            {machineCost > 0 && (
               <div style={{ fontSize: '11px', color: '#666' }}>
-                人工: {formatPrice(laborCost)}<br/>
-                板卡: {formatPrice(cardCost)}
+                人工: {formatUnitPrice(laborCost)}<br/>
+                机器: {formatUnitPrice(machineCost)}
               </div>
             )}
           </div>
@@ -479,29 +543,36 @@ const ProcessQuote = () => {
     const selectedCardIds = Object.keys(process.cardQuantities).map(id => parseInt(id));
     
     // 板卡表格列定义
-    const cardColumns = [
-      { 
-        title: 'Part Number', 
-        dataIndex: 'part_number',
-        width: '25%'
-      },
-      { 
-        title: 'Board Name', 
-        dataIndex: 'board_name',
-        width: '35%',
-        render: (text) => (
-          <span style={{ fontWeight: '500', color: '#333' }}>
-            {text}
-          </span>
-        )
-      },
-      { 
-        title: 'Unit Price', 
-        dataIndex: 'unit_price',
-        width: '20%',
-        render: (value) => formatHourlyRate(value || 0)
-      },
-      { 
+    const cardColumns = () => {
+      const columns = [
+        { 
+          title: 'Part Number', 
+          dataIndex: 'part_number',
+          width: '25%'
+        },
+        { 
+          title: 'Board Name', 
+          dataIndex: 'board_name',
+          width: user?.role === 'admin' || user?.role === 'super_admin' ? '35%' : '55%',
+          render: (text) => (
+            <span style={{ fontWeight: '500', color: '#333' }}>
+              {text}
+            </span>
+          )
+        }
+      ];
+      
+      // 只有管理员以上权限才能看到价格
+      if (user?.role === 'admin' || user?.role === 'super_admin') {
+        columns.push({ 
+          title: 'Unit Price', 
+          dataIndex: 'unit_price',
+          width: '20%',
+          render: (value) => formatQuotePrice(value || 0, formData.currency)
+        });
+      }
+      
+      columns.push({ 
         title: 'Quantity', 
         dataIndex: 'id',
         width: '20%',
@@ -515,8 +586,10 @@ const ProcessQuote = () => {
             placeholder="数量"
           />
         )
-      }
-    ];
+      });
+      
+      return columns;
+    };
     
     return (
       <div style={{ padding: '10px 0' }}>
@@ -525,7 +598,7 @@ const ProcessQuote = () => {
         </h5>
         <Table
           dataSource={availableCards}
-          columns={cardColumns}
+          columns={cardColumns()}
           rowKey="id"
           rowSelection={{
             type: 'checkbox',
@@ -553,7 +626,7 @@ const ProcessQuote = () => {
     <div className="quote-container">
       <PageTitle 
         title="量产工序报价" 
-        subtitle="基于生产工序的单颗芯片成本分析" 
+        subtitle="基于生产工序的单颗芯片成本分析 (v2.0)" 
       />
 
       {/* 客户信息 */}
@@ -671,12 +744,8 @@ const ProcessQuote = () => {
               expandRowByClick: false
             }}
           />
-          <div style={{ marginTop: 15, textAlign: 'right' }}>
-            <strong>CP工序总成本: {formatPrice(formData.cpProcesses.reduce((sum, p) => {
-              const laborCost = p.unitCost || 0;
-              const cardCost = calculateProcessCardCost(p);
-              return sum + laborCost + cardCost;
-            }, 0))}</strong>
+          <div style={{ marginTop: 15, textAlign: 'right', fontSize: '14px', color: '#666' }}>
+            <em>注：各工序报价不可直接相加，需考虑良率差异</em>
           </div>
         </Card>
       )}
@@ -701,12 +770,8 @@ const ProcessQuote = () => {
               expandRowByClick: false
             }}
           />
-          <div style={{ marginTop: 15, textAlign: 'right' }}>
-            <strong>FT工序总成本: {formatPrice(formData.ftProcesses.reduce((sum, p) => {
-              const laborCost = p.unitCost || 0;
-              const cardCost = calculateProcessCardCost(p);
-              return sum + laborCost + cardCost;
-            }, 0))}</strong>
+          <div style={{ marginTop: 15, textAlign: 'right', fontSize: '14px', color: '#666' }}>
+            <em>注：各工序报价不可直接相加，需考虑良率差异</em>
           </div>
         </Card>
       )}
@@ -757,6 +822,18 @@ const ProcessQuote = () => {
               ))}
             </select>
           </div>
+          {formData.currency === 'USD' && (
+            <div className="form-group">
+              <label>USD 汇率 (1 USD = ? CNY)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.exchangeRate}
+                onChange={(e) => setFormData(prev => ({ ...prev, exchangeRate: parseFloat(e.target.value) || 7.2 }))}
+                placeholder="7.2"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -773,20 +850,18 @@ const ProcessQuote = () => {
         </div>
       </div>
 
-      {/* 报价汇总 */}
+      {/* 报价说明 */}
       <div className="quote-summary">
-        <h3>成本汇总</h3>
-        <div className="summary-item">
-          <span>单颗总成本：</span>
-          <span className="summary-value">
-            {formatPrice(calculateTotalUnitCost())}
-          </span>
-        </div>
-        <div className="summary-item total">
-          <span>项目总成本：</span>
-          <span className="summary-value">
-            {formatPrice(calculateTotalProjectCost())}
-          </span>
+        <h3>报价说明</h3>
+        <div style={{ padding: '15px', backgroundColor: '#f6f8fa', border: '1px solid #d0d7de', borderRadius: '6px' }}>
+          <div style={{ marginBottom: '10px', fontWeight: 'bold', color: '#0969da' }}>
+            工序报价明细
+          </div>
+          <div style={{ fontSize: '14px', color: '#656d76', lineHeight: '1.5' }}>
+            • 各工序单独报价，反映每道工序的实际成本<br/>
+            • 不同工序存在良率差异，总成本需根据实际良率计算<br/>
+            • 最终报价请参考各工序明细，不可简单相加
+          </div>
         </div>
       </div>
 

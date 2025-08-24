@@ -349,6 +349,22 @@ class AuthService:
         
         return session.user
     
+    def get_session_by_token(self, session_token: str) -> Optional[UserSession]:
+        """
+        通过会话令牌获取会话对象
+        
+        Args:
+            session_token: 会话令牌
+            
+        Returns:
+            会话对象或None
+        """
+        return self.db.query(UserSession).filter(
+            UserSession.session_token == session_token,
+            UserSession.is_active == True,
+            UserSession.expires_at > datetime.utcnow()
+        ).first()
+    
     def invalidate_session(self, session_token: str) -> bool:
         """
         使会话失效

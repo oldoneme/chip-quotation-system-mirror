@@ -2,7 +2,7 @@
 class DataCache {
   constructor() {
     this.cache = new Map();
-    this.expirationTime = 5 * 60 * 1000; // 5分钟过期
+    this.expirationTime = 30 * 60 * 1000; // 30分钟过期，延长缓存时间避免频繁刷新
   }
 
   // 设置缓存

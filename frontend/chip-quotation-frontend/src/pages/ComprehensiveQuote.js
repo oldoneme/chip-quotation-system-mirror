@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
-import { formatHourlyRate } from '../utils';
+import { formatQuotePrice } from '../utils';
 import '../App.css';
 
 const ComprehensiveQuote = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isMounted, setIsMounted] = useState(false);
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -103,8 +105,7 @@ const ComprehensiveQuote = () => {
 
   const currencies = [
     { value: 'CNY', label: '人民币 (CNY)', symbol: '￥' },
-    { value: 'USD', label: '美元 (USD)', symbol: '$' },
-    { value: 'EUR', label: '欧元 (EUR)', symbol: '€' }
+    { value: 'USD', label: '美元 (USD)', symbol: '$' }
   ];
 
   const paymentTermOptions = [
@@ -114,6 +115,37 @@ const ComprehensiveQuote = () => {
     { value: '90_days', label: '90天' },
     { value: 'prepaid', label: '预付款' }
   ];
+
+  // 组件挂载和状态管理
+  useEffect(() => {
+    // 标记组件已挂载
+    setIsMounted(true);
+    
+    // 检查是否从结果页返回
+    const isFromResultPage = location.state?.fromResultPage;
+    if (isFromResultPage) {
+      const savedState = sessionStorage.getItem('comprehensiveQuoteState');
+      if (savedState) {
+        try {
+          const parsedState = JSON.parse(savedState);
+          console.log('从 sessionStorage 恢复综合报价状态:', parsedState);
+          setFormData(parsedState);
+        } catch (error) {
+          console.error('解析保存状态时出错:', error);
+        }
+      }
+    } else {
+      sessionStorage.removeItem('comprehensiveQuoteState');
+      console.log('开始全新综合报价流程');
+    }
+  }, [location.state?.fromResultPage]);
+
+  // 保存状态到sessionStorage（只有在已挂载且不是从结果页面返回时才保存）
+  useEffect(() => {
+    if (isMounted && !location.state?.fromResultPage) {
+      sessionStorage.setItem('comprehensiveQuoteState', JSON.stringify(formData));
+    }
+  }, [formData, isMounted, location.state?.fromResultPage]);
 
   const handleInputChange = (section, field, value) => {
     setFormData(prev => ({
@@ -292,7 +324,13 @@ const ComprehensiveQuote = () => {
   };
 
   const handleBack = () => {
-    navigate('/quote-type-selection');
+    // 保持当前状态并返回报价类型选择页面
+    navigate('/quote-type-selection', { 
+      state: { 
+        preserveState: true,
+        pageType: 'comprehensive-quote' 
+      } 
+    });
   };
 
   return (
@@ -482,7 +520,7 @@ const ComprehensiveQuote = () => {
                       <span className="service-name">{service.name}</span>
                       <span className="service-price">
                         {currencies.find(c => c.value === formData.currency)?.symbol}
-                        {service.unit === '小时' ? formatHourlyRate(service.basePrice) : service.basePrice}/{service.unit}
+                        {service.unit === '小时' ? formatQuotePrice(service.basePrice, formData.currency) : formatQuotePrice(service.basePrice, formData.currency)}/{service.unit}
                       </span>
                     </div>
                   </label>
@@ -677,7 +715,7 @@ const ComprehensiveQuote = () => {
                 <div className="form-group">
                   <label>小计</label>
                   <div className="price-display">
-                    {currencies.find(c => c.value === formData.currency)?.symbol} {item.totalPrice.toFixed(2)}
+                    {currencies.find(c => c.value === formData.currency)?.symbol} {formatQuotePrice(item.totalPrice, formData.currency)}
                   </div>
                 </div>
               </div>
@@ -847,17 +885,17 @@ const ComprehensiveQuote = () => {
                    formData.quoteType === 'time' ? '合约总价' : '自定义总价'}：</span>
             <span>
               {currencies.find(c => c.value === formData.currency)?.symbol} 
-              {(formData.quoteType === 'package' ? calculatePackageTotal() :
+              {formatQuotePrice((formData.quoteType === 'package' ? calculatePackageTotal() :
                 formData.quoteType === 'volume' ? calculateVolumeQuoteTotal() :
                 formData.quoteType === 'time' ? calculateTimeQuoteTotal() :
-                calculateCustomQuoteTotal()).toFixed(2)}
+                calculateCustomQuoteTotal()), formData.currency)}
             </span>
           </div>
           <div className="summary-item total">
             <span>最终报价：</span>
             <span className="summary-value">
               {currencies.find(c => c.value === formData.currency)?.symbol} 
-              {calculateFinalTotal().toFixed(2)}
+              {formatQuotePrice(calculateFinalTotal(), formData.currency)}
             </span>
           </div>
         </div>

@@ -4,7 +4,8 @@ import { Select, Table, Tabs, Spin, Alert, InputNumber, Form, Button, Card, Chec
 import StepIndicator from '../components/StepIndicator';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
-import { formatHourlyRate } from '../utils';
+import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
+import { useAuth } from '../contexts/AuthContext';
 import {
   getMachines
 } from '../services/machines';
@@ -17,7 +18,6 @@ import {
 import {
   getAuxiliaryEquipment
 } from '../services/auxiliaryEquipment';
-import { formatNumber } from '../utils';
 import '../App.css';
 
 const { Option } = Select;
@@ -26,6 +26,7 @@ const { TabPane } = Tabs;
 const EngineeringQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [testMachine, setTestMachine] = useState(null);
   const [handler, setHandler] = useState(null);
@@ -81,7 +82,9 @@ const EngineeringQuote = () => {
           getAuxiliaryEquipment()
         ]);
 
-        setCardTypes(cardTypesData);
+        if (isMounted) {
+          setCardTypes(cardTypesData);
+        }
 
         // 从机器中筛选出不同类型的机器
         console.log('开始筛选不同类型机器...');
@@ -148,10 +151,12 @@ const EngineeringQuote = () => {
             return isAuxMachine;
           });
           
-          setMachines(testMachines);      // 测试机
-          setHandlers(handlerMachines);   // 分选机
-          setProbers(proberMachines);     // 探针台
-          setAuxMachines(auxMachines);    // 辅助设备
+          if (isMounted) {
+            setMachines(testMachines);      // 测试机
+            setHandlers(handlerMachines);   // 分选机
+            setProbers(proberMachines);     // 探针台
+            setAuxMachines(auxMachines);    // 辅助设备
+          }
           
           console.log('筛选结果:');
           console.log('- 测试机:', testMachines.map(m => `${m.name} (ID: ${m.id})`));
@@ -163,7 +168,9 @@ const EngineeringQuote = () => {
         // 处理辅助设备数据，分为handlers和probers
         const handlers = auxEquipmentData.filter(item => item.name.includes('分选机') || item.name.includes('Handler'));
         const probers = auxEquipmentData.filter(item => item.name.includes('探针台') || item.name.includes('Prober'));
-        setAuxDevices({ handlers, probers });
+        if (isMounted) {
+          setAuxDevices({ handlers, probers });
+        }
       } catch (err) {
         console.error('详细错误信息:', err);
         console.error('错误响应:', err.response);
@@ -237,7 +244,7 @@ const EngineeringQuote = () => {
 
   // 格式化价格显示（包含币种符号）
   const formatPrice = (number) => {
-    const formattedNumber = formatNumber(number);
+    const formattedNumber = formatQuotePrice(number, quoteCurrency);
     if (quoteCurrency === 'USD') {
       return `$${formattedNumber}`;
     } else {
@@ -245,9 +252,9 @@ const EngineeringQuote = () => {
     }
   };
 
-  // 格式化机时价格显示（包含币种符号，精确到个位）
+  // 格式化机时价格显示（包含币种符号，根据币种精度）
   const formatHourlyPrice = (number) => {
-    const formattedNumber = formatHourlyRate(number);
+    const formattedNumber = formatQuotePrice(number, quoteCurrency);
     if (quoteCurrency === 'USD') {
       return `$${formattedNumber}`;
     } else {
@@ -369,7 +376,7 @@ const EngineeringQuote = () => {
   const calculateTestMachineFee = () => {
     if (!testMachine || testMachineCards.length === 0) return 0;
     
-    return testMachineCards.reduce((total, card) => {
+    const totalCost = testMachineCards.reduce((total, card) => {
       let adjustedPrice = card.unit_price / 10000;
       
       // 根据报价币种和机器币种进行转换
@@ -386,13 +393,16 @@ const EngineeringQuote = () => {
       
       return total + (adjustedPrice * testMachine.discount_rate * (card.quantity || 1));
     }, 0);
+    
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalCost, quoteCurrency);
   };
   
   // 计算分选机费用
   const calculateHandlerFee = () => {
     if (!handler || handlerCards.length === 0) return 0;
     
-    return handlerCards.reduce((total, card) => {
+    const totalCost = handlerCards.reduce((total, card) => {
       let adjustedPrice = card.unit_price / 10000;
       
       // 根据报价币种和机器币种进行转换
@@ -409,13 +419,16 @@ const EngineeringQuote = () => {
       
       return total + (adjustedPrice * handler.discount_rate * (card.quantity || 1));
     }, 0);
+    
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalCost, quoteCurrency);
   };
   
   // 计算探针台费用
   const calculateProberFee = () => {
     if (!prober || proberCards.length === 0) return 0;
     
-    return proberCards.reduce((total, card) => {
+    const totalCost = proberCards.reduce((total, card) => {
       let adjustedPrice = card.unit_price / 10000;
       
       // 根据报价币种和机器币种进行转换
@@ -432,6 +445,9 @@ const EngineeringQuote = () => {
       
       return total + (adjustedPrice * prober.discount_rate * (card.quantity || 1));
     }, 0);
+    
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalCost, quoteCurrency);
   };
   
   // 计算人员费用（用于明细显示，固定RMB）
@@ -455,7 +471,7 @@ const EngineeringQuote = () => {
   
   // 计算辅助设备费用
   const calculateAuxDeviceFee = () => {
-    return selectedAuxDevices.reduce((total, device) => {
+    const totalCost = selectedAuxDevices.reduce((total, device) => {
       // 如果是机器类型的辅助设备（有supplier信息），计算板卡费用
       if (device.supplier || device.machine_type) {
         // 查找该机器的板卡
@@ -489,6 +505,9 @@ const EngineeringQuote = () => {
         return total + hourlyRate;
       }
     }, 0);
+    
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalCost, quoteCurrency);
   };
   
   // 计算应用工程系数的机器总费用
@@ -499,7 +518,9 @@ const EngineeringQuote = () => {
     total += calculateProberFee();
     
     // 应用工程系数
-    return total * engineeringRate;
+    const totalWithRate = total * engineeringRate;
+    // 根据货币类型向上取整
+    return ceilByCurrency(totalWithRate, quoteCurrency);
   };
   
   // 计算不应用工程系数的其他费用
@@ -508,17 +529,22 @@ const EngineeringQuote = () => {
     
     // 人员费用
     selectedPersonnel.forEach(personType => {
-      total += calculatePersonnelFee(personType);
+      total += calculatePersonnelFeeForQuote(personType);
     });
     
     total += calculateAuxDeviceFee();
     
-    return total;
+    // 根据货币类型向上取整
+    return ceilByCurrency(total, quoteCurrency);
   };
   
   // 计算总费用
   const calculateTotal = () => {
-    return calculateMachineTotalWithEngineeringRate() + calculateOtherFees();
+    const machineTotal = calculateMachineTotalWithEngineeringRate();
+    const otherTotal = calculateOtherFees();
+    const grandTotal = machineTotal + otherTotal;
+    // 根据货币类型向上取整
+    return ceilByCurrency(grandTotal, quoteCurrency);
   };
 
   const handleCardSelection = (machineType, selectedRowKeys, selectedRows) => {
@@ -573,15 +599,22 @@ const EngineeringQuote = () => {
   };
 
   // 表格列定义
-  const cardColumns = (machineType) => [
-    { title: 'Part Number', dataIndex: 'part_number' },
-    { title: 'Board Name', dataIndex: 'board_name' },
-    { 
-      title: 'Unit Price', 
-      dataIndex: 'unit_price',
-      render: (value) => formatNumber(value || 0)
-    },
-    { 
+  const cardColumns = (machineType) => {
+    const columns = [
+      { title: 'Part Number', dataIndex: 'part_number' },
+      { title: 'Board Name', dataIndex: 'board_name' },
+    ];
+    
+    // 只有管理员以上权限才能看到价格
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      columns.push({ 
+        title: 'Unit Price', 
+        dataIndex: 'unit_price',
+        render: (value) => formatQuotePrice(value || 0, quoteCurrency)
+      });
+    }
+    
+    columns.push({ 
       title: 'Quantity', 
       render: (_, record) => (
         <InputNumber 
@@ -590,8 +623,10 @@ const EngineeringQuote = () => {
           onChange={(value) => handleCardQuantityChange(machineType, record.id, value)}
         />
       ) 
-    }
-  ];
+    });
+    
+    return columns;
+  };
   
   // 计算单个辅助设备的小时费率
   const calculateAuxDeviceHourlyRate = (device) => {
@@ -833,18 +868,18 @@ const EngineeringQuote = () => {
                 borderBottom: index < personnelOptions.length - 1 ? '1px solid #f0f0f0' : 'none'
               }}>
                 <Checkbox value={person.type}>{person.type}</Checkbox>
-                <span>¥{formatHourlyRate(person.rate)}/小时</span>
+                <span>{formatHourlyPrice(quoteCurrency === 'USD' ? person.rate / quoteExchangeRate : person.rate)}/小时</span>
               </div>
             ))}
           </Checkbox.Group>
         </div>
         
         {selectedPersonnel.includes('工程师') && (
-          <p><strong>工程师小时费: ¥{formatHourlyRate(calculatePersonnelFee('工程师'))}</strong></p>
+          <p><strong>工程师小时费: {formatHourlyPrice(calculatePersonnelFeeForQuote('工程师'))}</strong></p>
         )}
         
         {selectedPersonnel.includes('技术员') && (
-          <p><strong>技术员小时费: ¥{formatHourlyRate(calculatePersonnelFee('技术员'))}</strong></p>
+          <p><strong>技术员小时费: {formatHourlyPrice(calculatePersonnelFeeForQuote('技术员'))}</strong></p>
         )}
       </Card>
       
@@ -907,7 +942,7 @@ const EngineeringQuote = () => {
               {selectedAuxDevices.map((device, index) => (
                 <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, paddingLeft: 20 }}>
                   <span>{device.name} ({device.supplier?.machine_type?.name || '辅助设备'})</span>
-                  <span>¥{formatHourlyRate(device.hourly_rate || 0)}/小时</span>
+                  <span>{formatHourlyPrice(quoteCurrency === 'USD' ? (device.hourly_rate || 0) / quoteExchangeRate : (device.hourly_rate || 0))}/小时</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
