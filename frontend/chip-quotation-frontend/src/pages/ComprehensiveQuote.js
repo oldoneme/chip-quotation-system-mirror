@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { formatQuotePrice } from '../utils';
 import '../App.css';
 
 const ComprehensiveQuote = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isMounted, setIsMounted] = useState(false);
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -114,6 +116,37 @@ const ComprehensiveQuote = () => {
     { value: '90_days', label: '90天' },
     { value: 'prepaid', label: '预付款' }
   ];
+
+  // 组件挂载和状态管理
+  useEffect(() => {
+    // 标记组件已挂载
+    setIsMounted(true);
+    
+    // 检查是否从结果页返回
+    const isFromResultPage = location.state?.fromResultPage;
+    if (isFromResultPage) {
+      const savedState = sessionStorage.getItem('comprehensiveQuoteState');
+      if (savedState) {
+        try {
+          const parsedState = JSON.parse(savedState);
+          console.log('从 sessionStorage 恢复综合报价状态:', parsedState);
+          setFormData(parsedState);
+        } catch (error) {
+          console.error('解析保存状态时出错:', error);
+        }
+      }
+    } else {
+      sessionStorage.removeItem('comprehensiveQuoteState');
+      console.log('开始全新综合报价流程');
+    }
+  }, [location.state?.fromResultPage]);
+
+  // 保存状态到sessionStorage（只有在已挂载且不是从结果页面返回时才保存）
+  useEffect(() => {
+    if (isMounted && !location.state?.fromResultPage) {
+      sessionStorage.setItem('comprehensiveQuoteState', JSON.stringify(formData));
+    }
+  }, [formData, isMounted, location.state?.fromResultPage]);
 
   const handleInputChange = (section, field, value) => {
     setFormData(prev => ({
@@ -292,7 +325,13 @@ const ComprehensiveQuote = () => {
   };
 
   const handleBack = () => {
-    navigate('/quote-type-selection');
+    // 保持当前状态并返回报价类型选择页面
+    navigate('/quote-type-selection', { 
+      state: { 
+        preserveState: true,
+        pageType: 'comprehensive-quote' 
+      } 
+    });
   };
 
   return (

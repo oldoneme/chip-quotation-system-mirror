@@ -51,6 +51,7 @@ const InquiryQuote = () => {
   const [backendMachines, setBackendMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
   const [persistedCardQuantities, setPersistedCardQuantities] = useState({});
+  const [isMounted, setIsMounted] = useState(false);
 
   const machineCategories = [
     { value: 'tester', label: '测试机' },
@@ -63,41 +64,7 @@ const InquiryQuote = () => {
     { value: 'USD', label: '美元 (USD)', symbol: '$' }
   ];
 
-  // 状态保存和恢复
-  useEffect(() => {
-    // 检查是否从结果页返回
-    const isFromResultPage = location.state?.fromResultPage;
-    
-    if (isFromResultPage) {
-      // 从结果页返回时，恢复之前保存的状态
-      const savedState = sessionStorage.getItem('inquiryQuoteState');
-      if (savedState) {
-        try {
-          const parsedState = JSON.parse(savedState);
-          console.log('从 sessionStorage 恢复询价报价状态:', parsedState);
-          setFormData(parsedState.formData);
-          setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
-        } catch (error) {
-          console.error('解析保存状态时出错:', error);
-        }
-      }
-    } else {
-      // 正常进入页面时清空之前的状态
-      sessionStorage.removeItem('inquiryQuoteState');
-      console.log('开始全新询价报价流程');
-    }
-  }, [location.state?.fromResultPage]);
-
-  // 保存状态到sessionStorage
-  useEffect(() => {
-    const stateToSave = {
-      formData,
-      persistedCardQuantities
-    };
-    sessionStorage.setItem('inquiryQuoteState', JSON.stringify(stateToSave));
-  }, [formData, persistedCardQuantities]);
-
-  // 从后端获取机器和板卡数据
+  // 从后端获取机器和板卡数据，然后处理状态恢复
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -142,6 +109,27 @@ const InquiryQuote = () => {
         });
         
         setAvailableMachines(categorizedMachines);
+        setIsMounted(true);
+        
+        // 数据加载完成后，检查是否需要恢复状态
+        const isFromResultPage = location.state?.fromResultPage;
+        if (isFromResultPage) {
+          const savedState = sessionStorage.getItem('inquiryQuoteState');
+          if (savedState) {
+            try {
+              const parsedState = JSON.parse(savedState);
+              console.log('从 sessionStorage 恢复询价报价状态:', parsedState);
+              setFormData(parsedState.formData);
+              setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
+            } catch (error) {
+              console.error('解析保存状态时出错:', error);
+            }
+          }
+        } else {
+          sessionStorage.removeItem('inquiryQuoteState');
+          console.log('开始全新询价报价流程');
+        }
+        
       } catch (error) {
         console.error('获取数据失败:', error);
       } finally {
@@ -150,7 +138,18 @@ const InquiryQuote = () => {
     };
 
     fetchData();
-  }, []);
+  }, [location.state?.fromResultPage]);
+
+  // 保存状态到sessionStorage（只有在已挂载且不是从结果页面返回时才保存）
+  useEffect(() => {
+    if (isMounted && !location.state?.fromResultPage) {
+      const stateToSave = {
+        formData,
+        persistedCardQuantities
+      };
+      sessionStorage.setItem('inquiryQuoteState', JSON.stringify(stateToSave));
+    }
+  }, [formData, persistedCardQuantities, isMounted, location.state?.fromResultPage]);
   
 
   // 获取机器类型名称的辅助函数
@@ -471,7 +470,13 @@ const InquiryQuote = () => {
   };
 
   const handleBack = () => {
-    navigate('/quote-type-selection');
+    // 保持当前状态并返回报价类型选择页面
+    navigate('/quote-type-selection', { 
+      state: { 
+        preserveState: true,
+        pageType: 'inquiry-quote' 
+      } 
+    });
   };
 
   return (

@@ -7,6 +7,7 @@ import '../App.css';
 const ToolingQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isMounted, setIsMounted] = useState(false);
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -92,13 +93,14 @@ const ToolingQuote = () => {
     { value: 'cod', label: '货到付款' }
   ];
 
-  // 状态保存和恢复
+  // 组件挂载和状态管理
   useEffect(() => {
+    // 标记组件已挂载
+    setIsMounted(true);
+    
     // 检查是否从结果页返回
     const isFromResultPage = location.state?.fromResultPage;
-    
     if (isFromResultPage) {
-      // 从结果页返回时，恢复之前保存的状态
       const savedState = sessionStorage.getItem('toolingQuoteState');
       if (savedState) {
         try {
@@ -110,16 +112,17 @@ const ToolingQuote = () => {
         }
       }
     } else {
-      // 正常进入页面时清空之前的状态
       sessionStorage.removeItem('toolingQuoteState');
       console.log('开始全新工装夹具报价流程');
     }
   }, [location.state?.fromResultPage]);
 
-  // 保存状态到sessionStorage
+  // 保存状态到sessionStorage（只有在已挂载且不是从结果页面返回时才保存）
   useEffect(() => {
-    sessionStorage.setItem('toolingQuoteState', JSON.stringify(formData));
-  }, [formData]);
+    if (isMounted && !location.state?.fromResultPage) {
+      sessionStorage.setItem('toolingQuoteState', JSON.stringify(formData));
+    }
+  }, [formData, isMounted, location.state?.fromResultPage]);
 
   const addToolingItem = () => {
     const newItem = {
@@ -216,7 +219,13 @@ const ToolingQuote = () => {
   };
 
   const handleBack = () => {
-    navigate('/quote-type-selection');
+    // 保持当前状态并返回报价类型选择页面
+    navigate('/quote-type-selection', { 
+      state: { 
+        preserveState: true,
+        pageType: 'tooling-quote' 
+      } 
+    });
   };
 
   return (
