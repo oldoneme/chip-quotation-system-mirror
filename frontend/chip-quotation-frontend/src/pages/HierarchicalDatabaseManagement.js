@@ -31,7 +31,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
 
-const { TabPane } = Tabs;
+
 
 const HierarchicalDatabaseManagement = () => {
   const navigate = useNavigate();
@@ -500,30 +500,28 @@ const HierarchicalDatabaseManagement = () => {
               添加类型
             </Button>
           }
-        >
-          {hierarchicalData.map(machineType => (
-            <TabPane
-              tab={
-                <span>
-                  {machineType.name}
-                  <CloseOutlined 
-                    style={{ 
-                      marginLeft: 8, 
-                      fontSize: 12, 
-                      cursor: 'pointer',
-                      color: '#ff4d4f'
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteMachineType(machineType.id);
-                    }}
-                  />
-                </span>
-              }
-              key={machineType.id.toString()}
-            />
-          ))}
-        </Tabs>
+          items={hierarchicalData.map(machineType => ({
+            key: machineType.id.toString(),
+            label: (
+              <span>
+                {machineType.name}
+                <CloseOutlined 
+                  style={{ 
+                    marginLeft: 8, 
+                    fontSize: 12, 
+                    cursor: 'pointer',
+                    color: '#ff4d4f'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteMachineType(machineType.id);
+                  }}
+                />
+              </span>
+            ),
+            children: <div></div>
+          }))}
+        />
       </div>
       
       {/* 三栏式内容区 */}

@@ -1,0 +1,340 @@
+.approval-workflow {
+  padding: 24px;
+  background-color: #f0f2f5;
+  min-height: calc(100vh - 64px);
+}
+
+/* 页面头部 */
+.approval-workflow .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  background: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.approval-workflow .page-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #262626;
+}
+
+/* 统计卡片 */
+.approval-workflow .statistics-cards {
+  margin-bottom: 24px;
+}
+
+.approval-workflow .statistics-cards .ant-card {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.approval-workflow .statistics-cards .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.approval-workflow .statistics-cards .ant-statistic-title {
+  color: #8c8c8c;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.approval-workflow .statistics-cards .ant-statistic-content {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.approval-workflow .statistics-cards .ant-statistic-content-prefix {
+  font-size: 14px;
+}
+
+/* 表格样式 */
+.approval-workflow .ant-table {
+  font-size: 14px;
+}
+
+.approval-workflow .ant-table-thead > tr > th {
+  background: #fafafa;
+  font-weight: 600;
+  color: #262626;
+}
+
+.approval-workflow .ant-table-tbody > tr > td {
+  padding: 12px 16px;
+}
+
+/* 紧急程度标签样式 */
+.approval-workflow .ant-tag {
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 按钮样式 */
+.approval-workflow .ant-btn {
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.approval-workflow .ant-btn-primary {
+  background: #52c41a;
+  border-color: #52c41a;
+}
+
+.approval-workflow .ant-btn-primary:hover {
+  background: #73d13d;
+  border-color: #73d13d;
+}
+
+.approval-workflow .ant-btn-danger {
+  background: #ff4d4f;
+  border-color: #ff4d4f;
+}
+
+.approval-workflow .ant-btn-danger:hover {
+  background: #ff7875;
+  border-color: #ff7875;
+}
+
+/* 用户头像样式 */
+.approval-workflow .ant-avatar {
+  background-color: #1890ff;
+}
+
+/* 徽章样式 */
+.approval-workflow .ant-badge {
+  line-height: 1;
+}
+
+.approval-workflow .ant-badge-count {
+  background: #ff4d4f;
+  border-color: #ff4d4f;
+}
+
+/* 标签页样式 */
+.approval-workflow .ant-tabs {
+  background: white;
+}
+
+.approval-workflow .ant-tabs-nav {
+  margin-bottom: 0;
+  background: #fafafa;
+  padding: 0 16px;
+}
+
+.approval-workflow .ant-tabs-content-holder {
+  padding: 16px;
+}
+
+.approval-workflow .ant-tabs-tab {
+  padding: 12px 16px;
+  font-weight: 500;
+}
+
+.approval-workflow .ant-tabs-tab-active {
+  background: white;
+  border-radius: 6px 6px 0 0;
+}
+
+/* 模态框样式 */
+.approval-workflow .ant-modal .ant-modal-header {
+  border-radius: 8px 8px 0 0;
+}
+
+.approval-workflow .ant-modal .ant-modal-body {
+  padding: 24px;
+}
+
+.approval-workflow .ant-form-item-label > label {
+  font-weight: 500;
+  color: #262626;
+}
+
+/* 审批信息卡片 */
+.approval-workflow .ant-modal .ant-card {
+  border-radius: 6px;
+  background: #f8f9fa;
+}
+
+.approval-workflow .ant-modal .ant-card-body {
+  padding: 16px;
+}
+
+/* 金额显示样式 */
+.approval-workflow .amount-display {
+  font-size: 16px;
+  font-weight: 600;
+  color: #262626;
+}
+
+/* 报价单链接样式 */
+.approval-workflow .quote-link {
+  color: #1890ff;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.approval-workflow .quote-link:hover {
+  color: #40a9ff;
+  text-decoration: underline;
+}
+
+/* 工具提示样式 */
+.approval-workflow .ant-tooltip-inner {
+  max-width: 300px;
+  text-align: left;
+}
+
+/* 分页样式 */
+.approval-workflow .ant-pagination {
+  margin-top: 16px;
+  text-align: right;
+}
+
+.approval-workflow .ant-pagination .ant-pagination-item {
+  border-radius: 4px;
+}
+
+.approval-workflow .ant-pagination .ant-pagination-item-active {
+  border-color: #1890ff;
+}
+
+/* 卡片样式 */
+.approval-workflow .ant-card {
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: box-shadow 0.3s ease;
+}
+
+.approval-workflow .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 审批操作按钮特殊样式 */
+.approval-workflow .approval-actions .ant-btn {
+  margin-right: 8px;
+}
+
+.approval-workflow .approval-actions .ant-btn:last-child {
+  margin-right: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .approval-workflow .statistics-cards > .ant-col {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .approval-workflow {
+    padding: 16px;
+  }
+  
+  .approval-workflow .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .approval-workflow .page-header h1 {
+    margin-bottom: 0;
+  }
+  
+  .approval-workflow .ant-table {
+    font-size: 12px;
+  }
+  
+  .approval-workflow .ant-table-tbody > tr > td {
+    padding: 8px 12px;
+  }
+  
+  .approval-workflow .ant-modal {
+    margin: 0;
+    max-width: 100vw;
+  }
+}
+
+/* 空状态 */
+.approval-workflow .ant-empty {
+  padding: 48px 0;
+}
+
+/* 加载状态 */
+.approval-workflow .ant-spin-nested-loading > div > .ant-spin {
+  max-height: none;
+}
+
+/* 动画效果 */
+.approval-workflow .statistics-cards .ant-card,
+.approval-workflow > .ant-card {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 审批状态图标样式 */
+.approval-workflow .status-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 紧急程度颜色 */
+.approval-workflow .urgent-high {
+  background: linear-gradient(135deg, #ff4d4f, #ff7875);
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+.approval-workflow .urgent-medium {
+  background: #fa8c16;
+  color: white;
+}
+
+.approval-workflow .urgent-low {
+  background: #d9d9d9;
+  color: #595959;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 77, 79, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 79, 0);
+  }
+}
+
+/* 表单错误样式 */
+.approval-workflow .ant-form-item-has-error .ant-input,
+.approval-workflow .ant-form-item-has-error .ant-select-selector {
+  border-color: #ff4d4f;
+}
+
+.approval-workflow .ant-form-item-has-error .ant-form-item-explain-error {
+  color: #ff4d4f;
+}

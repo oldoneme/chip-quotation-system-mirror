@@ -14,6 +14,7 @@ const Navigation = () => {
 
   useEffect(() => {
     const checkMobile = () => {
+      // 只根据屏幕宽度判断，不再强制企业微信使用移动端布局
       setIsMobile(window.innerWidth <= 768);
     };
     
@@ -33,45 +34,82 @@ const Navigation = () => {
         label: '首页',
       },
       {
-        key: '/inquiry-quote',
-        icon: <SearchOutlined />,
-        label: '询价报价',
-      },
-      {
-        key: '/tooling-quote',
-        icon: <ToolOutlined />,
-        label: '工装夹具报价',
-      },
-      {
-        key: '/engineering-quote',
+        key: 'quotes',
         icon: <CalculatorOutlined />,
-        label: '工程机时报价',
+        label: '报价中心',
+        children: [
+          {
+            key: '/inquiry-quote',
+            icon: <SearchOutlined />,
+            label: '询价报价',
+          },
+          {
+            key: '/tooling-quote',
+            icon: <ToolOutlined />,
+            label: '工装夹具报价',
+          },
+          {
+            key: '/engineering-quote',
+            icon: <CalculatorOutlined />,
+            label: '工程机时报价',
+          },
+          {
+            key: '/mass-production-quote',
+            icon: <BarChartOutlined />,
+            label: '量产机时报价',
+          },
+          {
+            key: '/process-quote',
+            icon: <UnorderedListOutlined />,
+            label: '量产工序报价',
+          },
+          {
+            key: '/comprehensive-quote',
+            icon: <SettingOutlined />,
+            label: '综合报价',
+          },
+        ],
       },
       {
-        key: '/mass-production-quote',
-        icon: <BarChartOutlined />,
-        label: '量产机时报价',
-      },
-      {
-        key: '/process-quote',
+        key: '/quote-management',
         icon: <UnorderedListOutlined />,
-        label: '量产工序报价',
+        label: '报价单管理',
       },
       {
-        key: '/comprehensive-quote',
+        key: '/quote-templates',
         icon: <SettingOutlined />,
-        label: '综合报价',
+        label: '报价模板',
       },
     ];
 
     let items = [...baseMenuItems];
     
-    // 只有管理员和超级管理员能看到数据库管理
+    // 只有管理员和超级管理员能看到管理功能
     if (user?.role === 'admin' || user?.role === 'super_admin') {
       items.push({
-        key: '/hierarchical-database-management',
-        icon: <DatabaseOutlined />,
-        label: '数据库管理',
+        key: 'management',
+        icon: <SettingOutlined />,
+        label: '系统管理',
+        children: [
+          {
+            key: '/approval-workflow',
+            label: '审批工作流',
+          },
+          {
+            key: '/analytics',
+            icon: <BarChartOutlined />,
+            label: '数据分析',
+          },
+          {
+            key: '/version-control',
+            label: '版本管理',
+          },
+          {
+            key: '/hierarchical-database-management',
+            icon: <DatabaseOutlined />,
+            label: '数据库管理',
+          },
+        ],
       });
     }
     

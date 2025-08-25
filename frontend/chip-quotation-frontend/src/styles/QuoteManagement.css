@@ -1,0 +1,215 @@
+.quote-management {
+  padding: 24px;
+  background-color: #f0f2f5;
+  min-height: calc(100vh - 64px);
+}
+
+/* 页面标题栏 */
+.quote-management .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  background: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.quote-management .page-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #262626;
+}
+
+/* 统计卡片 */
+.quote-management .statistics-cards {
+  margin-bottom: 24px;
+}
+
+.quote-management .statistics-cards .ant-card {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.quote-management .statistics-cards .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.quote-management .statistics-cards .ant-statistic-title {
+  color: #8c8c8c;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.quote-management .statistics-cards .ant-statistic-content {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+/* 筛选卡片 */
+.quote-management .filter-card {
+  margin-bottom: 16px;
+  border-radius: 8px;
+}
+
+.quote-management .filter-card .ant-card-body {
+  padding: 16px 24px;
+}
+
+/* 表格样式 */
+.quote-management .ant-table {
+  font-size: 14px;
+}
+
+.quote-management .ant-table-thead > tr > th {
+  background: #fafafa;
+  font-weight: 600;
+  color: #262626;
+}
+
+.quote-management .ant-table-tbody > tr:hover {
+  background: #f5f5f5;
+}
+
+.quote-management .ant-table-tbody > tr > td a {
+  color: #1890ff;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.quote-management .ant-table-tbody > tr > td a:hover {
+  text-decoration: underline;
+}
+
+/* 标签页样式 */
+.quote-management .ant-tabs {
+  margin-bottom: 0;
+}
+
+.quote-management .ant-tabs-tab {
+  font-size: 14px;
+  padding: 12px 0;
+  margin-right: 32px;
+}
+
+.quote-management .ant-tabs-tab:hover {
+  color: #1890ff;
+}
+
+.quote-management .ant-tabs-tab.ant-tabs-tab-active {
+  font-weight: 600;
+}
+
+.quote-management .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+/* 操作按钮 */
+.quote-management .ant-dropdown-trigger {
+  cursor: pointer;
+}
+
+.quote-management .ant-dropdown-trigger:hover {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+/* 状态标签 */
+.quote-management .ant-tag {
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .quote-management .statistics-cards .ant-col {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .quote-management {
+    padding: 16px;
+  }
+  
+  .quote-management .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .quote-management .filter-card .ant-space {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .quote-management .filter-card .ant-space > * {
+    width: 100% !important;
+  }
+}
+
+/* 空状态 */
+.quote-management .ant-empty {
+  padding: 48px 0;
+}
+
+/* 分页器 */
+.quote-management .ant-pagination {
+  margin-top: 24px;
+  text-align: right;
+}
+
+/* 加载状态 */
+.quote-management .ant-spin-nested-loading {
+  min-height: 400px;
+}
+
+/* 金额样式 */
+.quote-management .amount-cell {
+  font-weight: 600;
+  color: #262626;
+}
+
+/* 批量操作栏（预留） */
+.quote-management .batch-actions {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 4px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quote-management .batch-actions .ant-checkbox-wrapper {
+  margin-right: 16px;
+}
+
+/* 快速筛选标签（预留） */
+.quote-management .quick-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.quote-management .quick-filters .ant-tag {
+  cursor: pointer;
+  padding: 4px 12px;
+  font-size: 14px;
+  border-radius: 16px;
+}
+
+.quote-management .quick-filters .ant-tag:hover {
+  opacity: 0.8;
+}
+
+.quote-management .quick-filters .ant-tag.ant-tag-checkable-checked {
+  background-color: #1890ff;
+  color: white;
+}

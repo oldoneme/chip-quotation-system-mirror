@@ -21,7 +21,7 @@ import { ceilByCurrency, formatQuotePrice } from '../utils';
 import '../App.css';
 
 const { Option } = Select;
-const { TabPane } = Tabs;
+
 
 const MassProductionQuote = () => {
   const navigate = useNavigate();
@@ -1089,63 +1089,69 @@ const MassProductionQuote = () => {
           <h2 className="section-title">辅助设备选择</h2>
           
           <Card title="辅助设备选择" style={{ marginBottom: 20 }}>
-            <Tabs defaultActiveKey="others">
-              {/* 分选机类辅助设备 */}
-              {auxDevices.handlers && auxDevices.handlers.length > 0 && (
-                <TabPane tab="分选机类" key="handlers">
-                  <Table 
-                    dataSource={auxDevices.handlers}
-                    rowKey="id"
-                    rowSelection={{
-                      type: 'checkbox',
-                      onChange: handleAuxDeviceSelect,
-                      selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                    }}
-                    columns={auxDeviceColumns}
-                    pagination={{ pageSize: 5, showSizeChanger: false }}
-                  />
-                </TabPane>
-              )}
-              
-              {/* 探针台类辅助设备 */}
-              {auxDevices.probers && auxDevices.probers.length > 0 && (
-                <TabPane tab="探针台类" key="probers">
-                  <Table 
-                    dataSource={auxDevices.probers}
-                    rowKey="id"
-                    rowSelection={{
-                      type: 'checkbox',
-                      onChange: handleAuxDeviceSelect,
-                      selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                    }}
-                    columns={auxDeviceColumns}
-                    pagination={{ pageSize: 5, showSizeChanger: false }}
-                  />
-                </TabPane>
-              )}
-              
-              {/* 其他类辅助设备 */}
-              <TabPane tab="其他设备" key="others">
-                {auxDevices.others && auxDevices.others.length > 0 ? (
-                  <Table 
-                    dataSource={auxDevices.others}
-                    rowKey="id"
-                    rowSelection={{
-                      type: 'checkbox',
-                      onChange: handleAuxDeviceSelect,
-                      selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                    }}
-                    columns={auxDeviceColumns}
-                    pagination={{ pageSize: 5, showSizeChanger: false }}
-                  />
-                ) : (
-                  <EmptyState 
-                    description="暂无可用的其他设备"
-                    size="small"
-                  />
-                )}
-              </TabPane>
-            </Tabs>
+            <Tabs 
+              defaultActiveKey="others"
+              items={[
+                ...(auxDevices.handlers && auxDevices.handlers.length > 0 ? [{
+                  key: 'handlers',
+                  label: '分选机类',
+                  children: (
+                    <Table 
+                      dataSource={auxDevices.handlers}
+                      rowKey="id"
+                      rowSelection={{
+                        type: 'checkbox',
+                        onChange: handleAuxDeviceSelect,
+                        selectedRowKeys: selectedAuxDevices.map(device => device.id)
+                      }}
+                      columns={auxDeviceColumns}
+                      pagination={{ pageSize: 5, showSizeChanger: false }}
+                    />
+                  )
+                }] : []),
+                ...(auxDevices.probers && auxDevices.probers.length > 0 ? [{
+                  key: 'probers',
+                  label: '探针台类',
+                  children: (
+                    <Table 
+                      dataSource={auxDevices.probers}
+                      rowKey="id"
+                      rowSelection={{
+                        type: 'checkbox',
+                        onChange: handleAuxDeviceSelect,
+                        selectedRowKeys: selectedAuxDevices.map(device => device.id)
+                      }}
+                      columns={auxDeviceColumns}
+                      pagination={{ pageSize: 5, showSizeChanger: false }}
+                    />
+                  )
+                }] : []),
+                {
+                  key: 'others',
+                  label: '其他设备',
+                  children: (
+                    auxDevices.others && auxDevices.others.length > 0 ? (
+                      <Table 
+                        dataSource={auxDevices.others}
+                        rowKey="id"
+                        rowSelection={{
+                          type: 'checkbox',
+                          onChange: handleAuxDeviceSelect,
+                          selectedRowKeys: selectedAuxDevices.map(device => device.id)
+                        }}
+                        columns={auxDeviceColumns}
+                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                      />
+                    ) : (
+                      <EmptyState 
+                        description="暂无可用的其他设备"
+                        size="small"
+                      />
+                    )
+                  )
+                }
+              ]}
+            />
             
             {selectedAuxDevices.length > 0 && (
               <p style={{ marginTop: 10 }}><strong>辅助设备机时费: {formatPrice(calculateAuxDeviceFee())}</strong></p>

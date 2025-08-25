@@ -3,7 +3,6 @@ import { Modal, Button, Tabs, Typography, List, Tag } from 'antd';
 import { QuestionCircleOutlined, SettingOutlined, InfoCircleOutlined } from '@ant-design/icons';
 
 const { Title, Paragraph, Text } = Typography;
-const { TabPane } = Tabs;
 
 const HelpModal = () => {
   const [visible, setVisible] = useState(false);
@@ -76,67 +75,71 @@ const HelpModal = () => {
         ]}
         width={600}
       >
-        <Tabs defaultActiveKey="guide">
-          <TabPane 
-            tab={
-              <span>
-                <InfoCircleOutlined />
-                使用指南
-              </span>
-            } 
-            key="guide"
-          >
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {usageGuide.map((section, index) => (
-                <div key={index} style={{ marginBottom: 24 }}>
-                  <Title level={5}>{section.title}</Title>
+        <Tabs 
+          defaultActiveKey="guide"
+          items={[
+            {
+              key: 'guide',
+              tab: (
+                <span>
+                  <InfoCircleOutlined />
+                  使用指南
+                </span>
+              ),
+              children: (
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {usageGuide.map((section, index) => (
+                    <div key={index} style={{ marginBottom: 24 }}>
+                      <Title level={5}>{section.title}</Title>
+                      <List
+                        size="small"
+                        dataSource={section.content}
+                        renderItem={(item) => (
+                          <List.Item>
+                            <Text>{item}</Text>
+                          </List.Item>
+                        )}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )
+            },
+            {
+              key: 'shortcuts',
+              tab: (
+                <span>
+                  <SettingOutlined />
+                  快捷键
+                </span>
+              ),
+              children: (
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  <Paragraph>
+                    使用键盘快捷键可以快速导航到不同页面：
+                  </Paragraph>
                   <List
                     size="small"
-                    dataSource={section.content}
+                    dataSource={keyboardShortcuts}
                     renderItem={(item) => (
                       <List.Item>
-                        <Text>{item}</Text>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                          <Tag color="blue" style={{ fontFamily: 'monospace' }}>
+                            {item.key}
+                          </Tag>
+                          <span>{item.description}</span>
+                        </div>
                       </List.Item>
                     )}
                   />
+                  <Paragraph style={{ marginTop: 16, color: '#666', fontSize: '12px' }}>
+                    注意：快捷键在输入框获得焦点时不会触发
+                  </Paragraph>
                 </div>
-              ))}
-            </div>
-          </TabPane>
-
-          <TabPane 
-            tab={
-              <span>
-                <SettingOutlined />
-                快捷键
-              </span>
-            } 
-            key="shortcuts"
-          >
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              <Paragraph>
-                使用键盘快捷键可以快速导航到不同页面：
-              </Paragraph>
-              <List
-                size="small"
-                dataSource={keyboardShortcuts}
-                renderItem={(item) => (
-                  <List.Item>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                      <Tag color="blue" style={{ fontFamily: 'monospace' }}>
-                        {item.key}
-                      </Tag>
-                      <span>{item.description}</span>
-                    </div>
-                  </List.Item>
-                )}
-              />
-              <Paragraph style={{ marginTop: 16, color: '#666', fontSize: '12px' }}>
-                注意：快捷键在输入框获得焦点时不会触发
-              </Paragraph>
-            </div>
-          </TabPane>
-        </Tabs>
+              )
+            }
+          ]}
+        />
       </Modal>
     </>
   );

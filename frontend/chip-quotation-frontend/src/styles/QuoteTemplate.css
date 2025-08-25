@@ -1,0 +1,289 @@
+.quote-template {
+  padding: 24px;
+  background-color: #f0f2f5;
+  min-height: calc(100vh - 64px);
+}
+
+/* 页面头部 */
+.quote-template .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  background: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.quote-template .page-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #262626;
+}
+
+/* 统计卡片 */
+.quote-template .statistics-cards {
+  margin-bottom: 24px;
+}
+
+.quote-template .statistics-cards .ant-card {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.quote-template .statistics-cards .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.quote-template .statistics-cards .ant-statistic-title {
+  color: #8c8c8c;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.quote-template .statistics-cards .ant-statistic-content {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quote-template .statistics-cards .ant-statistic-content-prefix {
+  font-size: 14px;
+  color: #1890ff;
+}
+
+/* 筛选卡片 */
+.quote-template .filter-card {
+  margin-bottom: 24px;
+  border-radius: 8px;
+}
+
+.quote-template .filter-card .ant-card-body {
+  padding: 16px 24px;
+}
+
+/* 模板表格 */
+.quote-template .ant-table {
+  font-size: 14px;
+}
+
+.quote-template .ant-table-thead > tr > th {
+  background: #fafafa;
+  font-weight: 600;
+  color: #262626;
+}
+
+.quote-template .ant-table-tbody > tr > td {
+  padding: 12px 16px;
+}
+
+/* 按钮样式 */
+.quote-template .ant-btn {
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.quote-template .ant-btn-primary {
+  background: #1890ff;
+  border-color: #1890ff;
+}
+
+.quote-template .ant-btn-primary:hover {
+  background: #40a9ff;
+  border-color: #40a9ff;
+}
+
+/* 标签样式 */
+.quote-template .ant-tag {
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 模态框样式 */
+.quote-template .ant-modal .ant-modal-header {
+  border-radius: 8px 8px 0 0;
+}
+
+.quote-template .ant-modal .ant-modal-body {
+  padding: 24px;
+}
+
+.quote-template .ant-form-item-label > label {
+  font-weight: 500;
+  color: #262626;
+}
+
+/* 搜索框样式 */
+.quote-template .ant-input-affix-wrapper {
+  border-radius: 4px;
+}
+
+.quote-template .ant-input-affix-wrapper:hover {
+  border-color: #40a9ff;
+}
+
+.quote-template .ant-input-affix-wrapper-focused {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* 选择器样式 */
+.quote-template .ant-select {
+  border-radius: 4px;
+}
+
+.quote-template .ant-select:hover .ant-select-selector {
+  border-color: #40a9ff;
+}
+
+.quote-template .ant-select-focused .ant-select-selector {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* 操作按钮组 */
+.quote-template .ant-space-compact .ant-btn {
+  margin-right: 0;
+}
+
+.quote-template .ant-space-compact .ant-btn:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.quote-template .ant-space-compact .ant-btn:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+/* 使用按钮特殊样式 */
+.quote-template .ant-btn-primary.use-template-btn {
+  background: #52c41a;
+  border-color: #52c41a;
+}
+
+.quote-template .ant-btn-primary.use-template-btn:hover {
+  background: #73d13d;
+  border-color: #73d13d;
+}
+
+/* 卡片样式 */
+.quote-template .ant-card {
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: box-shadow 0.3s ease;
+}
+
+.quote-template .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 分页样式 */
+.quote-template .ant-pagination {
+  margin-top: 16px;
+  text-align: right;
+}
+
+.quote-template .ant-pagination .ant-pagination-item {
+  border-radius: 4px;
+}
+
+.quote-template .ant-pagination .ant-pagination-item-active {
+  border-color: #1890ff;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .quote-template .statistics-cards > .ant-col {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .quote-template {
+    padding: 16px;
+  }
+  
+  .quote-template .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .quote-template .page-header h1 {
+    margin-bottom: 0;
+  }
+  
+  .quote-template .filter-card .ant-space {
+    width: 100%;
+    flex-direction: column;
+  }
+  
+  .quote-template .filter-card .ant-space > * {
+    width: 100% !important;
+  }
+  
+  .quote-template .ant-table {
+    font-size: 12px;
+  }
+  
+  .quote-template .ant-table-tbody > tr > td {
+    padding: 8px 12px;
+  }
+}
+
+/* 空状态 */
+.quote-template .ant-empty {
+  padding: 48px 0;
+}
+
+/* 加载状态 */
+.quote-template .ant-spin-nested-loading > div > .ant-spin {
+  max-height: none;
+}
+
+/* 动画效果 */
+.quote-template .statistics-cards .ant-card,
+.quote-template .filter-card,
+.quote-template > .ant-card {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 模板使用次数样式 */
+.quote-template .usage-count {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-top: 4px;
+}
+
+/* 确认删除弹窗样式 */
+.quote-template .ant-popconfirm .ant-popconfirm-message {
+  padding-left: 0;
+}
+
+/* 表单验证错误样式 */
+.quote-template .ant-form-item-has-error .ant-input,
+.quote-template .ant-form-item-has-error .ant-select-selector {
+  border-color: #ff4d4f;
+}
+
+.quote-template .ant-form-item-has-error .ant-form-item-explain-error {
+  color: #ff4d4f;
+}

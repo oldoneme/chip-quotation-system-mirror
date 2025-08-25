@@ -37,7 +37,7 @@ import { formatNumber } from '../utils';
 import api from '../services/api';
 import '../App.css';
 
-const { TabPane } = Tabs;
+
 
 const DatabaseManagement = () => {
   const navigate = useNavigate();
@@ -580,92 +580,124 @@ const DatabaseManagement = () => {
     <div className="database-management">
       <h1>数据库管理</h1>
       
-      <Tabs defaultActiveKey="1">
-        <TabPane tab="层级结构" key="1">
-          <Card title="供应商 -> 测试机 -> 配置和板卡 层级结构">
-            <Tree
-              treeData={convertToTreeData(hierarchicalData)}
-              defaultExpandAll
-            />
-          </Card>
-        </TabPane>
-        
-        <TabPane tab="测试机管理" key="2">
-          <div style={{ marginBottom: 16 }}>
-            <Button type="primary" onClick={handleAddMachine}>
-              添加测试机
-            </Button>
-          </div>
-          <Table 
-            dataSource={machines} 
-            columns={machineColumns} 
-            rowKey="id"
-            pagination={{ pageSize: 10 }}
-          />
-        </TabPane>
-        
-        <TabPane tab="配置管理" key="3">
-          <div style={{ marginBottom: 16 }}>
-            <Button type="primary" onClick={handleAddConfig}>
-              添加配置
-            </Button>
-          </div>
-          <Table 
-            dataSource={configurations} 
-            columns={configColumns} 
-            rowKey="id"
-            pagination={{ pageSize: 10 }}
-          />
-        </TabPane>
-        
-        <TabPane tab="板卡类型管理" key="4">
-          <div style={{ marginBottom: 16 }}>
-            <Button type="primary" onClick={handleAddCardType}>
-              添加板卡类型
-            </Button>
-          </div>
-          <Table 
-            dataSource={cardTypes} 
-            columns={cardTypeColumns} 
-            rowKey="id"
-            pagination={{ pageSize: 10 }}
-          />
-        </TabPane>
-        
-        <TabPane tab="板卡管理" key="5">
-          <div style={{ marginBottom: 16 }}>
-            <Button type="primary" onClick={handleAddCard}>
-              添加板卡
-            </Button>
-          </div>
-          <Table 
-            dataSource={cards} 
-            columns={cardColumns} 
-            rowKey="id"
-            pagination={{ pageSize: 10 }}
-          />
-        </TabPane>
-        
-        <TabPane tab="辅助设备管理" key="6">
-          <div style={{ marginBottom: 16 }}>
-            <Button type="primary" onClick={handleAddAuxEquipment}>
-              添加辅助设备
-            </Button>
-          </div>
-          {auxEquipments.length > 0 ? (
-            <Table 
-              dataSource={auxEquipments} 
-              columns={auxEquipmentColumns} 
-              rowKey="id"
-              pagination={{ pageSize: 10 }}
-            />
-          ) : (
-            <EmptyState 
-              description="暂无辅助设备数据，点击上方按钮添加"
-            />
-          )}
-        </TabPane>
-      </Tabs>
+      <Tabs 
+        defaultActiveKey="1"
+        items={[
+          {
+            key: '1',
+            label: '层级结构',
+            children: (
+              <Card title="供应商 -> 测试机 -> 配置和板卡 层级结构">
+                <Tree
+                  treeData={convertToTreeData(hierarchicalData)}
+                  defaultExpandAll
+                />
+              </Card>
+            )
+          },
+          {
+            key: '2',
+            label: '测试机管理',
+            children: (
+              <div>
+                <div style={{ marginBottom: 16 }}>
+                  <Button type="primary" onClick={handleAddMachine}>
+                    添加测试机
+                  </Button>
+                </div>
+                <Table 
+                  dataSource={machines} 
+                  columns={machineColumns} 
+                  rowKey="id"
+                  pagination={{ pageSize: 10 }}
+                />
+              </div>
+            )
+          },
+          {
+            key: '3',
+            label: '配置管理',
+            children: (
+              <div>
+                <div style={{ marginBottom: 16 }}>
+                  <Button type="primary" onClick={handleAddConfig}>
+                    添加配置
+                  </Button>
+                </div>
+                <Table 
+                  dataSource={configurations} 
+                  columns={configColumns} 
+                  rowKey="id"
+                  pagination={{ pageSize: 10 }}
+                />
+              </div>
+            )
+          },
+          {
+            key: '4',
+            label: '板卡类型管理',
+            children: (
+              <div>
+                <div style={{ marginBottom: 16 }}>
+                  <Button type="primary" onClick={handleAddCardType}>
+                    添加板卡类型
+                  </Button>
+                </div>
+                <Table 
+                  dataSource={cardTypes} 
+                  columns={cardTypeColumns} 
+                  rowKey="id"
+                  pagination={{ pageSize: 10 }}
+                />
+              </div>
+            )
+          },
+          {
+            key: '5',
+            label: '板卡管理',
+            children: (
+              <div>
+                <div style={{ marginBottom: 16 }}>
+                  <Button type="primary" onClick={handleAddCard}>
+                    添加板卡
+                  </Button>
+                </div>
+                <Table 
+                  dataSource={cards} 
+                  columns={cardColumns} 
+                  rowKey="id"
+                  pagination={{ pageSize: 10 }}
+                />
+              </div>
+            )
+          },
+          {
+            key: '6',
+            label: '辅助设备管理',
+            children: (
+              <div>
+                <div style={{ marginBottom: 16 }}>
+                  <Button type="primary" onClick={handleAddAuxEquipment}>
+                    添加辅助设备
+                  </Button>
+                </div>
+                {auxEquipments.length > 0 ? (
+                  <Table 
+                    dataSource={auxEquipments} 
+                    columns={auxEquipmentColumns} 
+                    rowKey="id"
+                    pagination={{ pageSize: 10 }}
+                  />
+                ) : (
+                  <EmptyState 
+                    description="暂无辅助设备数据，点击上方按钮添加"
+                  />
+                )}
+              </div>
+            )
+          }
+        ]}
+      />
       
       {/* 机器模态框 */}
       <Modal

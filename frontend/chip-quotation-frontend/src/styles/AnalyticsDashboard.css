@@ -1,0 +1,357 @@
+.analytics-dashboard {
+  padding: 24px;
+  background-color: #f0f2f5;
+  min-height: calc(100vh - 64px);
+}
+
+/* 页面头部 */
+.analytics-dashboard .dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  background: white;
+  padding: 20px 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.analytics-dashboard .header-left h1 {
+  margin: 0 0 4px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #262626;
+}
+
+.analytics-dashboard .header-left .subtitle {
+  color: #8c8c8c;
+  font-size: 14px;
+}
+
+.analytics-dashboard .header-controls {
+  display: flex;
+  align-items: center;
+}
+
+/* 指标行 */
+.analytics-dashboard .metrics-row {
+  margin-bottom: 24px;
+}
+
+.analytics-dashboard .metrics-row .ant-card {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.analytics-dashboard .metrics-row .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.analytics-dashboard .ant-statistic-title {
+  color: #8c8c8c;
+  font-size: 14px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.analytics-dashboard .ant-statistic-content {
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.analytics-dashboard .ant-statistic-content-prefix {
+  font-size: 16px;
+  color: #1890ff;
+  margin-right: 8px;
+}
+
+/* 图表行 */
+.analytics-dashboard .charts-row {
+  margin-bottom: 24px;
+}
+
+.analytics-dashboard .charts-row .ant-card,
+.analytics-dashboard .bottom-row .ant-card {
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.analytics-dashboard .ant-card-head {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.analytics-dashboard .ant-card-head-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #262626;
+}
+
+/* 状态分布 */
+.analytics-dashboard .status-distribution {
+  padding: 8px 0;
+}
+
+.analytics-dashboard .status-item {
+  margin-bottom: 16px;
+}
+
+.analytics-dashboard .status-item:last-child {
+  margin-bottom: 0;
+}
+
+.analytics-dashboard .status-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.analytics-dashboard .status-count {
+  font-weight: 600;
+  color: #262626;
+}
+
+.analytics-dashboard .ant-progress {
+  margin-bottom: 0;
+}
+
+/* 列表样式 */
+.analytics-dashboard .ant-list-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.analytics-dashboard .ant-list-item:last-child {
+  border-bottom: none;
+}
+
+.analytics-dashboard .ant-list-item-meta-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #262626;
+  margin-bottom: 4px;
+}
+
+.analytics-dashboard .ant-list-item-meta-description {
+  font-size: 13px;
+  color: #8c8c8c;
+  line-height: 1.4;
+}
+
+/* 头像样式 */
+.analytics-dashboard .ant-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+/* 标签样式 */
+.analytics-dashboard .ant-tag {
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  border: none;
+}
+
+/* 按钮样式 */
+.analytics-dashboard .ant-btn {
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.analytics-dashboard .ant-btn-sm {
+  font-size: 12px;
+  height: 28px;
+  padding: 4px 12px;
+}
+
+/* 选择器样式 */
+.analytics-dashboard .ant-select {
+  border-radius: 4px;
+}
+
+.analytics-dashboard .ant-picker {
+  border-radius: 4px;
+}
+
+/* 图表容器 */
+.analytics-dashboard .ant-card-body {
+  padding: 20px;
+}
+
+/* 趋势指示器 */
+.analytics-dashboard .trend-indicator {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.analytics-dashboard .trend-up {
+  color: #52c41a;
+}
+
+.analytics-dashboard .trend-down {
+  color: #ff4d4f;
+}
+
+/* 数据为空状态 */
+.analytics-dashboard .ant-empty {
+  padding: 40px 0;
+}
+
+/* 加载状态 */
+.analytics-dashboard .ant-spin-nested-loading {
+  min-height: 200px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .analytics-dashboard .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .analytics-dashboard .header-controls {
+    width: 100%;
+  }
+  
+  .analytics-dashboard .header-controls .ant-space {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 768px) {
+  .analytics-dashboard {
+    padding: 16px;
+  }
+  
+  .analytics-dashboard .dashboard-header {
+    padding: 16px;
+  }
+  
+  .analytics-dashboard .header-left h1 {
+    font-size: 20px;
+  }
+  
+  .analytics-dashboard .metrics-row .ant-col {
+    margin-bottom: 16px;
+  }
+  
+  .analytics-dashboard .charts-row .ant-col,
+  .analytics-dashboard .bottom-row .ant-col {
+    margin-bottom: 16px;
+  }
+  
+  .analytics-dashboard .ant-card-body {
+    padding: 16px;
+  }
+  
+  .analytics-dashboard .header-controls .ant-space {
+    flex-direction: column;
+    width: 100%;
+    align-items: stretch;
+  }
+  
+  .analytics-dashboard .header-controls .ant-space > * {
+    width: 100%;
+  }
+}
+
+/* 卡片悬停效果 */
+.analytics-dashboard .ant-card {
+  transition: all 0.3s ease;
+}
+
+.analytics-dashboard .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 图表标题图标 */
+.analytics-dashboard .ant-card-head-title .anticon {
+  margin-right: 8px;
+  color: #1890ff;
+}
+
+/* 进度条样式 */
+.analytics-dashboard .ant-progress-bg {
+  border-radius: 4px;
+}
+
+.analytics-dashboard .ant-progress-inner {
+  border-radius: 4px;
+  background-color: #f5f5f5;
+}
+
+/* 动画效果 */
+.analytics-dashboard .metrics-row .ant-card,
+.analytics-dashboard .charts-row .ant-card,
+.analytics-dashboard .bottom-row .ant-card {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 延迟动画 */
+.analytics-dashboard .metrics-row .ant-col:nth-child(1) .ant-card { animation-delay: 0.1s; }
+.analytics-dashboard .metrics-row .ant-col:nth-child(2) .ant-card { animation-delay: 0.2s; }
+.analytics-dashboard .metrics-row .ant-col:nth-child(3) .ant-card { animation-delay: 0.3s; }
+.analytics-dashboard .metrics-row .ant-col:nth-child(4) .ant-card { animation-delay: 0.4s; }
+
+/* 统计数值特殊样式 */
+.analytics-dashboard .ant-statistic-content-value {
+  color: #262626;
+}
+
+/* Space 组件样式 */
+.analytics-dashboard .ant-space {
+  display: flex;
+  align-items: center;
+}
+
+/* 小标题样式 */
+.analytics-dashboard .section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #262626;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 滚动条样式 */
+.analytics-dashboard .ant-card-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.analytics-dashboard .ant-card-body::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.analytics-dashboard .ant-card-body::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+.analytics-dashboard .ant-card-body::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
