@@ -24,6 +24,24 @@
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
     
+    <!-- 企业微信WebView缓存清理脚本（仅在开发环境生效） -->
+    <script>
+    if (location.hostname === 'wecom-dev.chipinfos.com.cn') {
+      // 清理Service Worker
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
+      }
+      // 清理Cache Storage
+      if (window.caches) {
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+      }
+      // 处理页面后退缓存
+      window.addEventListener('pageshow', e => { 
+        if (e.persisted) location.reload(); 
+      });
+    }
+    </script>
+    
     <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.

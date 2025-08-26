@@ -20,7 +20,7 @@ from .middleware.session_manager import record_role_change
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 class AdminLoginRequest(BaseModel):
     username: str
@@ -182,7 +182,7 @@ async def admin_login_page():
             };
             
             try {
-                const response = await fetch('/admin/login', {
+                const response = await fetch('/api/admin/login', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -194,7 +194,7 @@ async def admin_login_page():
                 
                 if (response.ok) {
                     // 登录成功，跳转到用户管理页面
-                    window.location.href = '/admin/management';
+                    window.location.href = '/api/admin/management';
                 } else {
                     // 登录失败，显示错误消息
                     errorMessage.textContent = result.detail || '登录失败';
@@ -428,11 +428,11 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
     <script>
         async function logout() {{
             try {{
-                await fetch('/admin/logout', {{ 
+                await fetch('/api/admin/logout', {{ 
                     method: 'POST',
                     credentials: 'include' 
                 }});
-                window.location.href = '/admin/login';
+                window.location.href = '/api/admin/login';
             }} catch (error) {{
                 console.error('退出登录失败:', error);
             }}
@@ -444,7 +444,7 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
             }}
             
             try {{
-                const response = await fetch('/admin/users/cleanup-test', {{
+                const response = await fetch('/api/admin/users/cleanup-test', {{
                     method: 'POST',
                     credentials: 'include'
                 }});
@@ -469,7 +469,7 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
             syncBtn.disabled = true;
             
             try {{
-                const response = await fetch('/admin/users/sync', {{ 
+                const response = await fetch('/api/admin/users/sync', {{ 
                     method: 'POST',
                     credentials: 'include'
                 }});
@@ -496,8 +496,8 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
         async function refreshUsers() {{
             console.log('refreshUsers() 被调用');
             try {{
-                console.log('正在请求 /admin/users');
-                const response = await fetch('/admin/users?' + new Date().getTime(), {{
+                console.log('正在请求 /api/admin/users');
+                const response = await fetch('/api/admin/users?' + new Date().getTime(), {{
                     credentials: 'include',  // 包含cookie
                     cache: 'no-cache',       // 禁用缓存
                     headers: {{
@@ -588,7 +588,7 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
             if (newRole && newRole >= 1 && newRole <= 4) {{
                 const selectedRole = roles[newRole - 1].value;
                 try {{
-                    const response = await fetch(`/admin/users/${{userid}}/role`, {{
+                    const response = await fetch(`/api/admin/users/${{userid}}/role`, {{
                         method: 'PUT',
                         headers: {{ 'Content-Type': 'application/json' }},
                         body: JSON.stringify({{ role: selectedRole }}),
@@ -613,7 +613,7 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
             const action = currentStatus ? '禁用' : '启用';
             if (confirm(`确定要${{action}}该用户吗？`)) {{
                 try {{
-                    const response = await fetch(`/admin/users/${{userid}}/status`, {{
+                    const response = await fetch(`/api/admin/users/${{userid}}/status`, {{
                         method: 'PUT',
                         headers: {{ 'Content-Type': 'application/json' }},
                         body: JSON.stringify({{ is_active: !currentStatus }}),
