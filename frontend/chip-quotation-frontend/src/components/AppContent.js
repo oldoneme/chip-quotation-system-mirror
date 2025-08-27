@@ -20,6 +20,9 @@ import ComingSoon from '../pages/ComingSoon';
 import QuoteTemplate from '../pages/QuoteTemplate';
 import AnalyticsDashboard from '../pages/AnalyticsDashboard';
 import VersionControl from '../pages/VersionControl';
+import QuoteManagement from '../pages/QuoteManagement';
+import QuoteDetail from '../pages/QuoteDetail';
+import ApprovalWorkflow from '../pages/ApprovalWorkflow';
 import DebugPanel from './DebugPanel';
 
 const { Header, Content, Footer } = Layout;
@@ -64,11 +67,11 @@ const AppContent = () => {
                 <Route path="/engineering-quote" element={<EngineeringQuote />} />
                 <Route path="/mass-production-quote" element={<MassProductionQuote />} />
                 <Route path="/quote-result" element={<QuoteResult />} />
-                <Route path="/quote-management" element={<ComingSoon title="报价单管理" />} />
-                <Route path="/quotes" element={<ComingSoon title="报价单管理" />} />
-                <Route path="/quotes/:id" element={<ComingSoon title="报价详情" />} />
+                <Route path="/quote-management" element={<QuoteManagement />} />
+                <Route path="/quotes" element={<QuoteManagement />} />
+                <Route path="/quote-detail/:id" element={<QuoteDetail />} />
                 <Route path="/quote-templates" element={<QuoteTemplate />} />
-                <Route path="/approval-workflow" element={<ComingSoon title="审批工作流" />} />
+                <Route path="/approval-workflow" element={<ApprovalWorkflow />} />
                 <Route path="/analytics" element={<AnalyticsDashboard />} />
                 <Route path="/version-control" element={<VersionControl />} />
                 <Route path="/database-management" element={<DatabaseManagement />} />
