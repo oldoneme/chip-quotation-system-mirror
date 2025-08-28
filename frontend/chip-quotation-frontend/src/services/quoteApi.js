@@ -71,6 +71,20 @@ export class QuoteApiService {
   }
 
   /**
+   * 根据报价单号获取报价单详情（测试端点，包含创建者姓名）
+   * @param {string} quoteNumber - 报价单号
+   */
+  static async getQuoteDetailTest(quoteNumber) {
+    try {
+      const response = await api.get(`${QUOTE_BASE_URL}/detail/${quoteNumber}`);
+      return response.data;
+    } catch (error) {
+      console.error('获取报价单详情失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 创建新报价单
    * @param {Object} quoteData - 报价单数据
    */

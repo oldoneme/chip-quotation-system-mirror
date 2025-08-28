@@ -44,10 +44,12 @@ const QuoteManagement = () => {
         customer: quote.customer_name,
         currency: quote.currency || 'CNY',
         status: QuoteApiService.mapStatusFromBackend(quote.status),
-        createdBy: quote.created_by_name || `用户${quote.created_by}`,
+        createdBy: quote.creator_name || `用户${quote.created_by}`,
         createdAt: new Date(quote.created_at).toLocaleString('zh-CN'),
         updatedAt: new Date(quote.updated_at).toLocaleString('zh-CN'),
-        validUntil: quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('zh-CN') : '-'
+        validUntil: quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('zh-CN') : '-',
+        totalAmount: quote.total_amount,
+        quoteDetails: quote.quote_details || []
       }));
       
       setQuotes(formattedQuotes);
@@ -212,6 +214,52 @@ const QuoteManagement = () => {
     });
   };
 
+  const renderQuoteDetails = (record) => {
+    if (!record.quoteDetails || record.quoteDetails.length === 0) {
+      return <div style={{ padding: '16px', color: '#666' }}>暂无报价明细</div>;
+    }
+
+    const detailColumns = [
+      {
+        title: '测试类型',
+        dataIndex: 'item_name',
+        key: 'item_name',
+        render: (text) => text || '-'
+      },
+      {
+        title: '设备类型',
+        dataIndex: 'machine_type', 
+        key: 'machine_type',
+        render: (text) => text || '-'
+      },
+      {
+        title: '设备型号',
+        dataIndex: 'machine_model',
+        key: 'machine_model', 
+        render: (text) => text || '-'
+      },
+      {
+        title: '小时费率',
+        dataIndex: 'unit_price',
+        key: 'unit_price',
+        render: (price) => price ? `¥${price.toLocaleString()}/小时` : '-'
+      }
+    ];
+
+    return (
+      <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
+        <h4 style={{ marginBottom: '16px' }}>报价明细</h4>
+        <Table
+          columns={detailColumns}
+          dataSource={record.quoteDetails}
+          pagination={false}
+          size="small"
+          rowKey={(item, index) => `${record.id}_${index}`}
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="quote-management">
       {/* 页面标题 */}
@@ -271,6 +319,10 @@ const QuoteManagement = () => {
           dataSource={quotes}
           rowKey="id"
           loading={loading}
+          expandable={{
+            expandedRowRender: (record) => renderQuoteDetails(record),
+            rowExpandable: (record) => record.quoteDetails && record.quoteDetails.length > 0,
+          }}
           pagination={{
             showSizeChanger: true,
             showQuickJumper: true,

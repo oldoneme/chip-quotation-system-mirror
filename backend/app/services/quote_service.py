@@ -52,12 +52,25 @@ class QuoteService:
         # 生成报价单号
         quote_number = self.generate_quote_number()
         
+        # 根据报价类型决定初始状态
+        # 询价报价直接设为已批准状态，其他类型设为草稿需要审批
+        if quote_data.quote_type == 'inquiry':
+            initial_status = 'approved'
+            approved_by = user_id
+            approved_at = datetime.now()
+        else:
+            initial_status = 'draft'
+            approved_by = None
+            approved_at = None
+        
         # 创建报价单主记录
         quote_dict = quote_data.model_dump(exclude={'items'})
         quote_dict.update({
             'quote_number': quote_number,
-            'status': 'draft',
-            'created_by': user_id
+            'status': initial_status,
+            'created_by': user_id,
+            'approved_by': approved_by,
+            'approved_at': approved_at
         })
         
         quote = Quote(**quote_dict)
@@ -71,6 +84,18 @@ class QuoteService:
             item = QuoteItem(**item_dict)
             self.db.add(item)
         
+        # 如果是询价报价，创建审批记录表示自动批准
+        if quote_data.quote_type == 'inquiry':
+            approval_record = ApprovalRecord(
+                quote_id=quote.id,
+                action='auto_approve_inquiry',
+                status='approved',
+                approver_id=user_id,
+                comments='询价报价自动批准，无需审批流程',
+                processed_at=datetime.now()
+            )
+            self.db.add(approval_record)
+        
         self.db.commit()
         self.db.refresh(quote)
         return quote
@@ -81,7 +106,11 @@ class QuoteService:
 
     def get_quote_by_number(self, quote_number: str) -> Optional[Quote]:
         """根据报价单号获取报价单"""
-        return self.db.query(Quote).filter(Quote.quote_number == quote_number).first()
+        from sqlalchemy.orm import selectinload
+        return (self.db.query(Quote)
+                .options(selectinload(Quote.items), selectinload(Quote.creator))
+                .filter(Quote.quote_number == quote_number)
+                .first())
 
     def get_quotes(self, filter_params: QuoteFilter, user_id: Optional[int] = None):
         """获取报价单列表"""

@@ -22,7 +22,7 @@ const InquiryQuote = () => {
     projectInfo: {
       projectName: '',
       chipPackage: '',
-      testType: '',
+      testType: 'mixed',
       urgency: 'normal'
     },
     machines: [
@@ -434,6 +434,14 @@ const InquiryQuote = () => {
   };
 
   const handleSubmit = () => {
+    // 映射测试类型值到显示名称
+    const testTypeMap = {
+      'CP': 'CP测试',
+      'FT': 'FT测试', 
+      'mixed': '混合测试'
+    };
+    const testTypeDisplay = testTypeMap[formData.projectInfo.testType] || '混合测试';
+    
     const totalRate = formData.machines.reduce((sum, machine) => sum + machine.hourlyRate, 0);
     
     const quoteData = {
@@ -446,7 +454,7 @@ const InquiryQuote = () => {
       totalHourlyRate: totalRate,
       inquiryFactor: formData.inquiryFactor,
       currency: formData.currency,
-      exchangeRate: formData.exchangeRate,  // 添加汇率
+      exchangeRate: formData.exchangeRate,
       remarks: formData.remarks,
       generatedAt: new Date().toISOString(),
       items: [
@@ -463,7 +471,40 @@ const InquiryQuote = () => {
         }
       ],
       totalAmount: totalRate,
-      quoteCurrency: formData.currency
+      quoteCurrency: formData.currency,
+      // 添加报价单数据结构，供结果页面确认时使用
+      quoteCreateData: {
+        title: `${formData.customerInfo.companyName} - ${formData.projectInfo.projectName || '询价项目'}`,
+        quote_type: 'inquiry',
+        customer_name: formData.customerInfo.companyName,
+        customer_contact: formData.customerInfo.contactPerson,
+        customer_phone: formData.customerInfo.phone || '',
+        customer_email: formData.customerInfo.email || '',
+        currency: formData.currency,
+        subtotal: totalRate,
+        discount: 0.0,
+        tax_rate: 0.0,
+        tax_amount: 0.0,
+        total_amount: totalRate,
+        description: `芯片封装: ${formData.projectInfo.chipPackage}, 测试类型: ${testTypeDisplay}`,
+        notes: formData.remarks || '',
+        items: formData.machines.map(machine => {
+          const categoryLabel = machineCategories.find(c => c.value === machine.category)?.label || machine.category;
+          
+          return {
+            item_name: testTypeDisplay,
+            item_description: `设备: ${machine.model || '未选择'} (${categoryLabel}), 机时费率: ${formatHourlyPrice(machine.hourlyRate)}/小时, 询价系数: ${formData.inquiryFactor}`,
+            machine_type: categoryLabel,
+            machine_model: machine.model || '未选择',
+            configuration: machine.selectedCards.map(card => card.board_name).join(', ') || '无板卡',
+            quantity: 1,
+            unit: '台·小时',
+            unit_price: machine.hourlyRate,
+            total_price: machine.hourlyRate,
+            machine_id: machine.machineData?.id || null
+          };
+        })
+      }
     };
 
     navigate('/quote-result', { state: quoteData });

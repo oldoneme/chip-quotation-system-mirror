@@ -8,6 +8,8 @@ const QuoteResult = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [quoteData, setQuoteData] = useState(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [isQuoteConfirmed, setIsQuoteConfirmed] = useState(false);
 
   // 货币配置
   const currencies = [
@@ -212,6 +214,43 @@ const QuoteResult = () => {
     });
     
     return cardCost;
+  };
+
+  // 确认报价，创建数据库记录
+  const handleConfirmQuote = async () => {
+    if (!quoteData || !quoteData.quoteCreateData) {
+      message.error('报价数据不完整，无法创建报价单');
+      return;
+    }
+
+    setConfirmLoading(true);
+    try {
+      // 动态导入API服务
+      const QuoteApiService = (await import('../services/quoteApi')).default;
+      
+      // 创建报价单
+      const createdQuote = await QuoteApiService.createQuote(quoteData.quoteCreateData);
+      
+      message.success(`报价单创建成功！报价单号：${createdQuote.quote_number}`);
+      setIsQuoteConfirmed(true);
+      
+      // 更新报价数据，添加创建的报价单信息
+      setQuoteData(prev => ({
+        ...prev,
+        quoteId: createdQuote.id,
+        quoteNumber: createdQuote.quote_number,
+        quoteStatus: createdQuote.status,
+        dbRecord: true
+      }));
+      
+      console.log('报价单创建成功:', createdQuote);
+      
+    } catch (error) {
+      console.error('创建报价单失败:', error);
+      message.error('创建报价单失败，请稍后重试');
+    } finally {
+      setConfirmLoading(false);
+    }
   };
 
   // 计算辅助设备费用（不乘以工程系数）
@@ -1042,6 +1081,35 @@ const QuoteResult = () => {
           <Button type="primary" onClick={() => window.print()}>
             打印报价
           </Button>
+          {/* 确认报价按钮 - 只在有报价数据且未确认时显示 */}
+          {quoteData && quoteData.quoteCreateData && !isQuoteConfirmed && (
+            <Button 
+              type="primary" 
+              size="large"
+              loading={confirmLoading}
+              onClick={handleConfirmQuote}
+              style={{ 
+                backgroundColor: '#52c41a', 
+                borderColor: '#52c41a',
+                fontWeight: 'bold'
+              }}
+            >
+              {confirmLoading ? '正在创建报价单...' : '确认报价'}
+            </Button>
+          )}
+          {/* 已确认状态显示 */}
+          {isQuoteConfirmed && (
+            <div style={{ 
+              padding: '8px 16px', 
+              backgroundColor: '#f6ffed', 
+              border: '1px solid #b7eb8f',
+              borderRadius: '6px',
+              color: '#52c41a',
+              fontWeight: 'bold'
+            }}>
+              ✓ 报价单已创建：{quoteData?.quoteNumber}
+            </div>
+          )}
         </div>
       </Card>
     </div>

@@ -83,10 +83,36 @@ async def get_quotes_test(
 ):
     """测试端点 - 直接返回报价单列表"""
     try:
-        from ....models import Quote
-        quotes = db.query(Quote).limit(10).all()
+        from ....models import Quote, User, QuoteItem
+        from sqlalchemy import desc
+        from sqlalchemy.orm import selectinload
+        
+        # 获取所有报价单，按创建时间倒序排列，并关联用户信息和报价项目
+        quotes = db.query(Quote).options(
+            selectinload(Quote.items)
+        ).join(User, Quote.created_by == User.id, isouter=True).order_by(desc(Quote.created_at)).all()
+        
         result = []
         for quote in quotes:
+            # 获取创建者姓名
+            creator_name = "未知"
+            if quote.creator:
+                creator_name = quote.creator.name
+            
+            # 格式化报价明细
+            quote_details = []
+            for item in quote.items:
+                detail = {
+                    "item_name": item.item_name,
+                    "machine_type": item.machine_type,
+                    "machine_model": item.machine_model,
+                    "unit_price": item.unit_price,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "total_price": item.total_price
+                }
+                quote_details.append(detail)
+            
             result.append({
                 "id": quote.id,
                 "quote_number": quote.quote_number,
@@ -95,16 +121,101 @@ async def get_quotes_test(
                 "customer_name": quote.customer_name,
                 "status": quote.status,
                 "created_at": quote.created_at.isoformat(),
-                "total_amount": quote.total_amount
+                "total_amount": quote.total_amount,
+                "creator_name": creator_name,
+                "quote_details": quote_details
             })
         return {
             "items": result,
             "total": len(result),
             "page": 1,
-            "size": 10
+            "size": len(result)
         }
     except Exception as e:
         print(f"测试端点错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+@router.get("/detail/{quote_number}")
+async def get_quote_detail_test(
+    quote_number: str,
+    db: Session = Depends(get_db)
+):
+    """测试端点 - 获取报价单详情（包含创建者姓名）"""
+    try:
+        from ....models import Quote, User, QuoteItem
+        from sqlalchemy.orm import selectinload
+        
+        # 获取报价单详情，关联用户和明细项
+        quote = (db.query(Quote)
+                .options(selectinload(Quote.items), selectinload(Quote.creator))
+                .filter(Quote.quote_number == quote_number)
+                .first())
+        
+        if not quote:
+            return {"error": "报价单不存在"}
+        
+        # 获取创建者姓名
+        creator_name = "未知"
+        if quote.creator:
+            creator_name = quote.creator.name
+        
+        # 格式化报价明细
+        quote_items = []
+        for item in quote.items:
+            quote_items.append({
+                "id": item.id,
+                "item_name": item.item_name,
+                "item_description": item.item_description,
+                "machine_type": item.machine_type,
+                "supplier": item.supplier,
+                "machine_model": item.machine_model,
+                "configuration": item.configuration,
+                "quantity": item.quantity,
+                "unit": item.unit,
+                "unit_price": item.unit_price,
+                "total_price": item.total_price
+            })
+        
+        result = {
+            "id": quote.id,
+            "quote_number": quote.quote_number,
+            "title": quote.title,
+            "quote_type": quote.quote_type,
+            "customer_name": quote.customer_name,
+            "customer_contact": quote.customer_contact,
+            "customer_phone": quote.customer_phone,
+            "customer_email": quote.customer_email,
+            "customer_address": quote.customer_address,
+            "currency": quote.currency,
+            "subtotal": quote.subtotal,
+            "discount": quote.discount,
+            "tax_rate": quote.tax_rate,
+            "tax_amount": quote.tax_amount,
+            "total_amount": quote.total_amount,
+            "valid_until": quote.valid_until.isoformat() if quote.valid_until else None,
+            "payment_terms": quote.payment_terms,
+            "description": quote.description,
+            "notes": quote.notes,
+            "status": quote.status,
+            "version": quote.version,
+            "submitted_at": quote.submitted_at.isoformat() if quote.submitted_at else None,
+            "approved_at": quote.approved_at.isoformat() if quote.approved_at else None,
+            "approved_by": quote.approved_by,
+            "rejection_reason": quote.rejection_reason,
+            "wecom_approval_id": quote.wecom_approval_id,
+            "created_by": quote.created_by,
+            "creator_name": creator_name,
+            "created_at": quote.created_at.isoformat(),
+            "updated_at": quote.updated_at.isoformat(),
+            "items": quote_items
+        }
+        
+        return result
+        
+    except Exception as e:
+        print(f"获取报价单详情错误: {e}")
         import traceback
         traceback.print_exc()
         return {"error": str(e)}

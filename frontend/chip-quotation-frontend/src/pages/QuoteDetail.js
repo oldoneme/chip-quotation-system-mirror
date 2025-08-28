@@ -31,7 +31,11 @@ const QuoteDetail = () => {
   const fetchQuoteDetail = async () => {
     setLoading(true);
     try {
-      const quoteData = await QuoteApiService.getQuoteByNumber(id);
+      const quoteData = await QuoteApiService.getQuoteDetailTest(id);
+      
+      if (quoteData.error) {
+        throw new Error(quoteData.error);
+      }
       
       // 格式化数据显示
       const formattedQuote = {
@@ -42,7 +46,7 @@ const QuoteDetail = () => {
         customer: quoteData.customer_name,
         currency: quoteData.currency || 'CNY',
         status: QuoteApiService.mapStatusFromBackend(quoteData.status),
-        createdBy: quoteData.created_by_name || `用户${quoteData.created_by}`,
+        createdBy: quoteData.creator_name || `用户${quoteData.created_by}`,
         createdAt: new Date(quoteData.created_at).toLocaleString('zh-CN'),
         updatedAt: new Date(quoteData.updated_at).toLocaleString('zh-CN'),
         validUntil: quoteData.valid_until ? new Date(quoteData.valid_until).toLocaleDateString('zh-CN') : '-',
@@ -58,6 +62,7 @@ const QuoteDetail = () => {
           supplier: item.supplier,
           machine: item.machine_model,
           quantity: item.quantity,
+          unit: item.unit,
           unitPrice: item.unit_price,
           totalPrice: item.total_price
         })) || []
@@ -140,42 +145,28 @@ const QuoteDetail = () => {
 
   const itemColumns = [
     {
-      title: '项目名称',
+      title: '测试类型',
       dataIndex: 'itemName',
-      key: 'itemName'
+      key: 'itemName',
+      render: (text) => text || '-'
     },
     {
       title: '设备类型',
       dataIndex: 'machineType',
-      key: 'machineType'
-    },
-    {
-      title: '供应商',
-      dataIndex: 'supplier',
-      key: 'supplier'
+      key: 'machineType',
+      render: (text) => text || '-'
     },
     {
       title: '设备型号',
       dataIndex: 'machine',
-      key: 'machine'
+      key: 'machine',
+      render: (text) => text || '-'
     },
     {
-      title: '数量',
-      dataIndex: 'quantity',
-      key: 'quantity',
-      render: (value) => value.toLocaleString()
-    },
-    {
-      title: '单价',
+      title: '小时费率',
       dataIndex: 'unitPrice',
       key: 'unitPrice',
-      render: (value) => `¥${value.toFixed(2)}`
-    },
-    {
-      title: '小计',
-      dataIndex: 'totalPrice',
-      key: 'totalPrice',
-      render: (value) => `¥${value.toFixed(2)}`
+      render: (price) => price ? `¥${price.toLocaleString()}/小时` : '-'
     }
   ];
 
@@ -239,7 +230,7 @@ const QuoteDetail = () => {
 
       <Row gutter={16} style={{ marginTop: '16px' }}>
         {/* Basic Information */}
-        <Col xs={24} lg={16}>
+        <Col xs={24}>
           <Card title="基本信息">
             <Descriptions column={2} bordered>
               <Descriptions.Item label="报价单号">{quote.id}</Descriptions.Item>
@@ -269,27 +260,6 @@ const QuoteDetail = () => {
             )}
           </Card>
         </Col>
-
-        {/* Summary */}
-        <Col xs={24} lg={8}>
-          <Card title="报价汇总">
-            <Statistic 
-              title="报价总额" 
-              value={quote.totalAmount} 
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: '#3f8600' }}
-            />
-            {quote.discount > 0 && (
-              <Statistic 
-                title="折扣率" 
-                value={quote.discount} 
-                suffix="%" 
-                style={{ marginTop: '16px' }}
-              />
-            )}
-          </Card>
-        </Col>
       </Row>
 
       {/* Items Detail */}
@@ -299,19 +269,6 @@ const QuoteDetail = () => {
           dataSource={quote.items}
           pagination={false}
           bordered
-          summary={(pageData) => {
-            const total = pageData.reduce((sum, item) => sum + item.totalPrice, 0);
-            return (
-              <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={6}>
-                  <strong>合计</strong>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={1}>
-                  <strong>¥{total.toFixed(2)}</strong>
-                </Table.Summary.Cell>
-              </Table.Summary.Row>
-            );
-          }}
         />
       </Card>
     </div>
