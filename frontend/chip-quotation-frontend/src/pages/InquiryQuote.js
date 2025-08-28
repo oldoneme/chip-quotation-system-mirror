@@ -23,7 +23,8 @@ const InquiryQuote = () => {
       projectName: '',
       chipPackage: '',
       testType: 'mixed',
-      urgency: 'normal'
+      urgency: 'normal',
+      quoteUnit: '昆山芯信安'  // 默认选择第一个
     },
     machines: [
       {
@@ -433,6 +434,20 @@ const InquiryQuote = () => {
     }));
   };
 
+  // 生成临时报价单号（与后端格式保持一致）
+  const generateTempQuoteNumber = (quoteUnit) => {
+    const unitMapping = {
+      "昆山芯信安": "KS",
+      "苏州芯昱安": "SZ", 
+      "上海芯睿安": "SH",
+      "珠海芯创安": "ZH"
+    };
+    const unitAbbr = unitMapping[quoteUnit] || "KS";
+    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,"");
+    const randomSeq = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
+    return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
+  };
+
   const handleSubmit = () => {
     // 映射测试类型值到显示名称
     const testTypeMap = {
@@ -446,7 +461,7 @@ const InquiryQuote = () => {
     
     const quoteData = {
       type: '询价报价',
-      number: `INQ-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`,
+      number: generateTempQuoteNumber(formData.projectInfo.quoteUnit),
       date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       customerInfo: formData.customerInfo,
       projectInfo: formData.projectInfo,
@@ -480,6 +495,7 @@ const InquiryQuote = () => {
         customer_contact: formData.customerInfo.contactPerson,
         customer_phone: formData.customerInfo.phone || '',
         customer_email: formData.customerInfo.email || '',
+        quote_unit: formData.projectInfo.quoteUnit,
         currency: formData.currency,
         subtotal: totalRate,
         discount: 0.0,
@@ -615,6 +631,18 @@ const InquiryQuote = () => {
               <option value="normal">正常</option>
               <option value="urgent">紧急</option>
               <option value="very_urgent">非常紧急</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>报价单位</label>
+            <select
+              value={formData.projectInfo.quoteUnit}
+              onChange={(e) => handleInputChange('projectInfo', 'quoteUnit', e.target.value)}
+            >
+              <option value="昆山芯信安">昆山芯信安</option>
+              <option value="苏州芯昱安">苏州芯昱安</option>
+              <option value="上海芯睿安">上海芯睿安</option>
+              <option value="珠海芯创安">珠海芯创安</option>
             </select>
           </div>
         </div>
