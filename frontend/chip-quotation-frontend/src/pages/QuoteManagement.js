@@ -380,6 +380,104 @@ const QuoteManagement = () => {
       );
     }
 
+    // 工程报价使用分类显示
+    if (record.type === '工程机时报价') {
+      return (
+        <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
+          <h4 style={{ marginBottom: '16px' }}>报价明细</h4>
+          
+          {/* 1. 机器设备 */}
+          {(() => {
+            const machineItems = record.quoteDetails.filter(item => 
+              item.machine_type && item.machine_type !== '人员'
+            );
+            
+            return machineItems && machineItems.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <h5>🔧 1. 机器设备</h5>
+                <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '2fr 2fr 2fr', 
+                    gap: '10px',
+                    padding: '8px 12px',
+                    backgroundColor: '#fafafa',
+                    borderBottom: '1px solid #d9d9d9',
+                    fontWeight: 'bold',
+                    fontSize: '12px'
+                  }}>
+                    <span>设备类型</span>
+                    <span>设备型号</span>
+                    <span>小时费率</span>
+                  </div>
+                  {machineItems.map((item, index) => (
+                    <div key={index} style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '2fr 2fr 2fr', 
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderBottom: index < machineItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                      fontSize: '12px'
+                    }}>
+                      <span>{item.machine_type}</span>
+                      <span>{item.machine_model}</span>
+                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                        ¥{item.unit_price?.toFixed(2)}/小时
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+          
+          {/* 2. 人员费用 */}
+          {(() => {
+            const personnelItems = record.quoteDetails.filter(item => 
+              item.machine_type === '人员' || 
+              (item.item_name && (item.item_name === '工程师' || item.item_name === '技术员'))
+            );
+            
+            return personnelItems.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <h5>👨‍💼 2. 人员费用</h5>
+                <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '3fr 3fr', 
+                    gap: '10px',
+                    padding: '8px 12px',
+                    backgroundColor: '#fafafa',
+                    borderBottom: '1px solid #d9d9d9',
+                    fontWeight: 'bold',
+                    fontSize: '12px'
+                  }}>
+                    <span>人员类别</span>
+                    <span>小时费率</span>
+                  </div>
+                  {personnelItems.map((item, index) => (
+                    <div key={index} style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '3fr 3fr', 
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderBottom: index < personnelItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                      fontSize: '12px'
+                    }}>
+                      <span>{item.item_name || item.machine_model}</span>
+                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                        ¥{item.unit_price?.toFixed(2)}/小时
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      );
+    }
+
     // 其他报价类型使用原有的表格显示
     const detailColumns = [
       {

@@ -48,6 +48,20 @@ const MassProductionQuote = () => {
   const [quoteCurrency, setQuoteCurrency] = useState('CNY'); // 报价币种，默认人民币
   const [quoteExchangeRate, setQuoteExchangeRate] = useState(7.2); // 报价汇率，默认7.2
   
+  // 基本信息状态
+  const [customerInfo, setCustomerInfo] = useState({
+    companyName: '',
+    contactPerson: '',
+    phone: '',
+    email: ''
+  });
+  const [projectInfo, setProjectInfo] = useState({
+    projectName: '',
+    chipPackage: '',
+    testType: 'mass_production',
+    urgency: 'normal'
+  });
+  
   // FT数据状态
   const [ftData, setFtData] = useState({
     testMachine: null,
@@ -818,13 +832,176 @@ const MassProductionQuote = () => {
       <StepIndicator 
         currentStep={currentStep}
         steps={[
+          '基本信息',
           '机器选择',
           '辅助设备'
         ]}
       />
 
-      {/* 第一步：机器选择 */}
+      {/* 第0步：基本信息 */}
       {currentStep === 0 && (
+        <div>
+          <h2 className="section-title">基本信息</h2>
+          
+          {/* 客户信息 */}
+          <Card title="客户信息" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  公司名称 <span style={{ color: 'red' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                  value={customerInfo.companyName}
+                  onChange={(e) => setCustomerInfo({...customerInfo, companyName: e.target.value})}
+                  placeholder="请输入公司名称"
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  联系人 <span style={{ color: 'red' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                  value={customerInfo.contactPerson}
+                  onChange={(e) => setCustomerInfo({...customerInfo, contactPerson: e.target.value})}
+                  placeholder="请输入联系人姓名"
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>联系电话</label>
+                <input
+                  type="text"
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                  value={customerInfo.phone}
+                  onChange={(e) => setCustomerInfo({...customerInfo, phone: e.target.value})}
+                  placeholder="请输入联系电话"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>邮箱地址</label>
+                <input
+                  type="email"
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                  value={customerInfo.email}
+                  onChange={(e) => setCustomerInfo({...customerInfo, email: e.target.value})}
+                  placeholder="请输入邮箱地址"
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* 项目信息 */}
+          <Card title="项目信息" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>项目名称</label>
+                <input
+                  type="text"
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                  value={projectInfo.projectName}
+                  onChange={(e) => setProjectInfo({...projectInfo, projectName: e.target.value})}
+                  placeholder="请输入项目名称"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  芯片封装 <span style={{ color: 'red' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                  value={projectInfo.chipPackage}
+                  onChange={(e) => setProjectInfo({...projectInfo, chipPackage: e.target.value})}
+                  placeholder="如：QFN48, BGA256等"
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>测试类型</label>
+                <select
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    backgroundColor: '#fff'
+                  }}
+                  value={projectInfo.testType}
+                  onChange={(e) => setProjectInfo({...projectInfo, testType: e.target.value})}
+                >
+                  <option value="mass_production">量产机时测试</option>
+                  <option value="CP">CP测试</option>
+                  <option value="FT">FT测试</option>
+                  <option value="mixed">混合测试</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>紧急程度</label>
+                <select
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    backgroundColor: '#fff'
+                  }}
+                  value={projectInfo.urgency}
+                  onChange={(e) => setProjectInfo({...projectInfo, urgency: e.target.value})}
+                >
+                  <option value="normal">正常</option>
+                  <option value="urgent">紧急</option>
+                </select>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 第一步：机器选择 */}
+      {currentStep === 1 && (
         <>
           {/* 选择FT或CP */}
           <Card title="测试类型选择" style={{ marginBottom: 20 }}>
@@ -1084,7 +1261,7 @@ const MassProductionQuote = () => {
       )}
 
       {/* 第二步：辅助设备选择 */}
-      {currentStep === 1 && (
+      {currentStep === 2 && (
         <div>
           <h2 className="section-title">辅助设备选择</h2>
           
@@ -1214,9 +1391,9 @@ const MassProductionQuote = () => {
           
           {/* 进度提示 */}
           <div style={{ textAlign: 'center', color: '#666' }}>
-            <div>步骤 {currentStep + 1} / 2</div>
+            <div>步骤 {currentStep + 1} / 3</div>
             <div style={{ fontSize: '12px', marginTop: '4px' }}>
-              {currentStep === 0 ? '配置测试机器和板卡' : '选择辅助设备并确认费用'}
+              {currentStep === 0 ? '填写基本信息' : currentStep === 1 ? '配置测试机器和板卡' : '选择辅助设备并确认费用'}
             </div>
           </div>
           

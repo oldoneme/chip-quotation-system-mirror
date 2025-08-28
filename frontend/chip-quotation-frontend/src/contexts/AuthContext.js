@@ -67,8 +67,8 @@ export const AuthProvider = ({ children }) => {
         setUser({
           id: 1,
           userid: 'temp_user',
-          name: '临时用户',
-          role: 'user'
+          name: '临时用户（开发模式）',
+          role: 'admin'  // 开发环境下给admin权限
         });
         setAuthenticated(true);
         return;

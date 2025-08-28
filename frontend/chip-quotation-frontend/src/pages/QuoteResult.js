@@ -228,8 +228,28 @@ const QuoteResult = () => {
       // 动态导入API服务
       const QuoteApiService = (await import('../services/quoteApi')).default;
       
+      console.log('准备创建报价单，数据:', quoteData.quoteCreateData);
+      console.log('Items字段详情:', JSON.stringify(quoteData.quoteCreateData.items, null, 2));
+      
+      // 修复数据格式问题
+      const fixedQuoteData = {
+        ...quoteData.quoteCreateData,
+        subtotal: quoteData.quoteCreateData.subtotal || 0,
+        total_amount: quoteData.quoteCreateData.total_amount || 0,
+        items: quoteData.quoteCreateData.items.map(item => ({
+          ...item,
+          supplier: typeof item.supplier === 'object' ? (item.supplier.name || '') : (item.supplier || ''),
+          unit_price: item.unit_price === null || isNaN(item.unit_price) ? 0 : item.unit_price,
+          total_price: item.total_price === null || isNaN(item.total_price) ? 0 : item.total_price,
+          configuration: item.configuration || '配置',
+          item_name: item.item_name.replace('undefined', '配置')
+        }))
+      };
+      
+      console.log('修复后的数据:', JSON.stringify(fixedQuoteData, null, 2));
+      
       // 创建报价单
-      const createdQuote = await QuoteApiService.createQuote(quoteData.quoteCreateData);
+      const createdQuote = await QuoteApiService.createQuote(fixedQuoteData);
       
       message.success(`报价单创建成功！报价单号：${createdQuote.quote_number}`);
       setIsQuoteConfirmed(true);
@@ -246,8 +266,53 @@ const QuoteResult = () => {
       console.log('报价单创建成功:', createdQuote);
       
     } catch (error) {
-      console.error('创建报价单失败:', error);
-      message.error('创建报价单失败，请稍后重试');
+      console.error('创建报价单详细错误:', error);
+      
+      let errorMessage = '创建报价单失败，请稍后重试';
+      
+      if (error.response) {
+        console.error('错误响应:', error.response.status, error.response.data);
+        
+        // 详细打印验证错误
+        if (error.response.status === 422 && error.response.data?.detail) {
+          console.error('验证错误详情:', JSON.stringify(error.response.data.detail, null, 2));
+        }
+        
+        if (error.response.status === 401) {
+          errorMessage = '用户认证失败，请重新登录';
+        } else if (error.response.status === 400) {
+          // 简化处理400错误
+          try {
+            const errorData = error.response.data;
+            if (typeof errorData === 'string') {
+              errorMessage = errorData;
+            } else if (errorData?.detail) {
+              if (typeof errorData.detail === 'string') {
+                errorMessage = errorData.detail;
+              } else if (Array.isArray(errorData.detail)) {
+                // 只取第一个错误信息
+                const firstError = errorData.detail[0];
+                if (firstError && firstError.msg) {
+                  errorMessage = `数据验证错误: ${firstError.msg}`;
+                } else {
+                  errorMessage = '数据验证失败，请检查输入信息';
+                }
+              } else {
+                errorMessage = '请求数据有误，请检查报价信息';
+              }
+            }
+          } catch (parseError) {
+            console.error('解析错误信息失败:', parseError);
+            errorMessage = '请求数据有误，请检查报价信息';
+          }
+        } else if (error.response.data?.detail && typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error.request) {
+        errorMessage = '网络连接失败，请检查网络设置';
+      }
+      
+      message.error(errorMessage);
     } finally {
       setConfirmLoading(false);
     }
