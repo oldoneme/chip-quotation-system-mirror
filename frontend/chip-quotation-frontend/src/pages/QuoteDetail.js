@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Card, Descriptions, Table, Timeline, Button, Space, Tag, 
-  Tabs, Divider, Row, Col, Statistic, Modal, message, Badge,
-  Avatar, Typography, Steps, Result, Spin
+  Card, Descriptions, Table, Button, Space, Tag, 
+  Divider, Row, Col, Statistic, Modal, message, 
+  Result, Spin, Empty
 } from 'antd';
 import { 
-  ArrowLeftOutlined, PrinterOutlined, DownloadOutlined, 
-  EditOutlined, DeleteOutlined, CopyOutlined, SendOutlined,
+  ArrowLeftOutlined, DownloadOutlined, 
+  EditOutlined, DeleteOutlined, SendOutlined,
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
-  UserOutlined, CalendarOutlined, FileTextOutlined, CommentOutlined,
-  ExclamationCircleOutlined
+  FileTextOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import QuoteApiService from '../services/quoteApi';
 import '../styles/QuoteDetail.css';
 
-const { Title, Text, Paragraph } = Typography;
-const { Step } = Steps;
 const { confirm } = Modal;
 
 const QuoteDetail = () => {
@@ -24,482 +22,297 @@ const QuoteDetail = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [quoteData, setQuoteData] = useState(null);
-  const [activeTab, setActiveTab] = useState('details');
-
-  // 模拟报价单详情数据
-  const mockQuoteData = {
-    id: 'QT202408001',
-    title: '华为技术有限公司芯片测试报价',
-    type: '量产机时报价',
-    status: 'approved',
-    version: 'V1.2',
-    customer: {
-      name: '华为技术有限公司',
-      contact: '张经理',
-      phone: '138-1234-5678',
-      email: 'zhang@huawei.com',
-      address: '深圳市龙岗区坂田华为基地'
-    },
-    financial: {
-      subtotal: 1150000,
-      discount: 50000,
-      tax: 150000,
-      total: 1250000,
-      currency: 'CNY',
-      paymentTerms: '30天账期',
-      validUntil: '2024-09-20'
-    },
-    items: [
-      {
-        key: '1',
-        name: 'Advantest V93000测试机时',
-        specification: 'Pin Scale 1024, 6.4Gbps',
-        quantity: 500,
-        unit: '小时',
-        unitPrice: 1200,
-        amount: 600000
-      },
-      {
-        key: '2',
-        name: 'Teradyne J750测试机时',
-        specification: '512通道, 100MHz',
-        quantity: 400,
-        unit: '小时',
-        unitPrice: 800,
-        amount: 320000
-      },
-      {
-        key: '3',
-        name: '工程支持服务',
-        specification: '测试程序开发与调试',
-        quantity: 100,
-        unit: '小时',
-        unitPrice: 500,
-        amount: 50000
-      },
-      {
-        key: '4',
-        name: '配套辅助设备',
-        specification: 'Handler + Prober',
-        quantity: 600,
-        unit: '小时',
-        unitPrice: 300,
-        amount: 180000
-      }
-    ],
-    timeline: [
-      {
-        time: '2024-08-20 14:30',
-        user: '张三',
-        action: '创建报价单',
-        status: 'success',
-        description: '创建初始报价单草稿'
-      },
-      {
-        time: '2024-08-20 16:45',
-        user: '张三',
-        action: '提交审批',
-        status: 'processing',
-        description: '提交给部门经理审批'
-      },
-      {
-        time: '2024-08-21 09:00',
-        user: '李经理',
-        action: '审批通过',
-        status: 'success',
-        description: '部门经理审批通过'
-      },
-      {
-        time: '2024-08-21 10:15',
-        user: '王总',
-        action: '最终批准',
-        status: 'success',
-        description: '总经理最终批准，报价单生效'
-      }
-    ],
-    comments: [
-      {
-        id: 1,
-        user: '李经理',
-        time: '2024-08-21 09:00',
-        content: '价格合理，建议通过',
-        avatar: null
-      },
-      {
-        id: 2,
-        user: '王总',
-        time: '2024-08-21 10:15',
-        content: '同意，请跟进后续合同签订',
-        avatar: null
-      }
-    ],
-    attachments: [
-      {
-        name: '技术规格说明书.pdf',
-        size: '2.5MB',
-        uploadTime: '2024-08-20 14:35'
-      },
-      {
-        name: '测试方案.docx',
-        size: '1.2MB',
-        uploadTime: '2024-08-20 14:36'
-      }
-    ],
-    createdBy: '张三',
-    createdAt: '2024-08-20 14:30',
-    updatedAt: '2024-08-21 10:15',
-    approvedBy: '王总',
-    approvedAt: '2024-08-21 10:15'
-  };
+  const [quote, setQuote] = useState(null);
 
   useEffect(() => {
     fetchQuoteDetail();
   }, [id]);
 
-  const fetchQuoteDetail = () => {
+  const fetchQuoteDetail = async () => {
     setLoading(true);
-    // 模拟API调用
-    setTimeout(() => {
-      setQuoteData(mockQuoteData);
+    try {
+      const quoteData = await QuoteApiService.getQuoteByNumber(id);
+      
+      // 格式化数据显示
+      const formattedQuote = {
+        id: quoteData.quote_number,
+        quoteId: quoteData.id,  // 保存实际ID用于操作
+        title: quoteData.title,
+        type: QuoteApiService.mapQuoteTypeFromBackend(quoteData.quote_type),
+        customer: quoteData.customer_name,
+        currency: quoteData.currency || 'CNY',
+        status: QuoteApiService.mapStatusFromBackend(quoteData.status),
+        createdBy: quoteData.created_by_name || `用户${quoteData.created_by}`,
+        createdAt: new Date(quoteData.created_at).toLocaleString('zh-CN'),
+        updatedAt: new Date(quoteData.updated_at).toLocaleString('zh-CN'),
+        validUntil: quoteData.valid_until ? new Date(quoteData.valid_until).toLocaleDateString('zh-CN') : '-',
+        approvedBy: quoteData.approved_by_name,
+        approvedAt: quoteData.approved_at ? new Date(quoteData.approved_at).toLocaleString('zh-CN') : null,
+        totalAmount: quoteData.total_amount || 0,
+        discount: quoteData.discount || 0,
+        description: quoteData.description,
+        items: quoteData.items?.map(item => ({
+          key: item.id?.toString(),
+          itemName: item.item_name,
+          machineType: item.machine_type,
+          supplier: item.supplier,
+          machine: item.machine_model,
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          totalPrice: item.total_price
+        })) || []
+      };
+      
+      setQuote(formattedQuote);
+    } catch (error) {
+      console.error('获取报价单详情失败:', error);
+      message.error('获取报价单详情失败');
+      setQuote(null);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   const getStatusTag = (status) => {
     const statusConfig = {
-      draft: { color: 'default', text: '草稿', icon: <EditOutlined /> },
+      draft: { color: 'default', text: '草稿', icon: <FileTextOutlined /> },
       pending: { color: 'processing', text: '待审批', icon: <ClockCircleOutlined /> },
       approved: { color: 'success', text: '已批准', icon: <CheckCircleOutlined /> },
       rejected: { color: 'error', text: '已拒绝', icon: <CloseCircleOutlined /> }
     };
     const config = statusConfig[status];
     return (
-      <Tag color={config.color} icon={config.icon} style={{ fontSize: 14, padding: '4px 12px' }}>
+      <Tag color={config.color} icon={config.icon} style={{ fontSize: '14px', padding: '4px 12px' }}>
         {config.text}
       </Tag>
     );
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleExport = () => {
-    message.success('正在导出PDF...');
+  const getTypeTag = (type) => {
+    const typeColors = {
+      '询价报价': 'blue',
+      '工装夹具报价': 'purple',
+      '工程机时报价': 'cyan',
+      '量产机时报价': 'green',
+      '量产工序报价': 'orange',
+      '综合报价': 'magenta'
+    };
+    return <Tag color={typeColors[type]} style={{ fontSize: '14px', padding: '4px 12px' }}>{type}</Tag>;
   };
 
   const handleEdit = () => {
-    if (quoteData.status === 'approved') {
-      confirm({
-        title: '提示',
-        icon: <ExclamationCircleOutlined />,
-        content: '该报价单已批准，编辑将创建新版本，是否继续？',
-        onOk() {
-          navigate(`/quote-edit/${id}`);
-        }
-      });
-    } else {
-      navigate(`/quote-edit/${id}`);
-    }
+    message.info(`编辑报价单 ${quote.id}`);
   };
 
   const handleDelete = () => {
     confirm({
       title: '确认删除',
-      icon: <ExclamationCircleOutlined />,
-      content: '确定要删除这个报价单吗？此操作不可恢复。',
+      content: `确定要删除报价单 ${quote.id} 吗？`,
       okText: '确定',
-      okType: 'danger',
       cancelText: '取消',
-      onOk() {
-        message.success('删除成功');
-        navigate('/quote-management');
+      onOk: async () => {
+        try {
+          await QuoteApiService.deleteQuote(quote.quoteId);
+          message.success('删除成功');
+          navigate(-1);
+        } catch (error) {
+          console.error('删除失败:', error);
+          message.error('删除失败');
+        }
       }
     });
   };
 
-  const handleSubmitApproval = () => {
-    confirm({
-      title: '提交审批',
-      content: '确定要提交审批吗？提交后将无法编辑。',
-      onOk() {
-        message.success('已提交审批');
-        fetchQuoteDetail();
-      }
-    });
+  const handleDownload = () => {
+    message.info(`下载报价单 ${quote.id}`);
+  };
+
+  const handleSubmitApproval = async () => {
+    try {
+      await QuoteApiService.submitForApproval(quote.quoteId);
+      message.success('审批提交成功！审批人将在企业微信中收到通知。');
+      fetchQuoteDetail(); // 重新获取数据
+    } catch (error) {
+      console.error('提交审批失败:', error);
+      message.error('提交审批失败');
+    }
   };
 
   const itemColumns = [
     {
-      title: '序号',
-      dataIndex: 'key',
-      key: 'key',
-      width: 60,
-      align: 'center'
-    },
-    {
       title: '项目名称',
-      dataIndex: 'name',
-      key: 'name'
+      dataIndex: 'itemName',
+      key: 'itemName'
     },
     {
-      title: '规格',
-      dataIndex: 'specification',
-      key: 'specification'
+      title: '设备类型',
+      dataIndex: 'machineType',
+      key: 'machineType'
+    },
+    {
+      title: '供应商',
+      dataIndex: 'supplier',
+      key: 'supplier'
+    },
+    {
+      title: '设备型号',
+      dataIndex: 'machine',
+      key: 'machine'
     },
     {
       title: '数量',
       dataIndex: 'quantity',
       key: 'quantity',
-      width: 80,
-      align: 'right'
-    },
-    {
-      title: '单位',
-      dataIndex: 'unit',
-      key: 'unit',
-      width: 60,
-      align: 'center'
+      render: (value) => value.toLocaleString()
     },
     {
       title: '单价',
       dataIndex: 'unitPrice',
       key: 'unitPrice',
-      width: 100,
-      align: 'right',
-      render: (value) => `¥${value.toLocaleString()}`
+      render: (value) => `¥${value.toFixed(2)}`
     },
     {
-      title: '金额',
-      dataIndex: 'amount',
-      key: 'amount',
-      width: 120,
-      align: 'right',
-      render: (value) => `¥${value.toLocaleString()}`
-    }
-  ];
-
-  const tabItems = [
-    {
-      key: 'details',
-      label: '报价详情',
-      children: quoteData && (
-        <div>
-          <Descriptions bordered column={{ xs: 1, sm: 2, md: 2, lg: 3 }}>
-            <Descriptions.Item label="报价单号">{quoteData.id}</Descriptions.Item>
-            <Descriptions.Item label="版本号">{quoteData.version}</Descriptions.Item>
-            <Descriptions.Item label="报价类型">{quoteData.type}</Descriptions.Item>
-            <Descriptions.Item label="客户名称">{quoteData.customer.name}</Descriptions.Item>
-            <Descriptions.Item label="联系人">{quoteData.customer.contact}</Descriptions.Item>
-            <Descriptions.Item label="联系电话">{quoteData.customer.phone}</Descriptions.Item>
-            <Descriptions.Item label="电子邮箱">{quoteData.customer.email}</Descriptions.Item>
-            <Descriptions.Item label="客户地址" span={2}>{quoteData.customer.address}</Descriptions.Item>
-            <Descriptions.Item label="付款条件">{quoteData.financial.paymentTerms}</Descriptions.Item>
-            <Descriptions.Item label="有效期至">{quoteData.financial.validUntil}</Descriptions.Item>
-            <Descriptions.Item label="币种">{quoteData.financial.currency}</Descriptions.Item>
-          </Descriptions>
-
-          <Divider orientation="left">报价明细</Divider>
-          <Table
-            columns={itemColumns}
-            dataSource={quoteData.items}
-            pagination={false}
-            footer={() => (
-              <div style={{ textAlign: 'right' }}>
-                <Space direction="vertical" size="small" style={{ width: 300 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Text>小计：</Text>
-                    <Text strong>¥{quoteData.financial.subtotal.toLocaleString()}</Text>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Text>折扣：</Text>
-                    <Text type="danger">-¥{quoteData.financial.discount.toLocaleString()}</Text>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Text>税额：</Text>
-                    <Text>¥{quoteData.financial.tax.toLocaleString()}</Text>
-                  </div>
-                  <Divider style={{ margin: '8px 0' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Title level={5} style={{ margin: 0 }}>总计：</Title>
-                    <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
-                      ¥{quoteData.financial.total.toLocaleString()}
-                    </Title>
-                  </div>
-                </Space>
-              </div>
-            )}
-          />
-
-          <Divider orientation="left">附件</Divider>
-          <Space direction="vertical">
-            {quoteData.attachments.map((file, index) => (
-              <div key={index}>
-                <FileTextOutlined /> {file.name} ({file.size}) - {file.uploadTime}
-                <Button type="link" size="small">下载</Button>
-              </div>
-            ))}
-          </Space>
-        </div>
-      )
-    },
-    {
-      key: 'timeline',
-      label: '审批记录',
-      children: quoteData && (
-        <Timeline
-          items={quoteData.timeline.map(item => ({
-            color: item.status === 'success' ? 'green' : item.status === 'processing' ? 'blue' : 'gray',
-            dot: item.status === 'success' ? <CheckCircleOutlined /> : <ClockCircleOutlined />,
-            children: (
-              <div>
-                <Text strong>{item.action}</Text>
-                <br />
-                <Text type="secondary">{item.user} · {item.time}</Text>
-                <br />
-                <Text>{item.description}</Text>
-              </div>
-            )
-          }))}
-        />
-      )
-    },
-    {
-      key: 'comments',
-      label: (
-        <Badge count={quoteData?.comments.length || 0} offset={[10, 0]}>
-          评论
-        </Badge>
-      ),
-      children: quoteData && (
-        <div>
-          {quoteData.comments.map(comment => (
-            <Card key={comment.id} style={{ marginBottom: 16 }} size="small">
-              <Space align="start">
-                <Avatar icon={<UserOutlined />} />
-                <div style={{ flex: 1 }}>
-                  <Space>
-                    <Text strong>{comment.user}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{comment.time}</Text>
-                  </Space>
-                  <Paragraph style={{ marginTop: 8, marginBottom: 0 }}>
-                    {comment.content}
-                  </Paragraph>
-                </div>
-              </Space>
-            </Card>
-          ))}
-        </div>
-      )
+      title: '小计',
+      dataIndex: 'totalPrice',
+      key: 'totalPrice',
+      render: (value) => `¥${value.toFixed(2)}`
     }
   ];
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '100px' }}>
+      <div style={{ textAlign: 'center', padding: '50px' }}>
         <Spin size="large" />
       </div>
     );
   }
 
-  if (!quoteData) {
+  if (!quote) {
     return (
-      <Result
-        status="404"
-        title="404"
-        subTitle="抱歉，报价单不存在"
-        extra={<Button type="primary" onClick={() => navigate('/quote-management')}>返回列表</Button>}
-      />
+      <div style={{ textAlign: 'center', padding: '50px' }}>
+        <Empty description="报价单不存在" />
+        <Button type="primary" onClick={() => navigate(-1)} style={{ marginTop: '16px' }}>
+          返回
+        </Button>
+      </div>
     );
   }
 
   return (
     <div className="quote-detail">
-      {/* 页面头部 */}
-      <Card className="detail-header">
-        <Row align="middle" justify="space-between">
-          <Col>
-            <Space>
-              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
-                返回
-              </Button>
-              <Divider type="vertical" />
-              <Title level={4} style={{ margin: 0 }}>{quoteData.title}</Title>
-              {getStatusTag(quoteData.status)}
-            </Space>
-          </Col>
-          <Col>
-            <Space>
-              {quoteData.status === 'draft' && (
-                <Button type="primary" icon={<SendOutlined />} onClick={handleSubmitApproval}>
+      {/* Header */}
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
+              返回
+            </Button>
+            <h2 style={{ margin: 0 }}>{quote.title}</h2>
+            {getStatusTag(quote.status)}
+            {getTypeTag(quote.type)}
+          </div>
+          
+          <Space>
+            <Button icon={<DownloadOutlined />} onClick={handleDownload}>
+              下载
+            </Button>
+            {quote.status === 'draft' && (
+              <>
+                <Button icon={<EditOutlined />} onClick={handleEdit}>
+                  编辑
+                </Button>
+                <Button 
+                  type="primary" 
+                  icon={<SendOutlined />} 
+                  onClick={handleSubmitApproval}
+                >
                   提交审批
                 </Button>
-              )}
-              <Button icon={<EditOutlined />} onClick={handleEdit}>
-                编辑
-              </Button>
-              <Button icon={<CopyOutlined />}>
-                复制
-              </Button>
-              <Button icon={<PrinterOutlined />} onClick={handlePrint}>
-                打印
-              </Button>
-              <Button icon={<DownloadOutlined />} onClick={handleExport}>
-                导出
-              </Button>
-              <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-                删除
-              </Button>
-            </Space>
-          </Col>
-        </Row>
+                <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+                  删除
+                </Button>
+              </>
+            )}
+          </Space>
+        </div>
       </Card>
 
-      {/* 统计信息 */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card>
+      <Row gutter={16} style={{ marginTop: '16px' }}>
+        {/* Basic Information */}
+        <Col xs={24} lg={16}>
+          <Card title="基本信息">
+            <Descriptions column={2} bordered>
+              <Descriptions.Item label="报价单号">{quote.id}</Descriptions.Item>
+              <Descriptions.Item label="客户">{quote.customer}</Descriptions.Item>
+              <Descriptions.Item label="报价类型">{quote.type}</Descriptions.Item>
+              <Descriptions.Item label="币种">{quote.currency}</Descriptions.Item>
+              <Descriptions.Item label="创建人">{quote.createdBy}</Descriptions.Item>
+              <Descriptions.Item label="创建时间">{quote.createdAt}</Descriptions.Item>
+              <Descriptions.Item label="更新时间">{quote.updatedAt}</Descriptions.Item>
+              <Descriptions.Item label="有效期至">{quote.validUntil}</Descriptions.Item>
+              {quote.approvedBy && (
+                <>
+                  <Descriptions.Item label="审批人">{quote.approvedBy}</Descriptions.Item>
+                  <Descriptions.Item label="审批时间">{quote.approvedAt}</Descriptions.Item>
+                </>
+              )}
+            </Descriptions>
+            
+            {quote.description && (
+              <>
+                <Divider />
+                <div>
+                  <h4>报价说明：</h4>
+                  <p>{quote.description}</p>
+                </div>
+              </>
+            )}
+          </Card>
+        </Col>
+
+        {/* Summary */}
+        <Col xs={24} lg={8}>
+          <Card title="报价汇总">
             <Statistic 
-              title="总金额" 
-              value={quoteData.financial.total} 
-              prefix={quoteData.financial.currency}
+              title="报价总额" 
+              value={quote.totalAmount} 
               precision={2}
+              prefix="¥"
+              valueStyle={{ color: '#3f8600' }}
             />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic 
-              title="项目数" 
-              value={quoteData.items.length}
-              suffix="项"
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic 
-              title="创建时间" 
-              value={quoteData.createdAt}
-              formatter={(value) => value}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic 
-              title="有效期至" 
-              value={quoteData.financial.validUntil}
-              formatter={(value) => value}
-            />
+            {quote.discount > 0 && (
+              <Statistic 
+                title="折扣率" 
+                value={quote.discount} 
+                suffix="%" 
+                style={{ marginTop: '16px' }}
+              />
+            )}
           </Card>
         </Col>
       </Row>
 
-      {/* 详情内容 */}
-      <Card>
-        <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+      {/* Items Detail */}
+      <Card title="报价明细" style={{ marginTop: '16px' }}>
+        <Table
+          columns={itemColumns}
+          dataSource={quote.items}
+          pagination={false}
+          bordered
+          summary={(pageData) => {
+            const total = pageData.reduce((sum, item) => sum + item.totalPrice, 0);
+            return (
+              <Table.Summary.Row>
+                <Table.Summary.Cell index={0} colSpan={6}>
+                  <strong>合计</strong>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={1}>
+                  <strong>¥{total.toFixed(2)}</strong>
+                </Table.Summary.Cell>
+              </Table.Summary.Row>
+            );
+          }}
+        />
       </Card>
     </div>
   );

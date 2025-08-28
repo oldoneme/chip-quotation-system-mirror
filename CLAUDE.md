@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+⚠️ **IMPORTANT**: Before making ANY changes, you MUST read and follow [CLAUDE_WORKFLOW.md](./CLAUDE_WORKFLOW.md) for mandatory workflow checks and safety rules.
+
 ## Project Overview
 
 Chip Testing Hourly Rate Quotation System (芯片测试报价系统) - A full-stack web application for calculating chip testing quotations based on equipment selection, configurations, and resources. The system supports multiple quotation types and integrates with WeChat Work (企业微信) for authentication.

@@ -368,3 +368,184 @@ class UserStats(BaseModel):
     approved_count: int
     total_amount: float
     success_rate: float
+
+
+# 新报价单系统 schemas
+class QuoteItemBase(BaseModel):
+    """报价明细项基本模型"""
+    item_name: str = Field(..., description="项目名称")
+    item_description: Optional[str] = Field(None, description="项目描述")
+    machine_type: Optional[str] = Field(None, description="设备类型")
+    supplier: Optional[str] = Field(None, description="供应商")
+    machine_model: Optional[str] = Field(None, description="设备型号")
+    configuration: Optional[str] = Field(None, description="配置")
+    quantity: float = Field(1.0, ge=0, description="数量")
+    unit: str = Field("小时", description="单位")
+    unit_price: float = Field(0.0, ge=0, description="单价")
+    total_price: float = Field(0.0, ge=0, description="小计")
+    machine_id: Optional[int] = Field(None, description="设备ID")
+    configuration_id: Optional[int] = Field(None, description="配置ID")
+
+
+class QuoteItemCreate(QuoteItemBase):
+    """创建报价明细项"""
+    pass
+
+
+class QuoteItemUpdate(QuoteItemBase):
+    """更新报价明细项"""
+    item_name: Optional[str] = None
+    quantity: Optional[float] = Field(None, ge=0)
+    unit_price: Optional[float] = Field(None, ge=0)
+    total_price: Optional[float] = Field(None, ge=0)
+
+
+class QuoteItem(QuoteItemBase):
+    """报价明细项返回模型"""
+    id: int
+    quote_id: int
+    
+    class Config:
+        from_attributes = True
+
+
+class QuoteBase(BaseModel):
+    """报价单基本模型"""
+    title: str = Field(..., description="报价标题")
+    quote_type: str = Field(..., description="报价类型")
+    customer_name: str = Field(..., description="客户名称")
+    customer_contact: Optional[str] = Field(None, description="联系人")
+    customer_phone: Optional[str] = Field(None, description="联系电话")
+    customer_email: Optional[str] = Field(None, description="邮箱")
+    customer_address: Optional[str] = Field(None, description="地址")
+    currency: str = Field("CNY", description="币种")
+    subtotal: float = Field(0.0, ge=0, description="小计")
+    discount: float = Field(0.0, ge=0, description="折扣金额")
+    tax_rate: float = Field(0.13, ge=0, le=1, description="税率")
+    tax_amount: float = Field(0.0, ge=0, description="税额")
+    total_amount: float = Field(0.0, ge=0, description="总金额")
+    valid_until: Optional[datetime] = Field(None, description="有效期")
+    payment_terms: Optional[str] = Field(None, description="付款条件")
+    description: Optional[str] = Field(None, description="报价说明")
+    notes: Optional[str] = Field(None, description="备注")
+    version: str = Field("V1.0", description="版本号")
+
+
+class QuoteCreate(QuoteBase):
+    """创建报价单"""
+    items: List[QuoteItemCreate] = Field([], description="报价明细项")
+
+
+class QuoteUpdate(BaseModel):
+    """更新报价单"""
+    title: Optional[str] = None
+    quote_type: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_contact: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_address: Optional[str] = None
+    currency: Optional[str] = None
+    subtotal: Optional[float] = Field(None, ge=0)
+    discount: Optional[float] = Field(None, ge=0)
+    tax_rate: Optional[float] = Field(None, ge=0, le=1)
+    tax_amount: Optional[float] = Field(None, ge=0)
+    total_amount: Optional[float] = Field(None, ge=0)
+    valid_until: Optional[datetime] = None
+    payment_terms: Optional[str] = None
+    description: Optional[str] = None
+    notes: Optional[str] = None
+    version: Optional[str] = None
+    items: Optional[List[QuoteItemUpdate]] = None
+
+
+class Quote(QuoteBase):
+    """报价单返回模型"""
+    id: int
+    quote_number: str
+    status: str
+    submitted_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[int] = None
+    rejection_reason: Optional[str] = None
+    wecom_approval_id: Optional[str] = None
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+    items: List[QuoteItem] = []
+    
+    class Config:
+        from_attributes = True
+
+
+class QuoteList(BaseModel):
+    """报价单列表项模型"""
+    id: int
+    quote_number: str
+    title: str
+    quote_type: str
+    customer_name: str
+    currency: str
+    total_amount: float
+    status: str
+    version: str
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+    valid_until: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class QuoteStatusUpdate(BaseModel):
+    """报价单状态更新"""
+    status: str = Field(..., description="新状态: draft, pending, approved, rejected")
+    comments: Optional[str] = Field(None, description="状态更新说明")
+
+
+class ApprovalRecordBase(BaseModel):
+    """审批记录基本模型"""
+    action: str = Field(..., description="操作")
+    status: str = Field(..., description="状态")
+    comments: Optional[str] = Field(None, description="审批意见")
+
+
+class ApprovalRecordCreate(ApprovalRecordBase):
+    """创建审批记录"""
+    pass
+
+
+class ApprovalRecord(ApprovalRecordBase):
+    """审批记录返回模型"""
+    id: int
+    quote_id: int
+    approver_id: Optional[int] = None
+    wecom_approval_id: Optional[str] = None
+    wecom_sp_no: Optional[str] = None
+    created_at: datetime
+    processed_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class QuoteStatistics(BaseModel):
+    """报价单统计模型"""
+    total: int = 0
+    draft: int = 0
+    pending: int = 0
+    approved: int = 0
+    rejected: int = 0
+    
+
+class QuoteFilter(BaseModel):
+    """报价单筛选参数"""
+    status: Optional[str] = None
+    quote_type: Optional[str] = None
+    customer_name: Optional[str] = None
+    created_by: Optional[int] = None
+    date_from: Optional[datetime] = None
+    date_to: Optional[datetime] = None
+    page: int = Field(1, ge=1)
+    size: int = Field(20, ge=1, le=100)

@@ -12,7 +12,9 @@ from .endpoints import (
     users,
     operation_logs,
     statistics,
-    confirmations
+    confirmations,
+    quotes,
+    wecom_approval
 )
 
 api_router = APIRouter()
@@ -26,8 +28,10 @@ api_router.include_router(card_configs.router, prefix="", tags=["card-configs"])
 api_router.include_router(auxiliary_equipment.router, prefix="", tags=["auxiliary-equipment"])
 api_router.include_router(personnel.router, prefix="", tags=["personnel"])
 api_router.include_router(quotations.router, prefix="", tags=["quotations"])
+api_router.include_router(quotes.router, prefix="", tags=["quotes"])
 api_router.include_router(hierarchical_data.router, prefix="", tags=["hierarchical"])
 api_router.include_router(users.router, prefix="", tags=["users"])
 api_router.include_router(operation_logs.router, prefix="", tags=["operation-logs"])
 api_router.include_router(statistics.router, prefix="", tags=["statistics"])
 api_router.include_router(confirmations.router, prefix="", tags=["confirmations"])
+api_router.include_router(wecom_approval.router, prefix="/wecom-approval", tags=["wecom-approval"])

@@ -80,6 +80,138 @@ class AuxiliaryEquipment(Base):
 
 # 移除Personnel模型，改为使用标准值
 
+# 报价单相关模型
+class Quote(Base):
+    """报价单主表"""
+    __tablename__ = "quotes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quote_number = Column(String, unique=True, index=True)  # 报价单号 QT202408001
+    title = Column(String, index=True)  # 报价标题
+    quote_type = Column(String, index=True)  # 报价类型: inquiry, tooling, engineering, mass_production, process, comprehensive
+    
+    # 客户信息
+    customer_name = Column(String, index=True)  # 客户名称
+    customer_contact = Column(String)  # 联系人
+    customer_phone = Column(String)  # 联系电话
+    customer_email = Column(String)  # 邮箱
+    customer_address = Column(Text)  # 地址
+    
+    # 报价信息
+    currency = Column(String, default="CNY")  # 币种 CNY/USD
+    subtotal = Column(Float, default=0.0)  # 小计
+    discount = Column(Float, default=0.0)  # 折扣金额
+    tax_rate = Column(Float, default=0.13)  # 税率
+    tax_amount = Column(Float, default=0.0)  # 税额
+    total_amount = Column(Float, default=0.0)  # 总金额
+    
+    # 条件信息
+    valid_until = Column(DateTime)  # 有效期
+    payment_terms = Column(String)  # 付款条件
+    description = Column(Text)  # 报价说明
+    notes = Column(Text)  # 备注
+    
+    # 状态管理
+    status = Column(String, default="draft", index=True)  # 状态: draft, pending, approved, rejected
+    version = Column(String, default="V1.0")  # 版本号
+    
+    # 审批相关
+    submitted_at = Column(DateTime)  # 提交审批时间
+    approved_at = Column(DateTime)  # 审批通过时间
+    approved_by = Column(Integer, ForeignKey("users.id"))  # 审批人
+    rejection_reason = Column(Text)  # 拒绝原因
+    wecom_approval_id = Column(String)  # 企业微信审批单ID
+    
+    # 系统字段
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    creator = relationship("User", foreign_keys=[created_by])
+    approver = relationship("User", foreign_keys=[approved_by])
+    items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
+    approval_records = relationship("ApprovalRecord", back_populates="quote", cascade="all, delete-orphan")
+
+
+class QuoteItem(Base):
+    """报价单明细项目"""
+    __tablename__ = "quote_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quote_id = Column(Integer, ForeignKey("quotes.id"))
+    
+    # 项目信息
+    item_name = Column(String)  # 项目名称
+    item_description = Column(Text)  # 项目描述
+    machine_type = Column(String)  # 设备类型
+    supplier = Column(String)  # 供应商
+    machine_model = Column(String)  # 设备型号
+    configuration = Column(String)  # 配置
+    
+    # 数量和价格
+    quantity = Column(Float, default=1.0)  # 数量
+    unit = Column(String, default="小时")  # 单位
+    unit_price = Column(Float, default=0.0)  # 单价
+    total_price = Column(Float, default=0.0)  # 小计
+    
+    # 关联信息
+    machine_id = Column(Integer, ForeignKey("machines.id"))
+    configuration_id = Column(Integer, ForeignKey("configurations.id"))
+    
+    # Relationships
+    quote = relationship("Quote", back_populates="items")
+    machine = relationship("Machine")
+    config = relationship("Configuration")
+
+
+class ApprovalRecord(Base):
+    """审批记录表"""
+    __tablename__ = "approval_records"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quote_id = Column(Integer, ForeignKey("quotes.id"))
+    
+    # 审批信息
+    action = Column(String)  # 操作: submit, approve, reject, withdraw
+    status = Column(String)  # 状态: pending, approved, rejected
+    approver_id = Column(Integer, ForeignKey("users.id"))  # 审批人
+    comments = Column(Text)  # 审批意见
+    
+    # 企业微信审批相关
+    wecom_approval_id = Column(String)  # 企业微信审批单ID
+    wecom_sp_no = Column(String)  # 企业微信审批编号
+    
+    # 时间信息
+    created_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime)  # 处理时间
+    
+    # Relationships
+    quote = relationship("Quote", back_populates="approval_records")
+    approver = relationship("User")
+
+
+class QuoteTemplate(Base):
+    """报价模板表"""
+    __tablename__ = "quote_templates"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)  # 模板名称
+    quote_type = Column(String)  # 报价类型
+    description = Column(Text)  # 模板描述
+    template_data = Column(Text)  # 模板数据(JSON格式)
+    
+    # 系统字段
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    
+    # Relationships
+    creator = relationship("User")
+
+
+# 保留原有的简单Quotation表做兼容性处理
 class Quotation(Base):
     __tablename__ = "quotations"
     

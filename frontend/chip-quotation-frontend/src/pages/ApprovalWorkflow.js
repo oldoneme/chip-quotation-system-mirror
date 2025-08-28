@@ -1,289 +1,212 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Card, Table, Button, Space, Tag, Input, Select, DatePicker,
-  Row, Col, Statistic, Tabs, Modal, message, Badge, Avatar,
-  Timeline, Form, Radio, Divider, Alert, Progress,
-  Tooltip, Dropdown, Descriptions
+  Card, Table, Button, Space, Tag, Tabs, Modal, message, Badge,
+  Row, Col, Statistic, Alert, Descriptions, Empty
 } from 'antd';
 import { 
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined,
-  UserOutlined, FileTextOutlined, SearchOutlined, FilterOutlined,
-  CheckOutlined, CloseOutlined, RollbackOutlined, CommentOutlined,
-  ExclamationCircleOutlined, TeamOutlined, SolutionOutlined,
-  AuditOutlined
+  SendOutlined, FileTextOutlined, EyeOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import QuoteApiService from '../services/quoteApi';
 import '../styles/ApprovalWorkflow.css';
-
-const { Search } = Input;
-const { Option } = Select;
-const { RangePicker } = DatePicker;
-const { confirm } = Modal;
 
 const ApprovalWorkflow = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [approvalList, setApprovalList] = useState([]);
-  const [activeTab, setActiveTab] = useState('pending');
-  const [selectedRecord, setSelectedRecord] = useState(null);
-  const [approvalModal, setApprovalModal] = useState(false);
-  const [approvalForm] = Form.useForm();
+  const [quoteList, setQuoteList] = useState([]);
+  const [activeTab, setActiveTab] = useState('my_quotes');
   
   // 统计数据
   const [statistics, setStatistics] = useState({
-    pending: 8,
-    approved: 45,
-    rejected: 3,
-    total: 56,
-    avgTime: '2.5天',
-    onTime: '92%'
+    draft: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    total: 0
   });
 
-  // 模拟审批数据
-  const mockApprovals = [
-    {
-      id: 'AP202408001',
-      quoteId: 'QT202408001',
-      title: '华为技术有限公司芯片测试报价',
-      type: '量产机时报价',
-      amount: 1250000,
-      currency: 'CNY',
-      applicant: '张三',
-      department: '销售部',
-      submitTime: '2024-08-20 16:45',
-      currentNode: '部门经理',
-      currentApprover: '李经理',
-      status: 'pending',
-      priority: 'high',
-      dueDate: '2024-08-23',
-      progress: 50
-    },
-    {
-      id: 'AP202408002',
-      quoteId: 'QT202408002',
-      title: '中兴通讯工程测试报价',
-      type: '工程机时报价',
-      amount: 850000,
-      currency: 'CNY',
-      applicant: '李四',
-      department: '技术部',
-      submitTime: '2024-08-21 09:00',
-      currentNode: '技术总监',
-      currentApprover: '王总监',
-      status: 'pending',
-      priority: 'normal',
-      dueDate: '2024-08-24',
-      progress: 30
-    },
-    {
-      id: 'AP202408003',
-      quoteId: 'QT202408003',
-      title: '小米科技询价报价单',
-      type: '询价报价',
-      amount: 450000,
-      currency: 'CNY',
-      applicant: '王五',
-      department: '销售部',
-      submitTime: '2024-08-22 11:20',
-      currentNode: '财务经理',
-      currentApprover: '赵经理',
-      status: 'pending',
-      priority: 'urgent',
-      dueDate: '2024-08-22',
-      progress: 70
-    }
-  ];
-
-  // 审批流程节点
-  const workflowNodes = [
-    { key: 'submit', title: '提交申请', user: '申请人' },
-    { key: 'dept_manager', title: '部门经理审批', user: '部门经理' },
-    { key: 'tech_review', title: '技术评审', user: '技术总监' },
-    { key: 'finance_review', title: '财务审核', user: '财务经理' },
-    { key: 'final_approval', title: '总经理审批', user: '总经理' },
-    { key: 'complete', title: '审批完成', user: '系统' }
-  ];
-
   useEffect(() => {
-    fetchApprovals();
+    fetchQuotes();
+    fetchStatistics();
   }, [activeTab]);
 
-  const fetchApprovals = () => {
+  const fetchQuotes = async () => {
     setLoading(true);
-    setTimeout(() => {
-      let filteredData = [...mockApprovals];
-      if (activeTab !== 'all') {
-        filteredData = filteredData.filter(item => {
-          if (activeTab === 'pending') return item.status === 'pending';
-          if (activeTab === 'myApproval') return item.currentApprover === user?.name;
-          if (activeTab === 'mySubmit') return item.applicant === user?.name;
-          return true;
-        });
+    try {
+      let statusFilter = null;
+      if (activeTab !== 'my_quotes') {
+        statusFilter = activeTab;
       }
-      setApprovalList(filteredData);
+
+      const params = {};
+      if (statusFilter) {
+        params.status = statusFilter;
+      }
+
+      const response = await QuoteApiService.getQuotes(params);
+      const quotesData = response.items || [];
+      
+      // 格式化数据显示
+      const formattedQuotes = quotesData.map(quote => ({
+        id: quote.quote_number,
+        quoteId: quote.id,  // 保存实际ID用于操作
+        title: quote.title,
+        type: QuoteApiService.mapQuoteTypeFromBackend(quote.quote_type),
+        customer: quote.customer_name,
+        status: QuoteApiService.mapStatusFromBackend(quote.status),
+        createdBy: quote.created_by_name || `用户${quote.created_by}`,
+        createdAt: new Date(quote.created_at).toLocaleString('zh-CN'),
+        approvedAt: quote.approved_at ? new Date(quote.approved_at).toLocaleString('zh-CN') : null,
+        approvedBy: quote.approved_by_name,
+        rejectedAt: quote.rejection_reason ? '已拒绝' : null,
+        rejectedBy: quote.rejection_reason
+      }));
+      
+      setQuoteList(formattedQuotes);
+    } catch (error) {
+      console.error('获取报价单列表失败:', error);
+      message.error('获取报价单列表失败');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
-  const getPriorityTag = (priority) => {
-    const config = {
-      urgent: { color: 'error', text: '紧急' },
-      high: { color: 'warning', text: '高' },
-      normal: { color: 'default', text: '普通' },
-      low: { color: 'default', text: '低' }
-    };
-    return <Tag color={config[priority]?.color}>{config[priority]?.text}</Tag>;
+  const fetchStatistics = async () => {
+    try {
+      const stats = await QuoteApiService.getStatistics();
+      setStatistics(stats);
+    } catch (error) {
+      console.error('获取统计信息失败:', error);
+      message.error('获取统计信息失败');
+    }
   };
 
   const getStatusTag = (status) => {
-    const config = {
-      pending: { color: 'processing', text: '待审批', icon: <ClockCircleOutlined /> },
-      approved: { color: 'success', text: '已通过', icon: <CheckCircleOutlined /> },
-      rejected: { color: 'error', text: '已拒绝', icon: <CloseCircleOutlined /> },
-      withdrawn: { color: 'default', text: '已撤回', icon: <RollbackOutlined /> }
+    const statusConfig = {
+      draft: { color: 'default', text: '草稿', icon: <FileTextOutlined /> },
+      pending: { color: 'processing', text: '审批中', icon: <ClockCircleOutlined /> },
+      approved: { color: 'success', text: '已批准', icon: <CheckCircleOutlined /> },
+      rejected: { color: 'error', text: '已拒绝', icon: <CloseCircleOutlined /> }
     };
-    const item = config[status];
-    return <Tag color={item.color} icon={item.icon}>{item.text}</Tag>;
+    const config = statusConfig[status];
+    return (
+      <Tag color={config.color} icon={config.icon}>
+        {config.text}
+      </Tag>
+    );
+  };
+
+  const getTypeTag = (type) => {
+    const typeColors = {
+      '询价报价': 'blue',
+      '工装夹具报价': 'purple',
+      '工程机时报价': 'cyan',
+      '量产机时报价': 'green',
+      '量产工序报价': 'orange',
+      '综合报价': 'magenta'
+    };
+    return <Tag color={typeColors[type] || 'default'}>{type}</Tag>;
+  };
+
+  const handleSubmitApproval = (record) => {
+    Modal.confirm({
+      title: '提交审批',
+      content: (
+        <div>
+          <p>确定要提交以下报价单进行审批吗？</p>
+          <Descriptions column={1} size="small" style={{ marginTop: 16 }}>
+            <Descriptions.Item label="报价单号">{record.id}</Descriptions.Item>
+            <Descriptions.Item label="标题">{record.title}</Descriptions.Item>
+            <Descriptions.Item label="客户">{record.customer}</Descriptions.Item>
+          </Descriptions>
+        </div>
+      ),
+      onOk: async () => {
+        try {
+          await QuoteApiService.submitForApproval(record.quoteId);
+          message.success('审批提交成功！审批人将在企业微信中收到通知。');
+          fetchQuotes();
+          fetchStatistics(); // 重新获取统计数据
+        } catch (error) {
+          console.error('提交审批失败:', error);
+          message.error('提交审批失败');
+        }
+      }
+    });
+  };
+
+  const handleViewDetail = (record) => {
+    // 导航到报价详情页面
+    navigate(`/quote-detail/${record.id}`);
   };
 
   const columns = [
     {
-      title: '审批编号',
+      title: '报价单号',
       dataIndex: 'id',
       key: 'id',
-      width: 120,
-      fixed: 'left',
-      render: (text, record) => (
-        <a onClick={() => handleViewDetail(record)}>{text}</a>
-      )
-    },
-    {
-      title: '报价单号',
-      dataIndex: 'quoteId',
-      key: 'quoteId',
-      width: 120,
       render: (text) => (
-        <a onClick={() => navigate(`/quote-detail/${text}`)}>{text}</a>
+        <a onClick={() => handleViewDetail({ id: text })}>{text}</a>
       )
     },
     {
       title: '标题',
       dataIndex: 'title',
       key: 'title',
-      width: 200,
       ellipsis: true
     },
     {
-      title: '金额',
-      dataIndex: 'amount',
-      key: 'amount',
-      width: 120,
-      align: 'right',
-      render: (amount, record) => (
-        <span>{record.currency} {amount.toLocaleString()}</span>
-      )
+      title: '类型',
+      dataIndex: 'type',
+      key: 'type',
+      render: (type) => getTypeTag(type)
     },
     {
-      title: '优先级',
-      dataIndex: 'priority',
-      key: 'priority',
-      width: 80,
-      render: (priority) => getPriorityTag(priority)
-    },
-    {
-      title: '申请人',
-      dataIndex: 'applicant',
-      key: 'applicant',
-      width: 100,
-      render: (name) => (
-        <Space>
-          <Avatar size="small" icon={<UserOutlined />} />
-          {name}
-        </Space>
-      )
-    },
-    {
-      title: '当前节点',
-      dataIndex: 'currentNode',
-      key: 'currentNode',
-      width: 120
-    },
-    {
-      title: '当前审批人',
-      dataIndex: 'currentApprover',
-      key: 'currentApprover',
-      width: 100
-    },
-    {
-      title: '进度',
-      dataIndex: 'progress',
-      key: 'progress',
-      width: 120,
-      render: (progress) => (
-        <Progress percent={progress} size="small" />
-      )
-    },
-    {
-      title: '提交时间',
-      dataIndex: 'submitTime',
-      key: 'submitTime',
-      width: 150
-    },
-    {
-      title: '截止日期',
-      dataIndex: 'dueDate',
-      key: 'dueDate',
-      width: 100,
-      render: (date) => {
-        const isOverdue = new Date(date) < new Date();
-        return (
-          <span style={{ color: isOverdue ? 'red' : 'inherit' }}>
-            {date}
-            {isOverdue && <ExclamationCircleOutlined style={{ marginLeft: 4 }} />}
-          </span>
-        );
-      }
+      title: '客户',
+      dataIndex: 'customer',
+      key: 'customer',
+      ellipsis: true
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
       render: (status) => getStatusTag(status)
+    },
+    {
+      title: '创建人',
+      dataIndex: 'createdBy',
+      key: 'createdBy'
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt'
     },
     {
       title: '操作',
       key: 'action',
-      fixed: 'right',
-      width: 150,
       render: (_, record) => (
         <Space>
-          {record.status === 'pending' && record.currentApprover === user?.name && (
-            <Button 
-              type="primary" 
-              size="small"
-              onClick={() => handleApprove(record)}
-            >
-              审批
-            </Button>
-          )}
           <Button 
             type="link" 
             size="small"
+            icon={<EyeOutlined />}
             onClick={() => handleViewDetail(record)}
           >
-            详情
+            查看
           </Button>
-          {record.status === 'pending' && record.applicant === user?.name && (
+          {record.status === 'draft' && (
             <Button 
-              type="link" 
+              type="primary"
               size="small"
-              danger
-              onClick={() => handleWithdraw(record)}
+              icon={<SendOutlined />}
+              onClick={() => handleSubmitApproval(record)}
             >
-              撤回
+              提交审批
             </Button>
           )}
         </Space>
@@ -291,75 +214,12 @@ const ApprovalWorkflow = () => {
     }
   ];
 
-  const handleApprove = (record) => {
-    setSelectedRecord(record);
-    setApprovalModal(true);
-    approvalForm.setFieldsValue({
-      action: 'approve',
-      comment: ''
-    });
-  };
-
-  const handleViewDetail = (record) => {
-    Modal.info({
-      title: '审批详情',
-      width: 800,
-      content: (
-        <div>
-          <Descriptions bordered column={2} style={{ marginBottom: 16 }}>
-            <Descriptions.Item label="审批编号">{record.id}</Descriptions.Item>
-            <Descriptions.Item label="报价单号">{record.quoteId}</Descriptions.Item>
-            <Descriptions.Item label="标题" span={2}>{record.title}</Descriptions.Item>
-            <Descriptions.Item label="申请人">{record.applicant}</Descriptions.Item>
-            <Descriptions.Item label="部门">{record.department}</Descriptions.Item>
-            <Descriptions.Item label="金额">{record.currency} {record.amount.toLocaleString()}</Descriptions.Item>
-            <Descriptions.Item label="优先级">{getPriorityTag(record.priority)}</Descriptions.Item>
-          </Descriptions>
-          
-          <Divider orientation="left">审批流程</Divider>
-          <Timeline>
-            {workflowNodes.map((node, index) => (
-              <Timeline.Item 
-                key={node.key}
-                color={index <= 2 ? 'green' : 'gray'}
-                dot={index === 2 ? <ClockCircleOutlined /> : null}
-              >
-                <strong>{node.title}</strong> - {node.user}
-                {index <= 2 && <Tag color="success" style={{ marginLeft: 8 }}>已完成</Tag>}
-                {index === 2 && <Tag color="processing" style={{ marginLeft: 8 }}>进行中</Tag>}
-              </Timeline.Item>
-            ))}
-          </Timeline>
-        </div>
-      )
-    });
-  };
-
-  const handleWithdraw = (record) => {
-    confirm({
-      title: '确认撤回',
-      content: `确定要撤回审批申请 ${record.id} 吗？`,
-      onOk() {
-        message.success('撤回成功');
-        fetchApprovals();
-      }
-    });
-  };
-
-  const handleApprovalSubmit = () => {
-    approvalForm.validateFields().then(values => {
-      const action = values.action === 'approve' ? '通过' : '拒绝';
-      message.success(`审批${action}成功`);
-      setApprovalModal(false);
-      fetchApprovals();
-    });
-  };
-
   const tabItems = [
-    { key: 'all', label: '全部', count: statistics.total },
-    { key: 'pending', label: '待审批', count: statistics.pending },
-    { key: 'myApproval', label: '我的审批', count: 5 },
-    { key: 'mySubmit', label: '我的申请', count: 12 }
+    { key: 'my_quotes', label: '全部报价', count: statistics.total },
+    { key: 'draft', label: '草稿', count: statistics.draft },
+    { key: 'pending', label: '审批中', count: statistics.pending },
+    { key: 'approved', label: '已批准', count: statistics.approved },
+    { key: 'rejected', label: '已拒绝', count: statistics.rejected }
   ].map(item => ({
     key: item.key,
     label: (
@@ -373,188 +233,82 @@ const ApprovalWorkflow = () => {
     <div className="approval-workflow">
       {/* 页面标题 */}
       <div className="page-header">
-        <h1>审批工作流</h1>
-        <Space>
-          <Button icon={<FilterOutlined />}>高级筛选</Button>
-        </Space>
+        <h1>审批管理</h1>
+        <p>管理报价单审批流程，查看审批状态</p>
       </div>
 
       {/* 统计卡片 */}
       <Row gutter={16} className="statistics-cards">
-        <Col xs={24} sm={8} md={4}>
+        <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic 
-              title="待审批" 
+              title="草稿" 
+              value={statistics.draft}
+              valueStyle={{ color: '#666' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic 
+              title="审批中" 
               value={statistics.pending}
-              prefix={<ClockCircleOutlined />}
               valueStyle={{ color: '#1890ff' }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8} md={4}>
+        <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic 
-              title="已通过" 
+              title="已批准" 
               value={statistics.approved}
-              prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#52c41a' }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8} md={4}>
+        <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic 
               title="已拒绝" 
               value={statistics.rejected}
-              prefix={<CloseCircleOutlined />}
               valueStyle={{ color: '#f5222d' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8} md={4}>
-          <Card>
-            <Statistic 
-              title="总数" 
-              value={statistics.total}
-              prefix={<FileTextOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8} md={4}>
-          <Card>
-            <Statistic 
-              title="平均审批时长" 
-              value={statistics.avgTime}
-              prefix={<ClockCircleOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8} md={4}>
-          <Card>
-            <Statistic 
-              title="按时完成率" 
-              value={statistics.onTime}
-              prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#52c41a' }}
             />
           </Card>
         </Col>
       </Row>
 
-      {/* 提示信息 */}
+      {/* 企业微信提示 */}
       <Alert
-        message="待处理提醒"
-        description={`您有 ${statistics.pending} 个待审批事项需要处理，其中 2 个即将到期`}
-        type="warning"
+        message="企业微信审批集成"
+        description="草稿状态的报价单可以提交到企业微信审批系统。审批人将在企业微信中收到通知并进行审批。"
+        type="info"
         showIcon
-        closable
         style={{ marginBottom: 16 }}
       />
 
-      {/* 过滤器 */}
-      <Card className="filter-card">
-        <Space size="middle" wrap>
-          <Search
-            placeholder="搜索审批编号、报价单号、标题"
-            allowClear
-            style={{ width: 250 }}
-            onSearch={(value) => console.log(value)}
-          />
-          <Select
-            placeholder="优先级"
-            style={{ width: 120 }}
-            allowClear
-          >
-            <Option value="urgent">紧急</Option>
-            <Option value="high">高</Option>
-            <Option value="normal">普通</Option>
-            <Option value="low">低</Option>
-          </Select>
-          <Select
-            placeholder="审批节点"
-            style={{ width: 150 }}
-            allowClear
-          >
-            <Option value="dept_manager">部门经理</Option>
-            <Option value="tech_review">技术评审</Option>
-            <Option value="finance_review">财务审核</Option>
-            <Option value="final_approval">总经理审批</Option>
-          </Select>
-          <RangePicker placeholder={['开始日期', '结束日期']} />
-        </Space>
-      </Card>
-
-      {/* 表格 */}
+      {/* 报价单列表 */}
       <Card>
         <Tabs 
           activeKey={activeTab} 
           onChange={setActiveTab}
           items={tabItems}
         />
-        <Table
-          columns={columns}
-          dataSource={approvalList}
-          rowKey="id"
-          loading={loading}
-          scroll={{ x: 1800 }}
-          pagination={{
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`
-          }}
-        />
+        {quoteList.length > 0 ? (
+          <Table
+            columns={columns}
+            dataSource={quoteList}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 条记录`
+            }}
+          />
+        ) : (
+          <Empty description="暂无数据" />
+        )}
       </Card>
-
-      {/* 审批弹窗 */}
-      <Modal
-        title="审批处理"
-        open={approvalModal}
-        onOk={handleApprovalSubmit}
-        onCancel={() => setApprovalModal(false)}
-        width={600}
-      >
-        <Form form={approvalForm} layout="vertical">
-          <Form.Item label="审批信息">
-            <Descriptions column={2} size="small">
-              <Descriptions.Item label="审批编号">{selectedRecord?.id}</Descriptions.Item>
-              <Descriptions.Item label="报价单号">{selectedRecord?.quoteId}</Descriptions.Item>
-              <Descriptions.Item label="申请人">{selectedRecord?.applicant}</Descriptions.Item>
-              <Descriptions.Item label="金额">
-                {selectedRecord?.currency} {selectedRecord?.amount.toLocaleString()}
-              </Descriptions.Item>
-            </Descriptions>
-          </Form.Item>
-          
-          <Form.Item
-            name="action"
-            label="审批意见"
-            rules={[{ required: true, message: '请选择审批意见' }]}
-          >
-            <Radio.Group>
-              <Radio value="approve">
-                <Space>
-                  <CheckOutlined style={{ color: '#52c41a' }} />
-                  同意
-                </Space>
-              </Radio>
-              <Radio value="reject">
-                <Space>
-                  <CloseOutlined style={{ color: '#f5222d' }} />
-                  拒绝
-                </Space>
-              </Radio>
-            </Radio.Group>
-          </Form.Item>
-          
-          <Form.Item
-            name="comment"
-            label="审批备注"
-            rules={[{ required: true, message: '请输入审批备注' }]}
-          >
-            <Input.TextArea rows={4} placeholder="请输入审批意见..." />
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   );
 };

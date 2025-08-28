@@ -27,9 +27,11 @@ export const AuthProvider = ({ children }) => {
         timeout: 10000
       });
       
+      console.log('✅ 用户认证成功:', response.data);
       setUser(response.data);
       setAuthenticated(true);
     } catch (error) {
+      console.log('❌ 用户认证失败:', error.response?.status, error.response?.data || error.message);
       
       if (error.response?.status === 401) {
         // 检查是否在调试模式或企业微信环境
