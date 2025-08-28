@@ -471,108 +471,217 @@ const QuoteResult = () => {
           )}
           
           {/* 工装夹具报价显示 */}
-          {quoteData && quoteData.type === '工装夹具报价' && (
+          {console.log('DEBUG: Checking tooling quote condition', {
+            hasQuoteData: !!quoteData,
+            type: quoteData?.type,
+            quote_type: quoteData?.quote_type,
+            condition1: quoteData?.type === '工装夹具报价',
+            condition2: quoteData?.quote_type === 'tooling'
+          })}
+          {(quoteData && (quoteData.type === '工装夹具报价' || quoteData.quote_type === 'tooling')) && (
             <>
               <div style={{ marginBottom: 20 }}>
                 <h4>客户信息</h4>
                 <div style={{ paddingLeft: 15 }}>
-                  <div>公司名称: {quoteData.customerInfo?.companyName || '-'}</div>
-                  <div>联系人: {quoteData.customerInfo?.contactPerson || '-'}</div>
-                  <div>联系电话: {quoteData.customerInfo?.phone || '-'}</div>
-                  <div>邮箱: {quoteData.customerInfo?.email || '-'}</div>
+                  <div>公司名称: {quoteData.customerInfo?.companyName || quoteData.customer_name || '-'}</div>
+                  <div>联系人: {quoteData.customerInfo?.contactPerson || quoteData.customer_contact || '-'}</div>
+                  <div>联系电话: {quoteData.customerInfo?.phone || quoteData.customer_phone || '-'}</div>
+                  <div>邮箱: {quoteData.customerInfo?.email || quoteData.customer_email || '-'}</div>
                 </div>
               </div>
               
               <div style={{ marginBottom: 20 }}>
                 <h4>项目信息</h4>
                 <div style={{ paddingLeft: 15 }}>
-                  <div>项目名称: {quoteData.projectInfo?.projectName || '-'}</div>
-                  <div>芯片封装: {quoteData.projectInfo?.chipPackage || '-'}</div>
-                  <div>测试类型: {quoteData.projectInfo?.testType || '-'}</div>
-                  <div>产品性质: {quoteData.projectInfo?.productStyle === 'new' ? '新产品' : '改良产品'}</div>
+                  <div>报价标题: {quoteData.title || '-'}</div>
+                  <div>项目描述: {quoteData.description || '-'}</div>
+                  <div>备注: {quoteData.notes || '-'}</div>
                 </div>
               </div>
               
-              {quoteData.toolingItems && quoteData.toolingItems.length > 0 && (
+              {/* 1. 工装夹具清单 */}
+              {(() => {
+                // 从数据库items中筛选出工装夹具类项目（category_type为tooling_hardware或根据item_description判断）
+                const toolingItems = quoteData.items ? quoteData.items.filter(item => 
+                  item.category_type === 'tooling_hardware' || 
+                  (item.item_description && item.item_description.includes('fixture')) ||
+                  (!item.item_description?.includes('工程') && !item.item_description?.includes('准备') && item.unit === '件')
+                ) : (quoteData.toolingItems || []);
+                
+                return toolingItems && toolingItems.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
-                  <h4>工装夹具明细</h4>
-                  {quoteData.toolingItems.map((item, index) => (
-                    <div key={index} style={{ 
-                      marginBottom: 10, 
-                      paddingLeft: 15, 
-                      border: '1px solid #f0f0f0', 
-                      borderRadius: '4px', 
-                      padding: '10px' 
+                  <h4>🔧 1. 工装夹具清单 [新版本显示]</h4>
+                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px' }}>
+                    {/* 表头 */}
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1.5fr', 
+                      gap: '10px',
+                      padding: '12px 15px',
+                      backgroundColor: '#fafafa',
+                      borderBottom: '1px solid #d9d9d9',
+                      fontWeight: 'bold',
+                      fontSize: '14px'
                     }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: 5 }}>
-                        {item.category} - {item.type}
-                      </div>
-                      <div>规格说明: {item.specification || '-'}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                        <span>数量: {item.quantity}</span>
-                        <span>单价: {formatPrice(item.unitPrice || 0)}</span>
+                      <span>类别</span>
+                      <span>类型</span>
+                      <span>单价</span>
+                      <span>数量</span>
+                      <span>小计</span>
+                    </div>
+                    {/* 内容 */}
+                    {toolingItems.map((item, index) => (
+                      <div key={index} style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1.5fr', 
+                        gap: '10px',
+                        padding: '12px 15px',
+                        borderBottom: index < toolingItems.length - 1 ? '1px solid #f0f0f0' : 'none'
+                      }}>
+                        <span>{item.category || item.item_description?.split(' - ')[0] || '工装夹具'}</span>
+                        <span>{item.type || item.item_name}</span>
+                        <span>{formatPrice(item.unitPrice || item.unit_price || 0)}</span>
+                        <span>{item.quantity}</span>
                         <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          小计: {formatPrice(item.totalPrice || 0)}
+                          {formatPrice(item.totalPrice || item.total_price || 0)}
                         </span>
                       </div>
+                    ))}
+                    {/* 工装夹具总价 */}
+                    <div style={{ 
+                      padding: '12px 15px',
+                      backgroundColor: '#f0f9ff',
+                      borderTop: '1px solid #d9d9d9',
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      fontWeight: 'bold',
+                      fontSize: '16px',
+                      color: '#1890ff'
+                    }}>
+                      工装夹具总价: {formatPrice(toolingItems.reduce((sum, item) => sum + (item.totalPrice || item.total_price || 0), 0))}
                     </div>
-                  ))}
+                  </div>
                 </div>
-              )}
+                );
+              })()}
               
-              <div style={{ marginBottom: 20 }}>
-                <h4>工程费用</h4>
-                <div style={{ paddingLeft: 15 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>测试程序开发:</span>
-                    <span>{formatPrice(quoteData.engineeringFees?.testProgramDevelopment || 0)}</span>
+              {/* 2. 工程费用 - 只显示非零项目 */}
+              {(() => {
+                // 从数据库items中筛选出工程费用项目
+                const engineeringItems = quoteData.items ? quoteData.items.filter(item => 
+                  item.category_type === 'engineering_fee' || 
+                  (item.item_description && item.item_description.includes('工程')) ||
+                  item.unit === '项' && (item.item_name?.includes('测试程序') || item.item_name?.includes('夹具设计') || 
+                                         item.item_name?.includes('测试验证') || item.item_name?.includes('文档'))
+                ) : [];
+                
+                // 如果没有数据库items，尝试从原始engineeringFees获取
+                if (engineeringItems.length === 0 && quoteData.engineeringFees) {
+                  const fees = quoteData.engineeringFees;
+                  const feeNames = {
+                    testProgramDevelopment: '测试程序开发费用',
+                    fixtureDesign: '夹具设计费',
+                    testValidation: '测试验证费',
+                    documentation: '文档制作费'
+                  };
+                  
+                  Object.entries(fees).forEach(([key, value]) => {
+                    if (value > 0) {
+                      engineeringItems.push({ item_name: feeNames[key], total_price: value });
+                    }
+                  });
+                }
+                
+                return engineeringItems.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <h4>2. 工程费用</h4>
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      {engineeringItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          padding: '12px 15px',
+                          borderBottom: index < engineeringItems.length - 1 ? '1px solid #f0f0f0' : 'none'
+                        }}>
+                          <span>{item.name || item.item_name}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            {formatPrice(item.value || item.total_price)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>夹具设计:</span>
-                    <span>{formatPrice(quoteData.engineeringFees?.fixtureDesign || 0)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>测试验证:</span>
-                    <span>{formatPrice(quoteData.engineeringFees?.testValidation || 0)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>文档编制:</span>
-                    <span>{formatPrice(quoteData.engineeringFees?.documentation || 0)}</span>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
               
-              <div style={{ marginBottom: 20 }}>
-                <h4>产线设置费用</h4>
-                <div style={{ paddingLeft: 15 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>设置费:</span>
-                    <span>{formatPrice(quoteData.productionSetup?.setupFee || 0)}</span>
+              {/* 3. 量产准备费用 - 只显示非零项目 */}
+              {(() => {
+                // 从数据库items中筛选出量产准备费用项目
+                const productionItems = quoteData.items ? quoteData.items.filter(item => 
+                  item.category_type === 'production_setup' || 
+                  (item.item_description && item.item_description.includes('准备')) ||
+                  item.unit === '项' && (item.item_name?.includes('调试') || item.item_name?.includes('校准') || item.item_name?.includes('检验'))
+                ) : [];
+                
+                // 如果没有数据库items，尝试从原始productionSetup获取
+                if (productionItems.length === 0 && quoteData.productionSetup) {
+                  const setup = quoteData.productionSetup;
+                  const setupNames = {
+                    setupFee: '生产准备费',
+                    calibrationFee: '设备校准费',
+                    firstArticleInspection: '首件检验费'
+                  };
+                  
+                  Object.entries(setup).forEach(([key, value]) => {
+                    if (value > 0) {
+                      productionItems.push({ item_name: setupNames[key], total_price: value });
+                    }
+                  });
+                }
+                
+                return productionItems.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <h4>3. 量产准备费用</h4>
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      {productionItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          padding: '12px 15px',
+                          borderBottom: index < productionItems.length - 1 ? '1px solid #f0f0f0' : 'none'
+                        }}>
+                          <span>{item.name || item.item_name}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            {formatPrice(item.value || item.total_price)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>校准费:</span>
-                    <span>{formatPrice(quoteData.productionSetup?.calibrationFee || 0)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>首件检验:</span>
-                    <span>{formatPrice(quoteData.productionSetup?.firstArticleInspection || 0)}</span>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
               
               <div style={{ marginBottom: 20, fontSize: '18px', fontWeight: 'bold', textAlign: 'right', color: '#1890ff' }}>
-                报价总额: {formatPrice(quoteData.totalCost || 0)}
+                报价总额: {formatPrice(quoteData.totalCost || quoteData.total_amount || 0)}
               </div>
               
               <div style={{ marginBottom: 20 }}>
                 <h4>商务条款</h4>
                 <div style={{ paddingLeft: 15 }}>
-                  <div>付款条件: {quoteData.paymentTerms === '30_days' ? '30天付款' : 
-                    quoteData.paymentTerms === '60_days' ? '60天付款' : 
-                    quoteData.paymentTerms === 'advance' ? '预付款' : 
-                    quoteData.paymentTerms || '-'}</div>
-                  <div>交期要求: {quoteData.deliveryTime || '-'}</div>
-                  {quoteData.remarks && <div>备注: {quoteData.remarks}</div>}
+                  <div>付款条件: {(() => {
+                    const paymentTerms = quoteData.paymentTerms || quoteData.payment_terms;
+                    return paymentTerms === '30_days' ? '30天付款' : 
+                           paymentTerms === '60_days' ? '60天付款' : 
+                           paymentTerms === 'advance' ? '预付款' : 
+                           paymentTerms || '-';
+                  })()}</div>
+                  <div>币种: {quoteData.currency || 'CNY'}</div>
+                  {(quoteData.deliveryTime || quoteData.valid_until) && 
+                    <div>有效期: {quoteData.deliveryTime || (quoteData.valid_until ? new Date(quoteData.valid_until).toLocaleDateString() : '-')}</div>
+                  }
+                  {(quoteData.remarks || quoteData.notes) && 
+                    <div>备注: {quoteData.remarks || quoteData.notes}</div>
+                  }
                 </div>
               </div>
             </>

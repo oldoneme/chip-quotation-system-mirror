@@ -219,6 +219,168 @@ const QuoteManagement = () => {
       return <div style={{ padding: '16px', color: '#666' }}>暂无报价明细</div>;
     }
 
+    // 工装夹具报价使用三大类别显示
+    if (record.type === '工装夹具报价') {
+      return (
+        <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
+          <h4 style={{ marginBottom: '16px' }}>报价明细</h4>
+          
+          {/* 1. 工装夹具清单 */}
+          {(() => {
+            const toolingItems = record.quoteDetails.filter(item => 
+              item.category_type === 'tooling_hardware' || 
+              (item.item_description && item.item_description.includes('fixture')) ||
+              (item.unit === '件' && !item.item_name?.includes('程序') && !item.item_name?.includes('调试') && !item.item_name?.includes('设计') && 
+               !item.item_description?.includes('工程') && !item.item_description?.includes('开发'))
+            );
+            
+            return toolingItems && toolingItems.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <h5>🔧 1. 工装夹具清单</h5>
+                <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1.5fr', 
+                    gap: '10px',
+                    padding: '8px 12px',
+                    backgroundColor: '#fafafa',
+                    borderBottom: '1px solid #d9d9d9',
+                    fontWeight: 'bold',
+                    fontSize: '12px'
+                  }}>
+                    <span>类别</span>
+                    <span>类型</span>
+                    <span>单价</span>
+                    <span>数量</span>
+                    <span>小计</span>
+                  </div>
+                  {toolingItems.map((item, index) => (
+                    <div key={index} style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1.5fr', 
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderBottom: index < toolingItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                      fontSize: '12px'
+                    }}>
+                      <span>{item.category || item.item_description?.split(' - ')[0] || '工装夹具'}</span>
+                      <span>{item.type || item.item_name}</span>
+                      <span>¥{item.unit_price?.toFixed(2)}</span>
+                      <span>{item.quantity}</span>
+                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                        ¥{item.total_price?.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                  <div style={{ 
+                    padding: '8px 12px',
+                    backgroundColor: '#f0f9ff',
+                    borderTop: '1px solid #d9d9d9',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    color: '#1890ff'
+                  }}>
+                    工装夹具总价: ¥{toolingItems.reduce((sum, item) => sum + (item.total_price || 0), 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          
+          {/* 2. 工程费用 */}
+          {(() => {
+            const engineeringItems = record.quoteDetails.filter(item => 
+              item.category_type === 'engineering_fee' || 
+              (item.item_name && (item.item_name.includes('测试程序') || item.item_name.includes('程序开发') || item.item_name.includes('夹具设计') || 
+                                 item.item_name.includes('测试验证') || item.item_name.includes('文档') || item.item_name.includes('设计'))) ||
+              (item.item_description && (item.item_description.includes('工程') || item.item_description.includes('开发')))
+            );
+            
+            return engineeringItems.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <h5>⚙️ 2. 工程费用</h5>
+                <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                  {engineeringItems.map((item, index) => (
+                    <div key={index} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      borderBottom: index < engineeringItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                      fontSize: '12px'
+                    }}>
+                      <span>{item.item_name}</span>
+                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                        ¥{item.total_price?.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                  <div style={{ 
+                    padding: '8px 12px',
+                    backgroundColor: '#f0f9ff',
+                    borderTop: '1px solid #d9d9d9',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    color: '#1890ff'
+                  }}>
+                    工程费用总价: ¥{engineeringItems.reduce((sum, item) => sum + (item.total_price || 0), 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          
+          {/* 3. 量产准备费用 */}
+          {(() => {
+            const productionItems = record.quoteDetails.filter(item => 
+              item.category_type === 'production_setup' || 
+              (item.item_name && (item.item_name.includes('调试') || item.item_name.includes('校准') || item.item_name.includes('检验') || 
+                                 item.item_name.includes('设备调试') || item.item_name.includes('调试费'))) ||
+              (item.item_description && (item.item_description.includes('准备') || item.item_description.includes('产线') || item.item_description.includes('设置')))
+            );
+            
+            return productionItems.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <h5>🏭 3. 量产准备费用</h5>
+                <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                  {productionItems.map((item, index) => (
+                    <div key={index} style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      borderBottom: index < productionItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                      fontSize: '12px'
+                    }}>
+                      <span>{item.item_name}</span>
+                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                        ¥{item.total_price?.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                  <div style={{ 
+                    padding: '8px 12px',
+                    backgroundColor: '#f0f9ff',
+                    borderTop: '1px solid #d9d9d9',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    color: '#1890ff'
+                  }}>
+                    量产准备费用总价: ¥{productionItems.reduce((sum, item) => sum + (item.total_price || 0), 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      );
+    }
+
+    // 其他报价类型使用原有的表格显示
     const detailColumns = [
       {
         title: '测试类型',

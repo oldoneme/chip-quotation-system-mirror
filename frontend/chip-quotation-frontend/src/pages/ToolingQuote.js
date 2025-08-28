@@ -205,13 +205,101 @@ const ToolingQuote = () => {
   };
 
   const handleSubmit = () => {
+    const totalCost = calculateTotalCost();
+    
+    // 生成工装夹具报价项目
+    const generateToolingQuoteItems = () => {
+      const items = [];
+      
+      // 1. 工装夹具类报价项目 - 按照具体工装夹具清单
+      formData.toolingItems.forEach((item, index) => {
+        if (item.category && item.type && item.totalPrice > 0) {
+          items.push({
+            item_name: item.type,
+            item_description: `${item.category} - ${item.specification || ''}`.trim(),
+            quantity: item.quantity || 1,
+            unit_price: item.unitPrice,
+            total_price: item.totalPrice,
+            unit: '件',
+            category_type: 'tooling_hardware', // 标记为工装夹具类
+            category_name: item.category
+          });
+        }
+      });
+      
+      // 2. 工程费用项目 - 只有非零项目才显示
+      Object.entries(formData.engineeringFees).forEach(([key, value]) => {
+        if (value > 0) {
+          const feeNames = {
+            testProgramDevelopment: '测试程序开发',
+            fixtureDesign: '夹具设计',
+            testValidation: '测试验证',
+            documentation: '文档编制'
+          };
+          
+          items.push({
+            item_name: feeNames[key],
+            item_description: '工程开发服务费',
+            quantity: 1,
+            unit_price: value,
+            total_price: value,
+            unit: '项',
+            category_type: 'engineering_fee', // 标记为工程费用
+            category_name: '工程费用'
+          });
+        }
+      });
+      
+      // 3. 量产准备费用项目 - 只有非零项目才显示
+      Object.entries(formData.productionSetup).forEach(([key, value]) => {
+        if (value > 0) {
+          const setupNames = {
+            setupFee: '设备调试费',
+            calibrationFee: '校准费',
+            firstArticleInspection: '首件检验费'
+          };
+          
+          items.push({
+            item_name: setupNames[key],
+            item_description: '量产准备服务费',
+            quantity: 1,
+            unit_price: value,
+            total_price: value,
+            unit: '项',
+            category_type: 'production_setup', // 标记为量产准备费用
+            category_name: '量产准备费用'
+          });
+        }
+      });
+      
+      return items;
+    };
+    
+    // 准备数据库创建数据
+    const quoteCreateData = {
+      title: `${formData.projectInfo.projectName || '工装夹具报价'} - ${formData.customerInfo.companyName}`,
+      quote_type: 'tooling',
+      customer_name: formData.customerInfo.companyName,
+      customer_contact: formData.customerInfo.contactPerson,
+      customer_phone: formData.customerInfo.phone,
+      customer_email: formData.customerInfo.email,
+      currency: formData.currency,
+      subtotal: totalCost,
+      total_amount: totalCost,
+      payment_terms: formData.paymentTerms,
+      description: `项目：${formData.projectInfo.projectName}，芯片封装：${formData.projectInfo.chipPackage}，测试类型：${formData.projectInfo.testType}`,
+      notes: `交期：${formData.deliveryTime}，备注：${formData.remarks}`,
+      items: generateToolingQuoteItems()
+    };
+    
     const quoteData = {
       type: '工装夹具报价',
       number: `TL-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`,
       date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       ...formData,
-      totalCost: calculateTotalCost(),
-      generatedAt: new Date().toISOString()
+      totalCost,
+      generatedAt: new Date().toISOString(),
+      quoteCreateData // 添加数据库创建数据
     };
 
     navigate('/quote-result', { state: quoteData });
