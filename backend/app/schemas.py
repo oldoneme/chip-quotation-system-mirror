@@ -418,6 +418,7 @@ class QuoteBase(BaseModel):
     customer_phone: Optional[str] = Field(None, description="联系电话")
     customer_email: Optional[str] = Field(None, description="邮箱")
     customer_address: Optional[str] = Field(None, description="地址")
+    quote_unit: str = Field("昆山芯信安", description="报价单位")
     currency: str = Field("CNY", description="币种")
     subtotal: float = Field(0.0, ge=0, description="小计")
     discount: float = Field(0.0, ge=0, description="折扣金额")
@@ -445,6 +446,7 @@ class QuoteUpdate(BaseModel):
     customer_phone: Optional[str] = None
     customer_email: Optional[str] = None
     customer_address: Optional[str] = None
+    quote_unit: Optional[str] = None
     currency: Optional[str] = None
     subtotal: Optional[float] = Field(None, ge=0)
     discount: Optional[float] = Field(None, ge=0)

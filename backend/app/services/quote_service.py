@@ -22,16 +22,30 @@ class QuoteService:
     def __init__(self, db: Session):
         self.db = db
 
-    def generate_quote_number(self) -> str:
-        """生成报价单号"""
-        # 获取当前年月
-        now = datetime.now()
-        year_month = now.strftime("%Y%m")
+    def get_quote_unit_abbreviation(self, quote_unit: str) -> str:
+        """获取报价单位缩写"""
+        unit_mapping = {
+            "昆山芯信安": "KS",
+            "苏州芯昱安": "SZ", 
+            "上海芯睿安": "SH",
+            "珠海芯创安": "ZH"
+        }
+        return unit_mapping.get(quote_unit, "KS")  # 默认返回KS
+
+    def generate_quote_number(self, quote_unit: str = "昆山芯信安") -> str:
+        """生成报价单号: CIS-{单位缩写}{年月日}{顺序编号}"""
+        # 获取单位缩写
+        unit_abbr = self.get_quote_unit_abbreviation(quote_unit)
         
-        # 查找当月最大编号
+        # 获取当前日期
+        now = datetime.now()
+        date_str = now.strftime("%Y%m%d")
+        
+        # 查找当日该单位的最大编号
+        prefix = f"CIS-{unit_abbr}{date_str}"
         latest_quote = (
             self.db.query(Quote)
-            .filter(Quote.quote_number.like(f"QT{year_month}%"))
+            .filter(Quote.quote_number.like(f"{prefix}%"))
             .order_by(desc(Quote.quote_number))
             .first()
         )
@@ -45,12 +59,12 @@ class QuoteService:
         else:
             seq = 1
         
-        return f"QT{year_month}{seq:03d}"
+        return f"{prefix}{seq:03d}"
 
     def create_quote(self, quote_data: QuoteCreate, user_id: int) -> Quote:
         """创建报价单"""
-        # 生成报价单号
-        quote_number = self.generate_quote_number()
+        # 生成报价单号，使用报价单位
+        quote_number = self.generate_quote_number(quote_data.quote_unit)
         
         # 根据报价类型决定初始状态
         # 询价报价直接设为已批准状态，其他类型设为草稿需要审批

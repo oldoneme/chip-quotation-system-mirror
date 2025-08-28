@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Select, Table, Tabs, Spin, Alert, InputNumber, Form, Button, Card, Checkbox, Divider, message } from 'antd';
 import StepIndicator from '../components/StepIndicator';
-import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
 import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,6 +17,7 @@ import {
 import {
   getAuxiliaryEquipment
 } from '../services/auxiliaryEquipment';
+import QuoteApiService from '../services/quoteApi';
 import '../App.css';
 
 const { Option } = Select;
@@ -42,6 +42,21 @@ const EngineeringQuote = () => {
   
   // 持久化存储所有板卡的数量状态，避免取消选中后再选中时丢失数量
   const [persistedCardQuantities, setPersistedCardQuantities] = useState({});
+  
+  // 基本信息状态
+  const [customerInfo, setCustomerInfo] = useState({
+    companyName: '',
+    contactPerson: '',
+    phone: '',
+    email: ''
+  });
+  const [projectInfo, setProjectInfo] = useState({
+    projectName: '',
+    chipPackage: '',
+    testType: 'engineering',
+    urgency: 'normal',
+    quoteUnit: '昆山芯信安'  // 默认选择第一个
+  });
   
   // 数据状态
   const [machines, setMachines] = useState([]);        // 测试机
@@ -204,6 +219,8 @@ const EngineeringQuote = () => {
         try {
           const parsedData = JSON.parse(storedQuoteData);
           // 恢复状态
+          setCustomerInfo(parsedData.customerInfo || { companyName: '', contactPerson: '', phone: '', email: '' });
+          setProjectInfo(parsedData.projectInfo || { projectName: '', chipPackage: '', testType: 'engineering', urgency: 'normal', quoteUnit: '昆山芯信安' });
           setTestMachine(parsedData.testMachine);
           setHandler(parsedData.handler);
           setProber(parsedData.prober);
@@ -238,7 +255,8 @@ const EngineeringQuote = () => {
   }, []);
 
   const steps = [
-    '设备选择',
+    '基本信息',
+    '设备选择', 
     '人员和辅助设备选择'
   ];
 
@@ -286,6 +304,8 @@ const EngineeringQuote = () => {
     // 保存当前状态到sessionStorage
     const currentState = {
       currentStep: nextStepValue,
+      customerInfo,
+      projectInfo,
       testMachine,
       handler,
       prober,
@@ -304,27 +324,235 @@ const EngineeringQuote = () => {
     if (nextStepValue < steps.length) {
       setCurrentStep(nextStepValue);
     } else {
-      // 在完成时将数据存储到sessionStorage
-      const quoteData = {
-        type: '工程报价',
-        engineeringRate, // 添加工程系数
-        quoteCurrency, // 添加报价币种
-        quoteExchangeRate, // 添加报价汇率
-        testMachine,
-        handler,
-        prober,
-        testMachineCards,
-        handlerCards,
-        proberCards,
-        selectedPersonnel,
-        selectedAuxDevices,
-        cardTypes // 传递板卡类型数据用于计算
-      };
-      sessionStorage.setItem('quoteData', JSON.stringify(quoteData));
-      navigate('/quote-result');
+      // 完成报价，跳转到最终报价页面
+      handleComplete();
     }
   };
   
+  // 生成工程机时报价项目数据 - 直接使用页面"费用明细"中显示的费率
+  const generateEngineeringQuoteItems = () => {
+    const items = [];
+    
+    // === 机器设备部分：直接使用页面费用明细中的含工程系数费率 ===
+    
+    // 测试机机时费（含工程系数）
+    if (testMachine && testMachineCards.length > 0) {
+      const testMachineRate = calculateTestMachineFee() * engineeringRate;
+      items.push({
+        item_name: testMachine.name,
+        item_description: `机器 - 测试机`,
+        machine_type: '测试机',
+        supplier: typeof testMachine.supplier === 'object' ? testMachine.supplier.name : testMachine.supplier || '',
+        machine_model: testMachine.name,
+        configuration: `设备类型: 测试机, 设备型号: ${testMachine.name}`,
+        quantity: 1,
+        unit: '小时',
+        unit_price: testMachineRate,
+        total_price: testMachineRate
+      });
+    }
+    
+    // 分选机机时费（含工程系数）
+    if (handler && handlerCards.length > 0) {
+      const handlerRate = calculateHandlerFee() * engineeringRate;
+      items.push({
+        item_name: handler.name,
+        item_description: `机器 - 分选机`,
+        machine_type: '分选机',
+        supplier: typeof handler.supplier === 'object' ? handler.supplier.name : handler.supplier || '',
+        machine_model: handler.name,
+        configuration: `设备类型: 分选机, 设备型号: ${handler.name}`,
+        quantity: 1,
+        unit: '小时',
+        unit_price: handlerRate,
+        total_price: handlerRate
+      });
+    }
+    
+    // 探针台机时费（含工程系数）
+    if (prober && proberCards.length > 0) {
+      const proberRate = calculateProberFee() * engineeringRate;
+      items.push({
+        item_name: prober.name,
+        item_description: `机器 - 探针台`,
+        machine_type: '探针台',
+        supplier: typeof prober.supplier === 'object' ? prober.supplier.name : prober.supplier || '',
+        machine_model: prober.name,
+        configuration: `设备类型: 探针台, 设备型号: ${prober.name}`,
+        quantity: 1,
+        unit: '小时',
+        unit_price: proberRate,
+        total_price: proberRate
+      });
+    }
+    
+    // 辅助设备：直接使用页面费用明细中的费率
+    if (selectedAuxDevices && selectedAuxDevices.length > 0) {
+      selectedAuxDevices.forEach(device => {
+        const deviceRate = calculateAuxDeviceHourlyRate(device);
+        items.push({
+          item_name: device.name,
+          item_description: `机器 - 辅助设备`,
+          machine_type: device.supplier?.machine_type?.name || '辅助设备',
+          supplier: typeof device.supplier === 'object' ? device.supplier.name : device.supplier || '',
+          machine_model: device.name,
+          configuration: `设备类型: 辅助设备, 设备型号: ${device.name}`,
+          quantity: 1,
+          unit: '小时',
+          unit_price: deviceRate,
+          total_price: deviceRate
+        });
+      });
+    }
+    
+    // === 人员部分：直接使用页面费用明细中的费率 ===
+    
+    if (selectedPersonnel && selectedPersonnel.length > 0) {
+      selectedPersonnel.forEach(personnelType => {
+        // 直接使用页面计算函数得到的费率
+        const hourlyRate = calculatePersonnelFeeForQuote(personnelType);
+        
+        items.push({
+          item_name: personnelType,
+          item_description: `人员 - ${personnelType}`,
+          machine_type: '人员',
+          supplier: '内部人员',
+          machine_model: personnelType,
+          configuration: `人员类别: ${personnelType}`,
+          quantity: 1,
+          unit: '小时',
+          unit_price: hourlyRate,
+          total_price: hourlyRate
+        });
+      });
+    }
+    
+    return items;
+  };
+  
+  // 完成报价配置，跳转到最终报价页面
+  const handleComplete = () => {
+    // 验证必需的字段
+    if (!customerInfo.companyName || customerInfo.companyName.trim() === '') {
+      message.error('请填写客户公司名称');
+      return;
+    }
+    
+    if (!projectInfo.projectName || projectInfo.projectName.trim() === '') {
+      message.error('请填写项目名称');
+      return;
+    }
+    
+    const quoteItems = generateEngineeringQuoteItems();
+    console.log('生成的报价项目:', JSON.stringify(quoteItems, null, 2));
+    
+    const totalAmount = quoteItems.reduce((sum, item) => {
+      const itemTotal = isNaN(item.total_price) || item.total_price === null ? 0 : item.total_price;
+      return sum + itemTotal;
+    }, 0);
+    
+    const title = `${projectInfo.projectName.trim()} - ${customerInfo.companyName.trim()}`;
+    
+    // 准备最终报价页面数据
+    const quoteData = {
+      type: '工程报价',
+      quote_type: 'engineering',
+      engineeringRate,
+      quoteCurrency,
+      quoteExchangeRate,
+      customerInfo,
+      projectInfo,
+      testMachine,
+      handler,
+      prober,
+      testMachineCards,
+      handlerCards,
+      proberCards,
+      selectedPersonnel,
+      selectedAuxDevices,
+      cardTypes,
+      totalAmount,
+      quoteItems,
+      // 添加数据库创建数据，供确认报价按钮使用
+      quoteCreateData: {
+        title: title,
+        quote_type: 'engineering',
+        customer_name: customerInfo.companyName.trim(),
+        customer_contact: customerInfo.contactPerson?.trim() || '',
+        customer_phone: customerInfo.phone?.trim() || '',
+        customer_email: customerInfo.email?.trim() || '',
+        quote_unit: projectInfo.quoteUnit,
+        currency: quoteCurrency,
+        subtotal: totalAmount || 0,
+        total_amount: totalAmount || 0,
+        payment_terms: '30_days',
+        description: `项目：${projectInfo.projectName.trim()}，芯片封装：${projectInfo.chipPackage || ''}，测试类型：工程机时测试，工程系数：${engineeringRate}，报价单位：${projectInfo.quoteUnit}`,
+        notes: `汇率：${quoteExchangeRate}，紧急程度：${projectInfo.urgency === 'urgent' ? '紧急' : '正常'}`,
+        items: quoteItems
+      }
+    };
+    
+    sessionStorage.setItem('quoteData', JSON.stringify(quoteData));
+    navigate('/quote-result');
+  };
+  
+  // 提交工程机时报价到数据库
+  const handleSubmit = async () => {
+    try {
+      // 从sessionStorage获取报价数据
+      const storedQuoteData = sessionStorage.getItem('quoteData');
+      if (!storedQuoteData) {
+        message.error('报价数据丢失，请重新生成报价');
+        return;
+      }
+      
+      const quoteData = JSON.parse(storedQuoteData);
+      const { quoteItems, totalAmount } = quoteData;
+      
+      const title = `${projectInfo.projectName || '工程机时报价'} - ${customerInfo.companyName}`;
+      
+      // 构建API数据格式
+      const quoteCreateData = {
+        title,
+        quote_type: 'engineering',
+        customer_name: customerInfo.companyName,
+        customer_contact: customerInfo.contactPerson,
+        customer_phone: customerInfo.phone,
+        customer_email: customerInfo.email,
+        quote_unit: projectInfo.quoteUnit,
+        currency: quoteCurrency,
+        subtotal: totalAmount,
+        total_amount: totalAmount,
+        payment_terms: '30_days',
+        description: `项目：${projectInfo.projectName}，芯片封装：${projectInfo.chipPackage}，测试类型：工程机时测试，工程系数：${engineeringRate}，报价单位：${projectInfo.quoteUnit}`,
+        notes: `汇率：${quoteExchangeRate}，紧急程度：${projectInfo.urgency === 'urgent' ? '紧急' : '正常'}`,
+        items: quoteItems
+      };
+      
+      // 调用API创建报价单
+      const createdQuote = await QuoteApiService.createQuote(quoteCreateData);
+      
+      message.success('工程机时报价创建成功！');
+      
+      // 更新sessionStorage中的数据，添加数据库返回的信息
+      const updatedQuoteData = {
+        ...quoteData,
+        quoteNumber: createdQuote.quote_number,
+        createdAt: createdQuote.created_at,
+        isSubmitted: true
+      };
+      
+      sessionStorage.setItem('quoteData', JSON.stringify(updatedQuoteData));
+      
+      // 刷新当前页面以显示已提交状态
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('创建工程机时报价失败:', error);
+      message.error('创建报价单失败，请重试');
+    }
+  };
+
   const prevStep = () => {
     if (currentStep > 0) {
       const prevStepValue = currentStep - 1;
@@ -332,6 +560,8 @@ const EngineeringQuote = () => {
       // 保存当前状态到sessionStorage
       const currentState = {
         currentStep: prevStepValue,
+        customerInfo,
+        projectInfo,
         testMachine,
         handler,
         prober,
@@ -341,6 +571,8 @@ const EngineeringQuote = () => {
         selectedPersonnel,
         selectedAuxDevices,
         engineeringRate,
+        quoteCurrency,
+        quoteExchangeRate,
         persistedCardQuantities
       };
       sessionStorage.setItem('quoteData', JSON.stringify(currentState));
@@ -350,26 +582,26 @@ const EngineeringQuote = () => {
   };
 
   const resetQuote = () => {
-    ConfirmDialog.showResetConfirm({
-      onOk: () => {
-        setTestMachine(null);
-        setHandler(null);
-        setProber(null);
-        setTestMachineCards([]);
-        setHandlerCards([]);
-        setProberCards([]);
-        setSelectedPersonnel([]);
-        setSelectedAuxDevices([]);
-        setEngineeringRate(1.2);
-        setQuoteCurrency('CNY');
-        setQuoteExchangeRate(7.2);
-        setPersistedCardQuantities({});
-        setCurrentStep(0);
-        
-        // 清除sessionStorage中的状态
-        sessionStorage.removeItem('quoteData');
-      }
-    });
+    if (window.confirm('确定要重置所有设置吗？这将清除您当前的所有选择。')) {
+      setCustomerInfo({ companyName: '', contactPerson: '', phone: '', email: '' });
+      setProjectInfo({ projectName: '', chipPackage: '', testType: 'engineering', urgency: 'normal', quoteUnit: '昆山芯信安' });
+      setTestMachine(null);
+      setHandler(null);
+      setProber(null);
+      setTestMachineCards([]);
+      setHandlerCards([]);
+      setProberCards([]);
+      setSelectedPersonnel([]);
+      setSelectedAuxDevices([]);
+      setEngineeringRate(1.2);
+      setQuoteCurrency('CNY');
+      setQuoteExchangeRate(7.2);
+      setPersistedCardQuantities({});
+      setCurrentStep(0);
+      
+      // 清除sessionStorage中的状态
+      sessionStorage.removeItem('quoteData');
+    }
   };
 
   // 计算测试机费用
@@ -695,6 +927,188 @@ const EngineeringQuote = () => {
   const handleAuxDeviceSelect = (selectedRowKeys, selectedRows) => {
     setSelectedAuxDevices(selectedRows);
   };
+
+  // 步骤0: 基本信息收集
+  const renderBasicInfo = () => (
+    <div>
+      <h2 className="section-title">基本信息</h2>
+      
+      {/* 客户信息 */}
+      <Card title="客户信息" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+              公司名称 <span style={{ color: 'red' }}>*</span>
+            </label>
+            <input
+              type="text"
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={customerInfo.companyName}
+              onChange={(e) => setCustomerInfo({...customerInfo, companyName: e.target.value})}
+              placeholder="请输入公司名称"
+              required
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+              联系人 <span style={{ color: 'red' }}>*</span>
+            </label>
+            <input
+              type="text"
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={customerInfo.contactPerson}
+              onChange={(e) => setCustomerInfo({...customerInfo, contactPerson: e.target.value})}
+              placeholder="请输入联系人姓名"
+              required
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>联系电话</label>
+            <input
+              type="text"
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={customerInfo.phone}
+              onChange={(e) => setCustomerInfo({...customerInfo, phone: e.target.value})}
+              placeholder="请输入联系电话"
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>邮箱地址</label>
+            <input
+              type="email"
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={customerInfo.email}
+              onChange={(e) => setCustomerInfo({...customerInfo, email: e.target.value})}
+              placeholder="请输入邮箱地址"
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* 项目信息 */}
+      <Card title="项目信息" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>项目名称</label>
+            <input
+              type="text"
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={projectInfo.projectName}
+              onChange={(e) => setProjectInfo({...projectInfo, projectName: e.target.value})}
+              placeholder="请输入项目名称"
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+              芯片封装 <span style={{ color: 'red' }}>*</span>
+            </label>
+            <input
+              type="text"
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={projectInfo.chipPackage}
+              onChange={(e) => setProjectInfo({...projectInfo, chipPackage: e.target.value})}
+              placeholder="如：QFN48, BGA256等"
+              required
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>测试类型</label>
+            <select
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: '#fff'
+              }}
+              value={projectInfo.testType}
+              onChange={(e) => setProjectInfo({...projectInfo, testType: e.target.value})}
+            >
+              <option value="engineering">工程机时测试</option>
+              <option value="CP">CP测试</option>
+              <option value="FT">FT测试</option>
+              <option value="mixed">混合测试</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>紧急程度</label>
+            <select
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: '#fff'
+              }}
+              value={projectInfo.urgency}
+              onChange={(e) => setProjectInfo({...projectInfo, urgency: e.target.value})}
+            >
+              <option value="normal">正常</option>
+              <option value="urgent">紧急</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>报价单位</label>
+            <select
+              style={{ 
+                width: '100%', 
+                padding: '8px 12px', 
+                border: '1px solid #d9d9d9', 
+                borderRadius: '6px',
+                fontSize: '14px',
+                backgroundColor: '#fff'
+              }}
+              value={projectInfo.quoteUnit}
+              onChange={(e) => setProjectInfo({...projectInfo, quoteUnit: e.target.value})}
+            >
+              <option value="昆山芯信安">昆山芯信安</option>
+              <option value="苏州芯昱安">苏州芯昱安</option>
+              <option value="上海芯睿安">上海芯睿安</option>
+              <option value="珠海芯创安">珠海芯创安</option>
+            </select>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
 
   // 步骤1: 设备选择内容
   const renderMachineSelection = () => (
@@ -1048,8 +1462,9 @@ const EngineeringQuote = () => {
       <StepIndicator currentStep={currentStep} steps={steps} />
 
       {/* 渲染当前步骤的内容 */}
-      {currentStep === 0 && renderMachineSelection()}
-      {currentStep === 1 && renderPersonnelAndAuxSelection()}
+      {currentStep === 0 && renderBasicInfo()}
+      {currentStep === 1 && renderMachineSelection()}
+      {currentStep === 2 && renderPersonnelAndAuxSelection()}
 
       {/* 导航按钮 */}
       <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between' }}>

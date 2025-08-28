@@ -98,6 +98,7 @@ class Quote(Base):
     customer_address = Column(Text)  # 地址
     
     # 报价信息
+    quote_unit = Column(String, default="昆山芯信安")  # 报价单位
     currency = Column(String, default="CNY")  # 币种 CNY/USD
     subtotal = Column(Float, default=0.0)  # 小计
     discount = Column(Float, default=0.0)  # 折扣金额
