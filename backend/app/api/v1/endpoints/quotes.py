@@ -366,3 +366,68 @@ async def get_quote_approval_records(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"获取审批记录失败: {str(e)}"
         )
+
+
+@router.post("/{quote_id}/approve")
+async def approve_quote(
+    quote_id: int,
+    approval_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """批准报价单"""
+    try:
+        service = QuoteService(db)
+        
+        # 检查权限 - 只有管理员可以审批
+        if current_user.role not in ['admin', 'super_admin']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权限执行审批操作"
+            )
+        
+        quote = service.approve_quote(quote_id, current_user.id, approval_data.get('comments', '审批通过'))
+        return {"message": "报价单已批准", "quote": quote}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"批准操作失败: {str(e)}"
+        )
+
+
+@router.post("/{quote_id}/reject")
+async def reject_quote(
+    quote_id: int,
+    rejection_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """拒绝报价单"""
+    try:
+        service = QuoteService(db)
+        
+        # 检查权限 - 只有管理员可以审批
+        if current_user.role not in ['admin', 'super_admin']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权限执行审批操作"
+            )
+        
+        comments = rejection_data.get('comments', '')
+        if not comments:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="拒绝时必须提供拒绝原因"
+            )
+        
+        quote = service.reject_quote(quote_id, current_user.id, comments)
+        return {"message": "报价单已拒绝", "quote": quote}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"拒绝操作失败: {str(e)}"
+        )

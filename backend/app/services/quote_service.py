@@ -307,3 +307,60 @@ class QuoteService:
             )
             
             return self.update_quote_status(quote_id, status_update, user_id)
+
+    def approve_quote(self, quote_id: int, approver_id: int, comments: str = "审批通过"):
+        """批准报价单"""
+        quote = self.get_quote_by_id(quote_id)
+        if not quote:
+            raise ValueError("报价单不存在")
+        
+        if quote.status != 'pending':
+            raise ValueError("只有审批中的报价单可以批准")
+        
+        # 更新报价单状态
+        quote.status = 'approved'
+        quote.approved_by = approver_id
+        quote.approved_at = datetime.utcnow()
+        
+        # 记录审批操作
+        approval_record = ApprovalRecord(
+            quote_id=quote_id,
+            action='approve',
+            status='approved',
+            approver_id=approver_id,
+            comments=comments,
+            processed_at=datetime.utcnow()
+        )
+        self.db.add(approval_record)
+        
+        self.db.commit()
+        self.db.refresh(quote)
+        return quote
+
+    def reject_quote(self, quote_id: int, approver_id: int, comments: str):
+        """拒绝报价单"""
+        quote = self.get_quote_by_id(quote_id)
+        if not quote:
+            raise ValueError("报价单不存在")
+        
+        if quote.status != 'pending':
+            raise ValueError("只有审批中的报价单可以拒绝")
+        
+        # 更新报价单状态
+        quote.status = 'rejected'
+        quote.rejection_reason = comments
+        
+        # 记录审批操作
+        approval_record = ApprovalRecord(
+            quote_id=quote_id,
+            action='reject',
+            status='rejected',
+            approver_id=approver_id,
+            comments=comments,
+            processed_at=datetime.utcnow()
+        )
+        self.db.add(approval_record)
+        
+        self.db.commit()
+        self.db.refresh(quote)
+        return quote

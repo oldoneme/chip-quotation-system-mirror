@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Card, Table, Button, Space, Tag, Tabs, Modal, message, Badge,
-  Row, Col, Statistic, Alert, Descriptions, Empty
+  Row, Col, Statistic, Alert, Descriptions, Empty, Input
 } from 'antd';
 import { 
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined,
@@ -143,6 +143,84 @@ const ApprovalWorkflow = () => {
     navigate(`/quote-detail/${record.id}`);
   };
 
+  const handleApprove = (record) => {
+    Modal.confirm({
+      title: '批准报价单',
+      content: (
+        <div>
+          <p>确定要批准以下报价单吗？</p>
+          <Descriptions column={1} size="small" style={{ marginTop: 16 }}>
+            <Descriptions.Item label="报价单号">{record.quote_number || record.id}</Descriptions.Item>
+            <Descriptions.Item label="标题">{record.title}</Descriptions.Item>
+            <Descriptions.Item label="客户">{record.customer}</Descriptions.Item>
+            <Descriptions.Item label="金额">{record.amount ? `¥${record.amount.toLocaleString()}` : '-'}</Descriptions.Item>
+          </Descriptions>
+        </div>
+      ),
+      onOk: async () => {
+        try {
+          await QuoteApiService.approveQuote(record.quoteId, {
+            action: 'approve',
+            comments: '审批通过'
+          });
+          message.success('报价单已批准！');
+          fetchQuotes();
+          fetchStatistics();
+        } catch (error) {
+          console.error('批准失败:', error);
+          message.error('批准操作失败');
+        }
+      }
+    });
+  };
+
+  const handleReject = (record) => {
+    let rejectReason = '';
+    
+    Modal.confirm({
+      title: '拒绝报价单',
+      content: (
+        <div>
+          <p>确定要拒绝以下报价单吗？</p>
+          <Descriptions column={1} size="small" style={{ marginTop: 16, marginBottom: 16 }}>
+            <Descriptions.Item label="报价单号">{record.quote_number || record.id}</Descriptions.Item>
+            <Descriptions.Item label="标题">{record.title}</Descriptions.Item>
+            <Descriptions.Item label="客户">{record.customer}</Descriptions.Item>
+          </Descriptions>
+          <div style={{ marginTop: 16 }}>
+            <label>拒绝原因：</label>
+            <Input.TextArea 
+              rows={3} 
+              placeholder="请输入拒绝原因..."
+              onChange={(e) => { rejectReason = e.target.value; }}
+              style={{ marginTop: 8 }}
+            />
+          </div>
+        </div>
+      ),
+      onOk: async () => {
+        if (!rejectReason.trim()) {
+          message.error('请输入拒绝原因');
+          return Promise.reject(new Error('拒绝原因不能为空'));
+        }
+        
+        try {
+          await QuoteApiService.rejectQuote(record.quoteId, {
+            action: 'reject',
+            comments: rejectReason.trim()
+          });
+          message.success('报价单已拒绝！');
+          fetchQuotes();
+          fetchStatistics();
+        } catch (error) {
+          console.error('拒绝失败:', error);
+          message.error('拒绝操作失败');
+          return Promise.reject(error);
+        }
+      }
+    });
+  };
+
   const columns = [
     {
       title: '报价单号',
@@ -208,6 +286,27 @@ const ApprovalWorkflow = () => {
             >
               提交审批
             </Button>
+          )}
+          {record.status === 'pending' && user?.role === 'admin' && (
+            <>
+              <Button 
+                type="primary"
+                size="small"
+                icon={<CheckCircleOutlined />}
+                onClick={() => handleApprove(record)}
+                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+              >
+                批准
+              </Button>
+              <Button 
+                danger
+                size="small"
+                icon={<CloseCircleOutlined />}
+                onClick={() => handleReject(record)}
+              >
+                拒绝
+              </Button>
+            </>
           )}
         </Space>
       )

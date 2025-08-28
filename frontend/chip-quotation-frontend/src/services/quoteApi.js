@@ -261,6 +261,36 @@ export class QuoteApiService {
       items: frontendQuote.items || []
     };
   }
+
+  /**
+   * 批准报价单
+   * @param {number} id - 报价单ID
+   * @param {Object} approvalData - 批准数据
+   */
+  static async approveQuote(id, approvalData) {
+    try {
+      const response = await api.post(`${QUOTE_BASE_URL}/${id}/approve`, approvalData);
+      return response.data;
+    } catch (error) {
+      console.error('批准报价单失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 拒绝报价单  
+   * @param {number} id - 报价单ID
+   * @param {Object} rejectionData - 拒绝数据
+   */
+  static async rejectQuote(id, rejectionData) {
+    try {
+      const response = await api.post(`${QUOTE_BASE_URL}/${id}/reject`, rejectionData);
+      return response.data;
+    } catch (error) {
+      console.error('拒绝报价单失败:', error);
+      throw error;
+    }
+  }
 }
 
 export default QuoteApiService;
