@@ -102,14 +102,28 @@ async def get_quotes_test(
             # 格式化报价明细
             quote_details = []
             for item in quote.items:
+                # 从configuration中解析UPH和计算机时费率
+                uph = None
+                hourly_rate = None
+                if item.configuration:
+                    import re
+                    uph_match = re.search(r'UPH:(\d+)', item.configuration)
+                    if uph_match:
+                        uph = int(uph_match.group(1))
+                        hourly_rate = f"¥{(item.unit_price * uph):.2f}/小时" if item.unit_price else "¥0.00/小时"
+                
                 detail = {
                     "item_name": item.item_name,
+                    "item_description": item.item_description,
                     "machine_type": item.machine_type,
                     "machine_model": item.machine_model,
+                    "configuration": item.configuration,
                     "unit_price": item.unit_price,
                     "quantity": item.quantity,
                     "unit": item.unit,
-                    "total_price": item.total_price
+                    "total_price": item.total_price,
+                    "uph": uph,
+                    "hourly_rate": hourly_rate
                 }
                 quote_details.append(detail)
             
@@ -164,6 +178,16 @@ async def get_quote_detail_test(
         # 格式化报价明细
         quote_items = []
         for item in quote.items:
+            # 从configuration中解析UPH和计算机时费率
+            uph = None
+            hourly_rate = None
+            if item.configuration:
+                import re
+                uph_match = re.search(r'UPH:(\d+)', item.configuration)
+                if uph_match:
+                    uph = int(uph_match.group(1))
+                    hourly_rate = f"¥{(item.unit_price * uph):.2f}/小时" if item.unit_price else "¥0.00/小时"
+            
             quote_items.append({
                 "id": item.id,
                 "item_name": item.item_name,
@@ -175,7 +199,9 @@ async def get_quote_detail_test(
                 "quantity": item.quantity,
                 "unit": item.unit,
                 "unit_price": item.unit_price,
-                "total_price": item.total_price
+                "total_price": item.total_price,
+                "uph": uph,
+                "hourly_rate": hourly_rate
             })
         
         result = {

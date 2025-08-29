@@ -654,6 +654,207 @@ const QuoteManagement = () => {
       );
     }
 
+    // 量产工序报价使用分类显示（兼容不同的类型名称）
+    if (record.type === '量产工序报价' || record.type === '工序报价' || record.quote_type === 'process') {
+      console.log('渲染工序报价明细 - record:', record);
+      console.log('渲染工序报价明细 - quoteDetails:', record.quoteDetails);
+      
+      return (
+        <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
+          <h4 style={{ marginBottom: '16px' }}>费用明细</h4>
+          
+          {/* CP工序费用详情 */}
+          {(() => {
+            // 筛选出CP工序（优先使用item_name判断）
+            const cpProcesses = record.quoteDetails.filter(item => {
+              // 优先检查item_name
+              const name = item.item_name || '';
+              if (name.startsWith('CP-')) return true;
+              
+              // 其次检查item_description
+              const description = item.item_description || '';
+              if (description.includes('CP工序')) return true;
+              
+              // 最后检查machine_type
+              const machineType = item.machine_type || '';
+              if (machineType.includes('CP')) return true;
+              
+              return false;
+            });
+            
+            return cpProcesses && cpProcesses.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <h5 style={{ 
+                  color: '#52c41a', 
+                  marginBottom: 12,
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  borderBottom: '2px solid #52c41a',
+                  paddingBottom: '6px'
+                }}>🔬 CP工序</h5>
+                {cpProcesses.map((item, index) => (
+                  <div key={index} style={{ 
+                    marginBottom: 15, 
+                    border: '1px solid #d9f7be', 
+                    borderRadius: '6px', 
+                    padding: '12px',
+                    backgroundColor: '#f6ffed'
+                  }}>
+                    <div style={{ 
+                      fontWeight: 'bold', 
+                      marginBottom: 10, 
+                      color: '#52c41a',
+                      fontSize: '14px'
+                    }}>
+                      {item.item_name || '-'}
+                    </div>
+                    
+                    {/* 设备成本 */}
+                    <div style={{ marginBottom: 10 }}>
+                      <h6 style={{ color: '#389e0d', marginBottom: 6, fontSize: '12px', fontWeight: 'bold' }}>💻 设备成本</h6>
+                      <div style={{ paddingLeft: 10, backgroundColor: '#fff', borderRadius: '3px', padding: '8px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '6px', fontSize: '11px' }}>
+                          <div><strong>设备类型:</strong> {item.machine_type || 'CP测试机'}</div>
+                          <div><strong>设备型号:</strong> {item.machine_model || item.item_name?.split('-')[1] || 'ETS-88'}</div>
+                          <div><strong>机时费率:</strong> 
+                            <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
+                              {item.hourly_rate || '¥0.00/小时'}
+                            </span>
+                          </div>
+                          <div><strong>UPH:</strong> {item.uph || '-'}</div>
+                          <div><strong>单颗报价:</strong> 
+                            <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
+                              ¥{(item.unit_price || 0).toFixed(4)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* 工序总成本 */}
+                    <div style={{ 
+                      marginTop: 10,
+                      paddingTop: 8,
+                      borderTop: '1px solid #52c41a',
+                      textAlign: 'right'
+                    }}>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        fontWeight: 'bold', 
+                        color: '#52c41a'
+                      }}>
+                        工序总成本: ¥{(item.unit_price || 0).toFixed(4)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ textAlign: 'center', marginTop: 10, fontSize: '11px', color: '#666', fontStyle: 'italic', backgroundColor: '#f0f0f0', padding: '6px', borderRadius: '3px' }}>
+                  💡 注：CP工序各道工序报价不可直接相加，请根据实际工艺流程选择
+                </div>
+              </div>
+            );
+          })()}
+          
+          {/* FT工序费用详情 */}
+          {(() => {
+            // 筛选出FT工序（优先使用item_name判断）
+            const ftProcesses = record.quoteDetails.filter(item => {
+              // 优先检查item_name
+              const name = item.item_name || '';
+              if (name.startsWith('FT-')) return true;
+              
+              // 其次检查item_description
+              const description = item.item_description || '';
+              if (description.includes('FT工序')) return true;
+              
+              // 最后检查machine_type
+              const machineType = item.machine_type || '';
+              if (machineType.includes('FT')) return true;
+              
+              return false;
+            });
+            
+            return ftProcesses && ftProcesses.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <h5 style={{ 
+                  color: '#1890ff', 
+                  marginBottom: 12,
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  borderBottom: '2px solid #1890ff',
+                  paddingBottom: '6px'
+                }}>📱 FT工序</h5>
+                {ftProcesses.map((item, index) => (
+                  <div key={index} style={{ 
+                    marginBottom: 15, 
+                    border: '1px solid #91d5ff', 
+                    borderRadius: '6px', 
+                    padding: '12px',
+                    backgroundColor: '#e6f7ff'
+                  }}>
+                    <div style={{ 
+                      fontWeight: 'bold', 
+                      marginBottom: 10, 
+                      color: '#1890ff',
+                      fontSize: '14px'
+                    }}>
+                      {item.item_name || '-'}
+                    </div>
+                    
+                    {/* 设备成本 */}
+                    <div style={{ marginBottom: 10 }}>
+                      <h6 style={{ color: '#096dd9', marginBottom: 6, fontSize: '12px', fontWeight: 'bold' }}>💻 设备成本</h6>
+                      <div style={{ paddingLeft: 10, backgroundColor: '#fff', borderRadius: '3px', padding: '8px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '6px', fontSize: '11px' }}>
+                          <div><strong>设备类型:</strong> {item.machine_type || 'FT测试机'}</div>
+                          <div><strong>设备型号:</strong> {item.machine_model || item.item_name?.split('-')[1] || 'ETS-88'}</div>
+                          <div><strong>机时费率:</strong> 
+                            <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
+                              {item.hourly_rate || '¥0.00/小时'}
+                            </span>
+                          </div>
+                          <div><strong>UPH:</strong> {item.uph || '-'}</div>
+                          <div><strong>单颗报价:</strong> 
+                            <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
+                              ¥{(item.unit_price || 0).toFixed(4)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* 工序总成本 */}
+                    <div style={{ 
+                      marginTop: 10,
+                      paddingTop: 8,
+                      borderTop: '1px solid #1890ff',
+                      textAlign: 'right'
+                    }}>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        fontWeight: 'bold', 
+                        color: '#1890ff'
+                      }}>
+                        工序总成本: ¥{(item.unit_price || 0).toFixed(4)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ textAlign: 'center', marginTop: 10, fontSize: '11px', color: '#666', fontStyle: 'italic', backgroundColor: '#f0f0f0', padding: '6px', borderRadius: '3px' }}>
+                  💡 注：FT工序各道工序报价不可直接相加，请根据实际工艺流程选择
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      );
+    }
+
+    // 调试信息：打印报价类型
+    console.log('QuoteManagement renderQuoteDetails - record.type:', record.type);
+    console.log('QuoteManagement renderQuoteDetails - record.quote_type:', record.quote_type);
+    console.log('QuoteManagement renderQuoteDetails - record:', record);
+    
     // 其他报价类型使用原有的表格显示
     const detailColumns = [
       {

@@ -210,6 +210,7 @@ export class QuoteApiService {
       'engineering': '工程机时报价',
       'mass_production': '量产机时报价',
       'process': '量产工序报价',
+      '工序报价': '量产工序报价',  // 兼容中文类型
       'comprehensive': '综合报价'
     };
     return typeMap[backendType] || backendType;
@@ -225,6 +226,7 @@ export class QuoteApiService {
       '工程机时报价': 'engineering',
       '量产机时报价': 'mass_production',
       '量产工序报价': 'process',
+      '工序报价': 'process',  // 兼容简称
       '综合报价': 'comprehensive'
     };
     return typeMap[frontendType] || frontendType;

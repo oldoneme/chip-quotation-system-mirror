@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Checkbox, Card, Button, Table, InputNumber } from 'antd';
+import { Checkbox, Card, Button, Table, InputNumber, Select } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
@@ -28,7 +28,8 @@ const ProcessQuote = () => {
     projectInfo: {
       projectName: '',
       chipPackage: '',
-      testType: ''
+      testType: '',
+      quoteUnit: '昆山芯信安'
     },
     selectedTypes: ['cp'], // 默认选择CP
     cpProcesses: [
@@ -366,11 +367,26 @@ const ProcessQuote = () => {
     }));
   };
 
+  // 生成临时报价编号
+  const generateTempQuoteNumber = (quoteUnit) => {
+    const unitMapping = {
+      "昆山芯信安": "KS",
+      "苏州芯昱安": "SZ", 
+      "上海芯睿安": "SH",
+      "珠海芯创安": "ZH"
+    };
+    const unitAbbr = unitMapping[quoteUnit] || "KS";
+    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,"");
+    const randomSeq = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
+    return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
+  };
+
   // 提交处理
   const handleSubmit = () => {
+    const tempQuoteNumber = generateTempQuoteNumber(formData.projectInfo.quoteUnit);
     const quoteData = {
       type: '工序报价',
-      number: `PR-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`,
+      number: tempQuoteNumber,
       date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       ...formData,
       cardTypes, // 传递板卡类型数据
@@ -415,6 +431,41 @@ const ProcessQuote = () => {
     const ceiledToFourDecimals = Math.ceil(number * 10000) / 10000;
     const formatted = ceiledToFourDecimals.toFixed(4);
     return `${symbol}${formatted}`;
+  };
+
+  // 计算单个工序的板卡成本（用于工序报价）
+  const calculateProcessCardCost = (process, cardTypes) => {
+    if (!process.machineData || !process.cardQuantities || !cardTypes) return 0;
+    
+    console.log('ProcessQuote calculateProcessCardCost - process:', process);
+    console.log('ProcessQuote calculateProcessCardCost - machine exchange_rate:', process.machineData?.exchange_rate);
+    
+    let cardCost = 0;
+    Object.entries(process.cardQuantities).forEach(([cardId, quantity]) => {
+      const card = cardTypes.find(c => c.id === parseInt(cardId));
+      if (card && quantity > 0) {
+        // 板卡单价除以10000，然后按照工程机时的逻辑进行币种转换
+        let adjustedPrice = (card.unit_price || 0) / 10000;
+        
+        // 根据报价币种和机器币种进行转换（参考工程机时报价逻辑）
+        if (formData.currency === 'USD') {
+          if (process.machineData.currency === 'CNY' || process.machineData.currency === 'RMB') {
+            // RMB机器转USD：除以报价汇率
+            adjustedPrice = adjustedPrice / formData.exchangeRate;
+          }
+          // USD机器：不做汇率转换，直接使用unit_price
+        } else {
+          // 报价币种是CNY，保持原逻辑
+          adjustedPrice = adjustedPrice * (process.machineData.exchange_rate || 1.0);
+        }
+        
+        const cardHourlyCost = adjustedPrice * (process.machineData.discount_rate || 1.0) * quantity;
+        const cardUnitCost = process.uph > 0 ? cardHourlyCost / process.uph : 0;
+        cardCost += cardUnitCost;
+      }
+    });
+    
+    return cardCost;
   };
 
   // 格式化机时价格显示（包含币种符号，根据币种精度）
@@ -710,6 +761,19 @@ const ProcessQuote = () => {
               <option value="mixed">混合测试</option>
             </select>
           </div>
+          <div className="form-group">
+            <label>报价单位 *</label>
+            <select
+              value={formData.projectInfo.quoteUnit}
+              onChange={(e) => handleInputChange('projectInfo', 'quoteUnit', e.target.value)}
+              required
+            >
+              <option value="昆山芯信安">昆山芯信安</option>
+              <option value="苏州芯昱安">苏州芯昱安</option>
+              <option value="上海芯睿安">上海芯睿安</option>
+              <option value="珠海芯创安">珠海芯创安</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -849,6 +913,198 @@ const ProcessQuote = () => {
           />
         </div>
       </div>
+
+      {/* 费用明细预览 */}
+      {(formData.selectedTypes.includes('cp') && formData.cpProcesses.some(p => p.machineData) || 
+        formData.selectedTypes.includes('ft') && formData.ftProcesses.some(p => p.machineData)) && (
+        <div className="quote-summary" style={{ marginBottom: 20 }}>
+          <h3>费用明细预览</h3>
+          
+          {/* CP工序费用详情 */}
+          {formData.selectedTypes.includes('cp') && formData.cpProcesses.some(p => p.machineData) && (
+            <div style={{ marginBottom: 30 }}>
+              <h5 style={{ 
+                color: '#52c41a', 
+                marginBottom: 15,
+                fontSize: '16px',
+                fontWeight: 'bold',
+                borderBottom: '2px solid #52c41a',
+                paddingBottom: '8px'
+              }}>🔬 CP工序</h5>
+              {formData.cpProcesses.filter(process => process.machineData).map((process, index) => (
+                <div key={index} style={{ 
+                  marginBottom: 20, 
+                  border: '1px solid #d9f7be', 
+                  borderRadius: '8px', 
+                  padding: '20px',
+                  backgroundColor: '#f6ffed'
+                }}>
+                  <div style={{ 
+                    fontWeight: 'bold', 
+                    marginBottom: 15, 
+                    color: '#52c41a',
+                    fontSize: '16px'
+                  }}>
+                    {process.name}
+                  </div>
+                  
+                  {/* 设备成本 */}
+                  <div style={{ marginBottom: 15 }}>
+                    <h6 style={{ color: '#389e0d', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>💻 设备成本</h6>
+                    <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                        <div><strong>设备类型:</strong> {process.machineData?.supplier?.machine_type?.name || 'CP测试机'}</div>
+                        <div><strong>设备型号:</strong> {process.machineData?.name || process.machine}</div>
+                        <div><strong>机时费率:</strong> 
+                          <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
+                            {(() => {
+                              const cardCost = calculateProcessCardCost(process, cardTypes);
+                              const hourlyRate = cardCost * (process.uph || 1);
+                              return formatPrice(hourlyRate);
+                            })()}
+                          </span>
+                        </div>
+                        <div><strong>UPH:</strong> {process.uph || 0}</div>
+                        <div><strong>单颗报价:</strong> 
+                          <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
+                            {formatUnitPrice(calculateProcessCardCost(process, cardTypes))}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* 人工成本 */}
+                  {(process.unitCost && process.unitCost > 0) ? (
+                    <div style={{ marginBottom: 10 }}>
+                      <h6 style={{ color: '#389e0d', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>👥 人工成本</h6>
+                      <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                          <span>人工成本:</span>
+                          <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
+                            {formatUnitPrice(process.unitCost)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  
+                  {/* 总成本汇总 */}
+                  <div style={{ 
+                    marginTop: 15,
+                    paddingTop: 12,
+                    borderTop: '2px solid #52c41a',
+                    textAlign: 'right'
+                  }}>
+                    <div style={{ 
+                      fontSize: '16px', 
+                      fontWeight: 'bold', 
+                      color: '#52c41a'
+                    }}>
+                      工序总成本: {formatUnitPrice((process.unitCost || 0) + calculateProcessCardCost(process, cardTypes))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div style={{ textAlign: 'center', marginTop: 15, fontSize: '13px', color: '#666', fontStyle: 'italic', backgroundColor: '#f0f0f0', padding: '8px', borderRadius: '4px' }}>
+                💡 注：CP工序各道工序报价不可直接相加，请根据实际工艺流程选择
+              </div>
+            </div>
+          )}
+          
+          {/* FT工序费用详情 */}
+          {formData.selectedTypes.includes('ft') && formData.ftProcesses.some(p => p.machineData) && (
+            <div style={{ marginBottom: 30 }}>
+              <h5 style={{ 
+                color: '#1890ff', 
+                marginBottom: 15,
+                fontSize: '16px',
+                fontWeight: 'bold',
+                borderBottom: '2px solid #1890ff',
+                paddingBottom: '8px'
+              }}>📱 FT工序</h5>
+              {formData.ftProcesses.filter(process => process.machineData).map((process, index) => (
+                <div key={index} style={{ 
+                  marginBottom: 20, 
+                  border: '1px solid #91d5ff', 
+                  borderRadius: '8px', 
+                  padding: '20px',
+                  backgroundColor: '#e6f7ff'
+                }}>
+                  <div style={{ 
+                    fontWeight: 'bold', 
+                    marginBottom: 15, 
+                    color: '#1890ff',
+                    fontSize: '16px'
+                  }}>
+                    {process.name}
+                  </div>
+                  
+                  {/* 设备成本 */}
+                  <div style={{ marginBottom: 15 }}>
+                    <h6 style={{ color: '#096dd9', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>💻 设备成本</h6>
+                    <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                        <div><strong>设备类型:</strong> {process.machineData?.supplier?.machine_type?.name || 'FT测试机'}</div>
+                        <div><strong>设备型号:</strong> {process.machineData?.name || process.machine}</div>
+                        <div><strong>机时费率:</strong> 
+                          <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
+                            {(() => {
+                              const cardCost = calculateProcessCardCost(process, cardTypes);
+                              const hourlyRate = cardCost * (process.uph || 1);
+                              return formatPrice(hourlyRate);
+                            })()}
+                          </span>
+                        </div>
+                        <div><strong>UPH:</strong> {process.uph || 0}</div>
+                        <div><strong>单颗报价:</strong> 
+                          <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
+                            {formatUnitPrice(calculateProcessCardCost(process, cardTypes))}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* 人工成本 */}
+                  {(process.unitCost && process.unitCost > 0) ? (
+                    <div style={{ marginBottom: 10 }}>
+                      <h6 style={{ color: '#096dd9', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>👥 人工成本</h6>
+                      <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                          <span>人工成本:</span>
+                          <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
+                            {formatUnitPrice(process.unitCost)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  
+                  {/* 总成本汇总 */}
+                  <div style={{ 
+                    marginTop: 15,
+                    paddingTop: 12,
+                    borderTop: '2px solid #1890ff',
+                    textAlign: 'right'
+                  }}>
+                    <div style={{ 
+                      fontSize: '16px', 
+                      fontWeight: 'bold', 
+                      color: '#1890ff'
+                    }}>
+                      工序总成本: {formatUnitPrice((process.unitCost || 0) + calculateProcessCardCost(process, cardTypes))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div style={{ textAlign: 'center', marginTop: 15, fontSize: '13px', color: '#666', fontStyle: 'italic', backgroundColor: '#f0f0f0', padding: '8px', borderRadius: '4px' }}>
+                💡 注：FT工序各道工序报价不可直接相加，请根据实际工艺流程选择
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 报价说明 */}
       <div className="quote-summary">
