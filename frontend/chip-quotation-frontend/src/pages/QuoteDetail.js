@@ -58,6 +58,7 @@ const QuoteDetail = () => {
         items: quoteData.items?.map(item => ({
           key: item.id?.toString(),
           itemName: item.item_name,
+          itemDescription: item.item_description,
           machineType: item.machine_type,
           supplier: item.supplier,
           machine: item.machine_model,
@@ -496,6 +497,181 @@ const QuoteDetail = () => {
                         fontSize: '12px'
                       }}>
                         <span>{item.itemName || item.machineModel}</span>
+                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                          ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        ) : quote.type === '量产机时报价' ? (
+          <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
+            <h4 style={{ marginBottom: '16px' }}>报价明细</h4>
+            
+            {/* FT测试设备 */}
+            {(() => {
+              const ftItems = quote.items.filter(item => 
+                item.itemDescription && item.itemDescription.includes('FT')
+              );
+              
+              return ftItems && ftItems.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <h5>📱 FT测试设备</h5>
+                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '2fr 2fr 2fr', 
+                      gap: '10px',
+                      padding: '8px 12px',
+                      backgroundColor: '#fafafa',
+                      borderBottom: '1px solid #d9d9d9',
+                      fontWeight: 'bold',
+                      fontSize: '12px'
+                    }}>
+                      <span>设备类型</span>
+                      <span>设备型号</span>
+                      <span>小时费率</span>
+                    </div>
+                    {ftItems.map((item, index) => (
+                      <div key={index} style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '2fr 2fr 2fr', 
+                        gap: '10px',
+                        padding: '8px 12px',
+                        borderBottom: index < ftItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        fontSize: '12px'
+                      }}>
+                        <span>{item.machineType || '-'}</span>
+                        <span>{item.machine || item.itemName || '-'}</span>
+                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                          ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                        </span>
+                      </div>
+                    ))}
+                    {/* FT小计 */}
+                    <div style={{ 
+                      padding: '8px 12px',
+                      backgroundColor: '#f0f9ff',
+                      borderTop: '1px solid #d9d9d9',
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 2fr 2fr',
+                      gap: '10px',
+                      fontWeight: 'bold',
+                      fontSize: '12px'
+                    }}>
+                      <span></span>
+                      <span>FT设备小计:</span>
+                      <span style={{ color: '#1890ff' }}>
+                        ¥{ftItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            
+            {/* CP测试设备 */}
+            {(() => {
+              const cpItems = quote.items.filter(item => 
+                item.itemDescription && item.itemDescription.includes('CP')
+              );
+              
+              return cpItems && cpItems.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <h5>🔬 CP测试设备</h5>
+                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '2fr 2fr 2fr', 
+                      gap: '10px',
+                      padding: '8px 12px',
+                      backgroundColor: '#fafafa',
+                      borderBottom: '1px solid #d9d9d9',
+                      fontWeight: 'bold',
+                      fontSize: '12px'
+                    }}>
+                      <span>设备类型</span>
+                      <span>设备型号</span>
+                      <span>小时费率</span>
+                    </div>
+                    {cpItems.map((item, index) => (
+                      <div key={index} style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '2fr 2fr 2fr', 
+                        gap: '10px',
+                        padding: '8px 12px',
+                        borderBottom: index < cpItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        fontSize: '12px'
+                      }}>
+                        <span>{item.machineType || '-'}</span>
+                        <span>{item.machine || item.itemName || '-'}</span>
+                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                          ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                        </span>
+                      </div>
+                    ))}
+                    {/* CP小计 */}
+                    <div style={{ 
+                      padding: '8px 12px',
+                      backgroundColor: '#f0f9ff',
+                      borderTop: '1px solid #d9d9d9',
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 2fr 2fr',
+                      gap: '10px',
+                      fontWeight: 'bold',
+                      fontSize: '12px'
+                    }}>
+                      <span></span>
+                      <span>CP设备小计:</span>
+                      <span style={{ color: '#1890ff' }}>
+                        ¥{cpItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            
+            {/* 辅助设备 */}
+            {(() => {
+              const auxItems = quote.items.filter(item => 
+                item.machineType === '辅助设备' || 
+                (!item.itemName?.includes('FT') && !item.itemName?.includes('CP') && 
+                 item.machineType && item.machineType !== '测试机' && item.machineType !== '分选机' && item.machineType !== '探针台')
+              );
+              
+              return auxItems && auxItems.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <h5>🔧 辅助设备</h5>
+                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '2fr 2fr 2fr', 
+                      gap: '10px',
+                      padding: '8px 12px',
+                      backgroundColor: '#fafafa',
+                      borderBottom: '1px solid #d9d9d9',
+                      fontWeight: 'bold',
+                      fontSize: '12px'
+                    }}>
+                      <span>设备类型</span>
+                      <span>设备型号</span>
+                      <span>小时费率</span>
+                    </div>
+                    {auxItems.map((item, index) => (
+                      <div key={index} style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '2fr 2fr 2fr', 
+                        gap: '10px',
+                        padding: '8px 12px',
+                        borderBottom: index < auxItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        fontSize: '12px'
+                      }}>
+                        <span>{item.machineType || '-'}</span>
+                        <span>{item.machine || item.itemName || '-'}</span>
                         <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
                           ¥{(item.unitPrice || 0).toFixed(2)}/小时
                         </span>

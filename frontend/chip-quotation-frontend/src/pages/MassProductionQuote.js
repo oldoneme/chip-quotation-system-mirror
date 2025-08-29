@@ -59,7 +59,8 @@ const MassProductionQuote = () => {
     projectName: '',
     chipPackage: '',
     testType: 'mass_production',
-    urgency: 'normal'
+    urgency: 'normal',
+    quoteUnit: '昆山芯信安'  // 新增报价单位字段
   });
   
   // FT数据状态
@@ -552,6 +553,20 @@ const MassProductionQuote = () => {
   
   const auxDeviceFee = calculateAuxDeviceFee();
 
+  // 生成临时报价单号函数
+  const generateTempQuoteNumber = (quoteUnit) => {
+    const unitMapping = {
+      "昆山芯信安": "KS",
+      "苏州芯昱安": "SZ",
+      "上海芯睿安": "SH",
+      "珠海芯创安": "ZH"
+    };
+    const unitAbbr = unitMapping[quoteUnit] || "KS";
+    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,"");
+    const randomSeq = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
+    return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
+  };
+
   const handleNextStep = () => {
     const nextStepValue = currentStep + 1;
     
@@ -572,9 +587,239 @@ const MassProductionQuote = () => {
       // Save current step data and navigate to next step
       setCurrentStep(nextStepValue);
     } else {
+      // 生成量产报价项目
+      const generateMassProductionQuoteItems = () => {
+        const items = [];
+        
+        // 1. FT测试设备
+        if (selectedTypes.includes('ft')) {
+          // FT测试机（只有板卡费用）
+          if (ftData.testMachine && ftData.testMachineCards.length > 0) {
+            let testMachineFee = 0;
+            
+            // 计算测试机板卡费用
+            ftData.testMachineCards.forEach(card => {
+              if (card && card.quantity > 0) {
+                let adjustedPrice = card.unit_price / 10000;
+                
+                // 根据报价币种和机器币种进行转换
+                if (quoteCurrency === 'USD') {
+                  if (ftData.testMachine.currency === 'CNY' || ftData.testMachine.currency === 'RMB') {
+                    adjustedPrice = adjustedPrice / quoteExchangeRate;
+                  }
+                } else {
+                  adjustedPrice = adjustedPrice * (ftData.testMachine.exchange_rate || 1);
+                }
+                
+                testMachineFee += adjustedPrice * (ftData.testMachine.discount_rate || 1) * card.quantity;
+              }
+            });
+            
+            if (testMachineFee > 0) {
+              items.push({
+                item_name: ftData.testMachine.name || 'FT测试机',
+                item_description: `FT测试机 - ${typeof ftData.testMachine.supplier === 'object' 
+                  ? ftData.testMachine.supplier.name || '' 
+                  : ftData.testMachine.supplier || ''}`,
+                machine_type: '测试机',
+                supplier: typeof ftData.testMachine.supplier === 'object' 
+                  ? ftData.testMachine.supplier.name || '' 
+                  : ftData.testMachine.supplier || '',
+                machine_model: ftData.testMachine.name || '',
+                quantity: 1,
+                unit: '小时',
+                unit_price: testMachineFee,
+                total_price: testMachineFee,
+                category_type: 'machine'
+              });
+            }
+          }
+          
+          // FT分选机（只有板卡费用）
+          if (ftData.handler && ftData.handlerCards.length > 0) {
+            let handlerFee = 0;
+            
+            // 计算分选机板卡费用
+            ftData.handlerCards.forEach(card => {
+              if (card && card.quantity > 0) {
+                let adjustedPrice = card.unit_price / 10000;
+                
+                // 根据报价币种和机器币种进行转换
+                if (quoteCurrency === 'USD') {
+                  if (ftData.handler.currency === 'CNY' || ftData.handler.currency === 'RMB') {
+                    adjustedPrice = adjustedPrice / quoteExchangeRate;
+                  }
+                } else {
+                  adjustedPrice = adjustedPrice * (ftData.handler.exchange_rate || 1);
+                }
+                
+                handlerFee += adjustedPrice * (ftData.handler.discount_rate || 1) * card.quantity;
+              }
+            });
+            
+            if (handlerFee > 0) {
+              items.push({
+                item_name: ftData.handler.name || 'FT分选机',
+                item_description: `FT分选机 - ${typeof ftData.handler.supplier === 'object' 
+                  ? ftData.handler.supplier.name || '' 
+                  : ftData.handler.supplier || ''}`,
+                machine_type: '分选机',
+                supplier: typeof ftData.handler.supplier === 'object' 
+                  ? ftData.handler.supplier.name || '' 
+                  : ftData.handler.supplier || '',
+                machine_model: ftData.handler.name || '',
+                quantity: 1,
+                unit: '小时',
+                unit_price: handlerFee,
+                total_price: handlerFee,
+                category_type: 'machine'
+              });
+            }
+          }
+        }
+        
+        // 2. CP测试设备
+        if (selectedTypes.includes('cp')) {
+          // CP测试机（只有板卡费用）
+          if (cpData.testMachine && cpData.testMachineCards.length > 0) {
+            let testMachineFee = 0;
+            
+            // 计算测试机板卡费用
+            cpData.testMachineCards.forEach(card => {
+              if (card && card.quantity > 0) {
+                let adjustedPrice = card.unit_price / 10000;
+                
+                // 根据报价币种和机器币种进行转换
+                if (quoteCurrency === 'USD') {
+                  if (cpData.testMachine.currency === 'CNY' || cpData.testMachine.currency === 'RMB') {
+                    adjustedPrice = adjustedPrice / quoteExchangeRate;
+                  }
+                } else {
+                  adjustedPrice = adjustedPrice * (cpData.testMachine.exchange_rate || 1);
+                }
+                
+                testMachineFee += adjustedPrice * (cpData.testMachine.discount_rate || 1) * card.quantity;
+              }
+            });
+            
+            if (testMachineFee > 0) {
+              items.push({
+                item_name: cpData.testMachine.name || 'CP测试机',
+                item_description: `CP测试机 - ${typeof cpData.testMachine.supplier === 'object' 
+                  ? cpData.testMachine.supplier.name || '' 
+                  : cpData.testMachine.supplier || ''}`,
+                machine_type: '测试机',
+                supplier: typeof cpData.testMachine.supplier === 'object' 
+                  ? cpData.testMachine.supplier.name || '' 
+                  : cpData.testMachine.supplier || '',
+                machine_model: cpData.testMachine.name || '',
+                quantity: 1,
+                unit: '小时',
+                unit_price: testMachineFee,
+                total_price: testMachineFee,
+                category_type: 'machine'
+              });
+            }
+          }
+          
+          // CP探针台（只有板卡费用）
+          if (cpData.prober && cpData.proberCards.length > 0) {
+            let proberFee = 0;
+            
+            // 计算探针台板卡费用
+            cpData.proberCards.forEach(card => {
+              if (card && card.quantity > 0) {
+                let adjustedPrice = card.unit_price / 10000;
+                
+                // 根据报价币种和机器币种进行转换
+                if (quoteCurrency === 'USD') {
+                  if (cpData.prober.currency === 'CNY' || cpData.prober.currency === 'RMB') {
+                    adjustedPrice = adjustedPrice / quoteExchangeRate;
+                  }
+                } else {
+                  adjustedPrice = adjustedPrice * (cpData.prober.exchange_rate || 1);
+                }
+                
+                proberFee += adjustedPrice * (cpData.prober.discount_rate || 1) * card.quantity;
+              }
+            });
+            
+            if (proberFee > 0) {
+              items.push({
+                item_name: cpData.prober.name || 'CP探针台',
+                item_description: `CP探针台 - ${typeof cpData.prober.supplier === 'object' 
+                  ? cpData.prober.supplier.name || '' 
+                  : cpData.prober.supplier || ''}`,
+                machine_type: '探针台',
+                supplier: typeof cpData.prober.supplier === 'object' 
+                  ? cpData.prober.supplier.name || '' 
+                  : cpData.prober.supplier || '',
+                machine_model: cpData.prober.name || '',
+                quantity: 1,
+                unit: '小时',
+                unit_price: proberFee,
+                total_price: proberFee,
+                category_type: 'machine'
+              });
+            }
+          }
+        }
+        
+        // 3. 辅助设备费用
+        selectedAuxDevices.forEach(device => {
+          if (device && device.hourlyFee > 0) {
+            items.push({
+              item_name: device.name || '辅助设备',
+              item_description: `辅助设备 - ${device.description || ''}`,
+              machine_type: '辅助设备',
+              supplier: device.supplier || '',
+              machine_model: device.model || device.name || '',
+              quantity: 1,
+              unit: '小时',
+              unit_price: device.hourlyFee,
+              total_price: device.hourlyFee,
+              category_type: 'auxiliary'
+            });
+          }
+        });
+        
+        return items;
+      };
+      
+      // 计算总费用
+      const totalAmount = ftHourlyFee + cpHourlyFee + auxDeviceFee;
+      
+      // 准备数据库创建数据
+      const quoteCreateData = {
+        title: `${projectInfo.projectName || '量产机时报价'} - ${customerInfo.companyName}`,
+        quote_type: 'mass_production',
+        customer_name: customerInfo.companyName,
+        customer_contact: customerInfo.contactPerson,
+        customer_phone: customerInfo.phone,
+        customer_email: customerInfo.email,
+        quote_unit: projectInfo.quoteUnit,
+        currency: quoteCurrency,
+        subtotal: totalAmount,
+        total_amount: totalAmount,
+        description: `项目：${projectInfo.projectName}，芯片封装：${projectInfo.chipPackage}，测试类型：${selectedTypes.join('、')}`,
+        notes: `汇率：${quoteExchangeRate}，紧急程度：${projectInfo.urgency === 'urgent' ? '紧急' : '正常'}`,
+        items: generateMassProductionQuoteItems()
+      };
+      
       // 完成报价，将数据传递到结果页面
       const quoteData = {
         type: '量产报价',
+        number: generateTempQuoteNumber(projectInfo.quoteUnit),  // 使用新的报价单号生成函数
+        date: new Date().toLocaleString('zh-CN', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric', 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit' 
+        }),
+        customerInfo,  // 添加客户信息
+        projectInfo,   // 添加项目信息
         selectedTypes,
         ftData,
         cpData,
@@ -584,7 +829,9 @@ const MassProductionQuote = () => {
         cpHourlyFee,
         auxDeviceFee,
         quoteCurrency, // 添加报价币种
-        quoteExchangeRate // 添加报价汇率
+        quoteExchangeRate, // 添加报价汇率
+        generatedAt: new Date().toISOString(),
+        quoteCreateData // 添加数据库创建数据
       };
       
       // 通过location.state传递数据到结果页面
@@ -993,6 +1240,28 @@ const MassProductionQuote = () => {
                 >
                   <option value="normal">正常</option>
                   <option value="urgent">紧急</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  报价单位 <span style={{ color: 'red' }}>*</span>
+                </label>
+                <select
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px 12px', 
+                    border: '1px solid #d9d9d9', 
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    backgroundColor: '#fff'
+                  }}
+                  value={projectInfo.quoteUnit}
+                  onChange={(e) => setProjectInfo({...projectInfo, quoteUnit: e.target.value})}
+                >
+                  <option value="昆山芯信安">昆山芯信安</option>
+                  <option value="苏州芯昱安">苏州芯昱安</option>
+                  <option value="上海芯睿安">上海芯睿安</option>
+                  <option value="珠海芯创安">珠海芯创安</option>
                 </select>
               </div>
             </div>

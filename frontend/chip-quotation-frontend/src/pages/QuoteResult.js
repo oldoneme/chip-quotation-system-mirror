@@ -1089,16 +1089,169 @@ const QuoteResult = () => {
           {quoteData && quoteData.type === '量产报价' && (
             <>
               <div style={{ padding: '20px 0' }}>
+                {/* FT测试费用明细 */}
                 {quoteData.selectedTypes && quoteData.selectedTypes.includes('ft') && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span>FT小时费:</span>
-                    <span>{formatHourlyPrice(quoteData.ftHourlyFee || 0)}</span>
+                  <div style={{ marginBottom: 20 }}>
+                    <h4 style={{ marginBottom: 10 }}>📱 FT测试费用明细</h4>
+                    <div style={{ paddingLeft: 20 }}>
+                      {/* FT测试机 */}
+                      {quoteData.ftData?.testMachine && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ color: '#666' }}>
+                            测试机 - {quoteData.ftData.testMachine.name || 'FT测试机'}
+                          </span>
+                          <span>
+                            {(() => {
+                              // 计算FT测试机费用
+                              let testMachineFee = 0;
+                              if (quoteData.ftData.testMachineCards) {
+                                quoteData.ftData.testMachineCards.forEach(card => {
+                                  if (card && card.quantity > 0) {
+                                    let adjustedPrice = card.unit_price / 10000;
+                                    if (quoteData.quoteCurrency === 'USD') {
+                                      if (quoteData.ftData.testMachine.currency === 'CNY' || quoteData.ftData.testMachine.currency === 'RMB') {
+                                        adjustedPrice = adjustedPrice / quoteData.quoteExchangeRate;
+                                      }
+                                    } else {
+                                      adjustedPrice = adjustedPrice * (quoteData.ftData.testMachine.exchange_rate || 1);
+                                    }
+                                    testMachineFee += adjustedPrice * (quoteData.ftData.testMachine.discount_rate || 1) * card.quantity;
+                                  }
+                                });
+                              }
+                              return formatHourlyPrice(testMachineFee);
+                            })()}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* FT分选机 */}
+                      {quoteData.ftData?.handler && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ color: '#666' }}>
+                            分选机 - {quoteData.ftData.handler.name || 'FT分选机'}
+                          </span>
+                          <span>
+                            {(() => {
+                              // 计算FT分选机费用
+                              let handlerFee = 0;
+                              if (quoteData.ftData.handlerCards) {
+                                quoteData.ftData.handlerCards.forEach(card => {
+                                  if (card && card.quantity > 0) {
+                                    let adjustedPrice = card.unit_price / 10000;
+                                    if (quoteData.quoteCurrency === 'USD') {
+                                      if (quoteData.ftData.handler.currency === 'CNY' || quoteData.ftData.handler.currency === 'RMB') {
+                                        adjustedPrice = adjustedPrice / quoteData.quoteExchangeRate;
+                                      }
+                                    } else {
+                                      adjustedPrice = adjustedPrice * (quoteData.ftData.handler.exchange_rate || 1);
+                                    }
+                                    handlerFee += adjustedPrice * (quoteData.ftData.handler.discount_rate || 1) * card.quantity;
+                                  }
+                                });
+                              }
+                              return formatHourlyPrice(handlerFee);
+                            })()}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* FT小时费总计 */}
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        marginTop: 10,
+                        paddingTop: 10,
+                        borderTop: '1px solid #f0f0f0',
+                        fontWeight: 'bold'
+                      }}>
+                        <span>FT小时费合计:</span>
+                        <span style={{ color: '#1890ff' }}>{formatHourlyPrice(quoteData.ftHourlyFee || 0)}</span>
+                      </div>
+                    </div>
                   </div>
                 )}
+                
+                {/* CP测试费用明细 */}
                 {quoteData.selectedTypes && quoteData.selectedTypes.includes('cp') && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span>CP小时费:</span>
-                    <span>{formatHourlyPrice(quoteData.cpHourlyFee || 0)}</span>
+                  <div style={{ marginBottom: 20 }}>
+                    <h4 style={{ marginBottom: 10 }}>🔬 CP测试费用明细</h4>
+                    <div style={{ paddingLeft: 20 }}>
+                      {/* CP测试机 */}
+                      {quoteData.cpData?.testMachine && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ color: '#666' }}>
+                            测试机 - {quoteData.cpData.testMachine.name || 'CP测试机'}
+                          </span>
+                          <span>
+                            {(() => {
+                              // 计算CP测试机费用
+                              let testMachineFee = 0;
+                              if (quoteData.cpData.testMachineCards) {
+                                quoteData.cpData.testMachineCards.forEach(card => {
+                                  if (card && card.quantity > 0) {
+                                    let adjustedPrice = card.unit_price / 10000;
+                                    if (quoteData.quoteCurrency === 'USD') {
+                                      if (quoteData.cpData.testMachine.currency === 'CNY' || quoteData.cpData.testMachine.currency === 'RMB') {
+                                        adjustedPrice = adjustedPrice / quoteData.quoteExchangeRate;
+                                      }
+                                    } else {
+                                      adjustedPrice = adjustedPrice * (quoteData.cpData.testMachine.exchange_rate || 1);
+                                    }
+                                    testMachineFee += adjustedPrice * (quoteData.cpData.testMachine.discount_rate || 1) * card.quantity;
+                                  }
+                                });
+                              }
+                              return formatHourlyPrice(testMachineFee);
+                            })()}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* CP探针台 */}
+                      {quoteData.cpData?.prober && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ color: '#666' }}>
+                            探针台 - {quoteData.cpData.prober.name || 'CP探针台'}
+                          </span>
+                          <span>
+                            {(() => {
+                              // 计算CP探针台费用
+                              let proberFee = 0;
+                              if (quoteData.cpData.proberCards) {
+                                quoteData.cpData.proberCards.forEach(card => {
+                                  if (card && card.quantity > 0) {
+                                    let adjustedPrice = card.unit_price / 10000;
+                                    if (quoteData.quoteCurrency === 'USD') {
+                                      if (quoteData.cpData.prober.currency === 'CNY' || quoteData.cpData.prober.currency === 'RMB') {
+                                        adjustedPrice = adjustedPrice / quoteData.quoteExchangeRate;
+                                      }
+                                    } else {
+                                      adjustedPrice = adjustedPrice * (quoteData.cpData.prober.exchange_rate || 1);
+                                    }
+                                    proberFee += adjustedPrice * (quoteData.cpData.prober.discount_rate || 1) * card.quantity;
+                                  }
+                                });
+                              }
+                              return formatHourlyPrice(proberFee);
+                            })()}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* CP小时费总计 */}
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        marginTop: 10,
+                        paddingTop: 10,
+                        borderTop: '1px solid #f0f0f0',
+                        fontWeight: 'bold'
+                      }}>
+                        <span>CP小时费合计:</span>
+                        <span style={{ color: '#1890ff' }}>{formatHourlyPrice(quoteData.cpHourlyFee || 0)}</span>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {quoteData.selectedAuxDevices && quoteData.selectedAuxDevices.length > 0 && (
