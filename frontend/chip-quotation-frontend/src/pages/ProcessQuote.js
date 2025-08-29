@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Checkbox, Card, Button, Table, InputNumber, Select } from 'antd';
+import { Checkbox, Card, Button, Table, InputNumber } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
-import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
+import { ceilByCurrency, formatQuotePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
 
@@ -36,9 +36,13 @@ const ProcessQuote = () => {
       {
         id: 1,
         name: 'CP1测试',
-        machine: '',
-        machineData: null,
-        cardQuantities: {},
+        // CP工序包含两种设备：测试机和探针台
+        testMachine: '',
+        testMachineData: null,
+        testMachineCardQuantities: {},
+        prober: '',
+        proberData: null,
+        proberCardQuantities: {},
         uph: 1000,
         unitCost: 0
       }
@@ -47,9 +51,13 @@ const ProcessQuote = () => {
       {
         id: 1,
         name: 'FT1测试',
-        machine: '',
-        machineData: null,
-        cardQuantities: {},
+        // FT工序包含两种设备：测试机和分选机
+        testMachine: '',
+        testMachineData: null,
+        testMachineCardQuantities: {},
+        handler: '',
+        handlerData: null,
+        handlerCardQuantities: {},
         uph: 1000,
         unitCost: 0
       }
@@ -73,22 +81,6 @@ const ProcessQuote = () => {
     'FT1测试', 'FT2测试', 'FT3测试', '烘烤', '编带', 'AOI检测', '包装', '老化测试'
   ];
 
-  // 设备选项
-  const machineOptions = {
-    'CP1测试': ['Advantest V93K', 'Teradyne UltraFlex', 'Cohu Delta'],
-    'CP2测试': ['Advantest V93K', 'Teradyne UltraFlex', 'Cohu Delta'],
-    'CP3测试': ['Advantest V93K', 'Teradyne UltraFlex', 'Cohu Delta'],
-    'FT1测试': ['Advantest T2000', 'Teradyne Magnum', 'Cohu Eagle'],
-    'FT2测试': ['Advantest T2000', 'Teradyne Magnum', 'Cohu Eagle'],
-    'FT3测试': ['Advantest T2000', 'Teradyne Magnum', 'Cohu Eagle'],
-    '烘烤': ['Blue M Oven', 'Despatch Oven', 'Heraeus Oven'],
-    '编带': ['Multitest MT8590', 'Advantest M6541', 'Delta S3000'],
-    'AOI检测': ['Orbotech VT-9300', 'Koh Young Zenith', 'Mirtec MV-7'],
-    'X-Ray检测': ['Dage XD7600NT', 'Nordson DAGE 4000', 'Yxlon Y.Cougar'],
-    '外观检查': ['人工检测', 'Cognex VisionPro', 'Keyence CV-X'],
-    '包装': ['ASM SIPLACE', 'Universal GSM2', 'Assembleon Topaz'],
-    '老化测试': ['Delta Design 9023', 'Thermonics T-2420', 'Temptronic ThermoStream']
-  };
 
   const currencies = [
     { value: 'CNY', label: '人民币 (CNY)', symbol: '￥' },
@@ -161,9 +153,22 @@ const ProcessQuote = () => {
     const newProcess = {
       id: formData[processKey].length + 1,
       name: type === 'cp' ? 'CP1测试' : 'FT1测试',
-      machine: '',
-      machineData: null,
-      cardQuantities: {},
+      // 根据类型设置双设备结构
+      ...(type === 'cp' ? {
+        testMachine: '',
+        testMachineData: null,
+        testMachineCardQuantities: {},
+        prober: '',
+        proberData: null,
+        proberCardQuantities: {}
+      } : {
+        testMachine: '',
+        testMachineData: null,
+        testMachineCardQuantities: {},
+        handler: '',
+        handlerData: null,
+        handlerCardQuantities: {}
+      }),
       uph: 1000,
       unitCost: 0
     };
@@ -185,7 +190,7 @@ const ProcessQuote = () => {
     }
   };
 
-  // 更新工序
+  // 更新工序 - 支持双设备结构
   const updateProcess = (type, processId, field, value) => {
     console.log('updateProcess called:', { type, processId, field, value });
     const processKey = type === 'cp' ? 'cpProcesses' : 'ftProcesses';
@@ -195,23 +200,44 @@ const ProcessQuote = () => {
         if (process.id === processId) {
           let updatedProcess = { ...process, [field]: value };
           
-          // 如果改变了工序名称，重置机器选择
+          // 如果改变了工序名称，重置所有设备选择
           if (field === 'name') {
-            updatedProcess.machine = '';
-            updatedProcess.machineData = null;
-            updatedProcess.cardQuantities = {};
+            if (type === 'cp') {
+              updatedProcess.testMachine = '';
+              updatedProcess.testMachineData = null;
+              updatedProcess.testMachineCardQuantities = {};
+              updatedProcess.prober = '';
+              updatedProcess.proberData = null;
+              updatedProcess.proberCardQuantities = {};
+            } else {
+              updatedProcess.testMachine = '';
+              updatedProcess.testMachineData = null;
+              updatedProcess.testMachineCardQuantities = {};
+              updatedProcess.handler = '';
+              updatedProcess.handlerData = null;
+              updatedProcess.handlerCardQuantities = {};
+            }
           }
           
-          // 如果改变了机器选择，更新机器数据并重置板卡选择
-          if (field === 'machine') {
+          // 处理测试机选择
+          if (field === 'testMachine') {
             const selectedMachine = machines.find(m => m.name === value);
-            updatedProcess.machineData = selectedMachine;
-            updatedProcess.cardQuantities = {};
+            updatedProcess.testMachineData = selectedMachine;
+            updatedProcess.testMachineCardQuantities = {};
+          }
+          
+          // 处理第二种设备选择 (CP: prober, FT: handler)
+          if ((type === 'cp' && field === 'prober') || (type === 'ft' && field === 'handler')) {
+            const selectedMachine = machines.find(m => m.name === value);
+            const dataField = type === 'cp' ? 'proberData' : 'handlerData';
+            const cardField = type === 'cp' ? 'proberCardQuantities' : 'handlerCardQuantities';
+            updatedProcess[dataField] = selectedMachine;
+            updatedProcess[cardField] = {};
           }
           
           // 人工成本设置为0，不进行自动计算
           if (field === 'uph') {
-            updatedProcess.unitCost = 0; // 人工成本设为0
+            updatedProcess.unitCost = 0;
           }
           
           return updatedProcess;
@@ -222,8 +248,10 @@ const ProcessQuote = () => {
   };
 
   // 处理板卡选择变化
-  const handleCardSelection = (type, processId, selectedRowKeys, selectedRows) => {
+  const handleCardSelection = (type, processId, selectedRowKeys, selectedRows, deviceName = 'testMachine') => {
     const processKey = type === 'cp' ? 'cpProcesses' : 'ftProcesses';
+    const cardQuantitiesKey = `${deviceName}CardQuantities`;
+    
     setFormData(prev => ({
       ...prev,
       [processKey]: prev[processKey].map(process => {
@@ -231,11 +259,11 @@ const ProcessQuote = () => {
           const newCardQuantities = {};
           selectedRows.forEach(card => {
             // 保持已有的数量，如果没有则设为1
-            newCardQuantities[card.id] = process.cardQuantities[card.id] || 1;
+            newCardQuantities[card.id] = process[cardQuantitiesKey]?.[card.id] || 1;
           });
           return {
             ...process,
-            cardQuantities: newCardQuantities
+            [cardQuantitiesKey]: newCardQuantities
           };
         }
         return process;
@@ -249,13 +277,15 @@ const ProcessQuote = () => {
   };
 
   // 处理板卡数量变化
-  const handleCardQuantityChange = (type, processId, cardId, quantity) => {
+  const handleCardQuantityChange = (type, processId, cardId, quantity, deviceName = 'testMachine') => {
     const processKey = type === 'cp' ? 'cpProcesses' : 'ftProcesses';
+    const cardQuantitiesKey = `${deviceName}CardQuantities`;
+    
     setFormData(prev => ({
       ...prev,
       [processKey]: prev[processKey].map(process => {
         if (process.id === processId) {
-          const updatedQuantities = { ...process.cardQuantities };
+          const updatedQuantities = { ...process[cardQuantitiesKey] };
           if (quantity > 0) {
             updatedQuantities[cardId] = quantity;
           } else {
@@ -263,7 +293,7 @@ const ProcessQuote = () => {
           }
           return {
             ...process,
-            cardQuantities: updatedQuantities
+            [cardQuantitiesKey]: updatedQuantities
           };
         }
         return process;
@@ -276,21 +306,30 @@ const ProcessQuote = () => {
     }, 0);
   };
 
-  // 计算单个工序的机器费用（包括板卡成本）
-  const calculateProcessMachineCost = (process) => {
-    if (!process.machineData || !process.cardQuantities) {
-      console.log('calculateProcessMachineCost: No machine data or card quantities', { machineData: process.machineData, cardQuantities: process.cardQuantities });
+  // 计算单个设备的机器费用（包括板卡成本）- 支持双设备
+  const calculateProcessMachineCostForDevice = (process, deviceName) => {
+    const machineDataKey = `${deviceName}Data`;
+    const cardQuantitiesKey = `${deviceName}CardQuantities`;
+    
+    const machineData = process[machineDataKey];
+    const cardQuantities = process[cardQuantitiesKey];
+    
+    if (!machineData || !cardQuantities) {
+      console.log(`calculateProcessMachineCostForDevice: No ${deviceName} data or card quantities`, { 
+        machineData: machineData, 
+        cardQuantities: cardQuantities 
+      });
       return 0;
     }
     
-    console.log('calculateProcessMachineCost for process:', process.name, 'Machine:', process.machine, 'UPH:', process.uph);
-    console.log('Card quantities:', process.cardQuantities);
+    console.log(`calculateProcessMachineCostForDevice for ${deviceName} in process:`, process.name, 'Machine:', process[deviceName], 'UPH:', process.uph);
+    console.log(`${deviceName} Card quantities:`, cardQuantities);
     
     let totalCost = 0;
-    Object.entries(process.cardQuantities).forEach(([cardId, quantity]) => {
+    Object.entries(cardQuantities).forEach(([cardId, quantity]) => {
       const card = cardTypes.find(c => c.id === parseInt(cardId));
       if (card && quantity > 0) {
-        console.log(`Processing card ${card.part_number}: price=${card.unit_price}, quantity=${quantity}`);
+        console.log(`Processing ${deviceName} card ${card.part_number}: price=${card.unit_price}, quantity=${quantity}`);
         
         // 计算调整后的板卡价格，参考工程机时的计算逻辑
         let adjustedPrice = (card.unit_price || 0) / 10000;
@@ -298,7 +337,7 @@ const ProcessQuote = () => {
         
         // 根据报价币种和机器币种进行转换（参考EngineeringQuote.js逻辑）
         if (formData.currency === 'USD') {
-          if (process.machineData.currency === 'CNY' || process.machineData.currency === 'RMB') {
+          if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
             // RMB机器转USD：除以报价汇率
             adjustedPrice = adjustedPrice / formData.exchangeRate;
             console.log(`Converted CNY to USD: ${adjustedPrice} (rate: ${formData.exchangeRate})`);
@@ -306,17 +345,17 @@ const ProcessQuote = () => {
           // USD机器：不做汇率转换，直接使用unit_price
         } else {
           // 报价币种是CNY，保持原逻辑
-          adjustedPrice = adjustedPrice * (process.machineData.exchange_rate || 1.0);
-          console.log(`Applied exchange rate: ${adjustedPrice} (rate: ${process.machineData.exchange_rate})`);
+          adjustedPrice = adjustedPrice * (machineData.exchange_rate || 1.0);
+          console.log(`Applied exchange rate: ${adjustedPrice} (rate: ${machineData.exchange_rate})`);
         }
         
         // 应用折扣率和数量，然后除以UPH得到单颗成本
-        const hourlyCost = adjustedPrice * (process.machineData.discount_rate || 1.0) * quantity;
-        console.log(`Hourly cost: ${adjustedPrice} * ${process.machineData.discount_rate} * ${quantity} = ${hourlyCost}`);
+        const hourlyCost = adjustedPrice * (machineData.discount_rate || 1.0) * quantity;
+        console.log(`${deviceName} Hourly cost: ${adjustedPrice} * ${machineData.discount_rate} * ${quantity} = ${hourlyCost}`);
         
         if (process.uph > 0) {
           const unitCost = hourlyCost / process.uph;
-          console.log(`Unit cost: ${hourlyCost} / ${process.uph} = ${unitCost}`);
+          console.log(`${deviceName} Unit cost: ${hourlyCost} / ${process.uph} = ${unitCost}`);
           totalCost += unitCost;
         } else {
           console.log('UPH is 0 or undefined, unit cost = 0');
@@ -324,27 +363,33 @@ const ProcessQuote = () => {
       }
     });
     
-    console.log(`Total machine cost for ${process.name}: ${totalCost}`);
+    console.log(`Total ${deviceName} cost for ${process.name}: ${totalCost}`);
     return totalCost;
   };
 
-  // 计算总成本（人工成本 + 机器成本）
+  // 计算总成本（人工成本 + 双设备机器成本）
   const calculateTotalUnitCost = () => {
     let total = 0;
     
     if (formData.selectedTypes.includes('cp')) {
       total += formData.cpProcesses.reduce((sum, process) => {
-        const laborCost = process.unitCost || 0; // 人工成本（现在为0）
-        const machineCost = calculateProcessMachineCost(process); // 机器成本
-        return sum + laborCost + machineCost;
+        const laborCost = process.unitCost || 0; // 人工成本
+        // 双设备机器成本：测试机 + 探针台
+        const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
+        const proberCost = calculateProcessMachineCostForDevice(process, 'prober');
+        const totalMachineCost = testMachineCost + proberCost;
+        return sum + laborCost + totalMachineCost;
       }, 0);
     }
     
     if (formData.selectedTypes.includes('ft')) {
       total += formData.ftProcesses.reduce((sum, process) => {
-        const laborCost = process.unitCost || 0; // 人工成本（现在为0）
-        const machineCost = calculateProcessMachineCost(process); // 机器成本
-        return sum + laborCost + machineCost;
+        const laborCost = process.unitCost || 0; // 人工成本
+        // 双设备机器成本：测试机 + 分选机
+        const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
+        const handlerCost = calculateProcessMachineCostForDevice(process, 'handler');
+        const totalMachineCost = testMachineCost + handlerCost;
+        return sum + laborCost + totalMachineCost;
       }, 0);
     }
     
@@ -415,12 +460,6 @@ const ProcessQuote = () => {
     });
   };
 
-  // 格式化价格显示
-  const formatPrice = (number) => {
-    const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
-    const formattedNumber = formatQuotePrice(number, formData.currency);
-    return `${symbol}${formattedNumber}`;
-  };
 
   // 格式化单颗费用显示（4位小数，万分位向上取整）- v2.0
   const formatUnitPrice = (number) => {
@@ -433,87 +472,110 @@ const ProcessQuote = () => {
     return `${symbol}${formatted}`;
   };
 
-  // 计算单个工序的板卡成本（用于工序报价）
-  const calculateProcessCardCost = (process, cardTypes) => {
-    if (!process.machineData || !process.cardQuantities || !cardTypes) return 0;
-    
-    console.log('ProcessQuote calculateProcessCardCost - process:', process);
-    console.log('ProcessQuote calculateProcessCardCost - machine exchange_rate:', process.machineData?.exchange_rate);
-    
-    let cardCost = 0;
-    Object.entries(process.cardQuantities).forEach(([cardId, quantity]) => {
-      const card = cardTypes.find(c => c.id === parseInt(cardId));
-      if (card && quantity > 0) {
-        // 板卡单价除以10000，然后按照工程机时的逻辑进行币种转换
-        let adjustedPrice = (card.unit_price || 0) / 10000;
-        
-        // 根据报价币种和机器币种进行转换（参考工程机时报价逻辑）
-        if (formData.currency === 'USD') {
-          if (process.machineData.currency === 'CNY' || process.machineData.currency === 'RMB') {
-            // RMB机器转USD：除以报价汇率
-            adjustedPrice = adjustedPrice / formData.exchangeRate;
-          }
-          // USD机器：不做汇率转换，直接使用unit_price
-        } else {
-          // 报价币种是CNY，保持原逻辑
-          adjustedPrice = adjustedPrice * (process.machineData.exchange_rate || 1.0);
-        }
-        
-        const cardHourlyCost = adjustedPrice * (process.machineData.discount_rate || 1.0) * quantity;
-        const cardUnitCost = process.uph > 0 ? cardHourlyCost / process.uph : 0;
-        cardCost += cardUnitCost;
-      }
-    });
-    
-    return cardCost;
-  };
 
-  // 格式化机时价格显示（包含币种符号，根据币种精度）
-  const formatHourlyPrice = (number) => {
-    const formattedNumber = formatQuotePrice(number, formData.currency);
-    const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
-    return `${symbol}${formattedNumber}`;
+
+  // 判断是否为测试工序（需要双设备）
+  const isTestProcess = (processName) => {
+    if (!processName) return false;
+    return (processName.includes('CP') && (processName.includes('1') || processName.includes('2') || processName.includes('3'))) ||
+           (processName.includes('FT') && (processName.includes('1') || processName.includes('2') || processName.includes('3')));
   };
 
   // 工序表格列定义
-  const getProcessColumns = (type) => [
-    {
-      title: '工序名称',
-      dataIndex: 'name',
-      render: (name, record) => (
-        <select
-          value={name}
-          onChange={(e) => updateProcess(type, record.id, 'name', e.target.value)}
-          style={{ width: '100%', padding: '4px' }}
-        >
-          {(type === 'cp' ? cpProcessTypes : ftProcessTypes).map(processType => (
-            <option key={processType} value={processType}>
-              {processType}
-            </option>
-          ))}
-        </select>
-      )
-    },
-    {
-      title: '设备型号',
-      dataIndex: 'machine',
-      render: (machine, record) => (
-        <select
-          value={machine}
-          onChange={(e) => updateProcess(type, record.id, 'machine', e.target.value)}
-          style={{ width: '100%', padding: '4px' }}
-          disabled={!record.name}
-        >
-          <option value="">请选择设备</option>
-          {machines.map(machineData => (
-            <option key={machineData.id} value={machineData.name}>
-              {machineData.name}
-            </option>
-          ))}
-        </select>
-      )
-    },
-    {
+  const getProcessColumns = (type) => {
+    const baseColumns = [
+      {
+        title: '工序名称',
+        dataIndex: 'name',
+        render: (name, record) => (
+          <select
+            value={name}
+            onChange={(e) => updateProcess(type, record.id, 'name', e.target.value)}
+            style={{ width: '100%', padding: '4px' }}
+          >
+            {(type === 'cp' ? cpProcessTypes : ftProcessTypes).map(processType => (
+              <option key={processType} value={processType}>
+                {processType}
+              </option>
+            ))}
+          </select>
+        )
+      }
+    ];
+
+
+    // 动态添加设备列的逻辑需要在render时处理，这里先添加一个固定的设备列结构
+    baseColumns.push({
+      title: '设备选择',
+      key: 'equipment',
+      render: (_, record) => {
+        const isTest = isTestProcess(record.name);
+        
+        if (isTest) {
+          // 测试工序：显示两个设备选择器
+          return (
+            <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: '#666' }}>测试机:</label>
+                <select
+                  value={record.testMachine || ''}
+                  onChange={(e) => updateProcess(type, record.id, 'testMachine', e.target.value)}
+                  style={{ width: '100%', padding: '4px', marginTop: '2px' }}
+                  disabled={!record.name}
+                >
+                  <option value="">请选择测试机</option>
+                  {machines.filter(m => m.supplier?.machine_type?.name?.includes('测试机')).map(machineData => (
+                    <option key={machineData.id} value={machineData.name}>
+                      {machineData.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', color: '#666' }}>{type === 'cp' ? '探针台:' : '分选机:'}</label>
+                <select
+                  value={record[type === 'cp' ? 'prober' : 'handler'] || ''}
+                  onChange={(e) => updateProcess(type, record.id, type === 'cp' ? 'prober' : 'handler', e.target.value)}
+                  style={{ width: '100%', padding: '4px', marginTop: '2px' }}
+                  disabled={!record.name}
+                >
+                  <option value="">{`请选择${type === 'cp' ? '探针台' : '分选机'}`}</option>
+                  {machines.filter(m => {
+                    const machineTypeName = m.supplier?.machine_type?.name || '';
+                    return type === 'cp' ? machineTypeName.includes('探针台') : machineTypeName.includes('分选机');
+                  }).map(machineData => (
+                    <option key={machineData.id} value={machineData.name}>
+                      {machineData.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          );
+        } else if (record.name) {
+          // 非测试工序：显示单设备选择器
+          return (
+            <select
+              value={record.testMachine || ''}
+              onChange={(e) => updateProcess(type, record.id, 'testMachine', e.target.value)}
+              style={{ width: '100%', padding: '4px' }}
+              disabled={!record.name}
+            >
+              <option value="">请选择设备</option>
+              {machines.map(machineData => (
+                <option key={machineData.id} value={machineData.name}>
+                  {machineData.name}
+                </option>
+              ))}
+            </select>
+          );
+        } else {
+          return <span style={{ color: '#ccc' }}>请先选择工序</span>;
+        }
+      }
+    });
+
+    baseColumns.push({
       title: 'UPH',
       dataIndex: 'uph',
       render: (uph, record) => (
@@ -524,51 +586,94 @@ const ProcessQuote = () => {
           style={{ width: '100%' }}
         />
       )
-    },
-    {
+    });
+
+    baseColumns.push({
       title: '单颗费用',
       dataIndex: 'unitCost',
       render: (unitCost, record) => {
         const laborCost = unitCost || 0;
-        const machineCost = calculateProcessMachineCost(record);
-        const totalCost = laborCost + machineCost;
+        const isTest = isTestProcess(record.name);
+        
+        if (isTest) {
+          // 测试工序：计算双设备成本
+          const testMachineCost = calculateProcessMachineCostForDevice(record, 'testMachine');
+          const secondDeviceCost = calculateProcessMachineCostForDevice(record, type === 'cp' ? 'prober' : 'handler');
+          const totalMachineCost = testMachineCost + secondDeviceCost;
+          const totalCost = laborCost + totalMachineCost;
+          
+          return (
+            <div>
+              <div>{formatUnitPrice(totalCost)}</div>
+              {totalMachineCost > 0 && (
+                <div style={{ fontSize: '11px', color: '#666' }}>
+                  人工: {formatUnitPrice(laborCost)}<br/>
+                  {testMachineCost > 0 && <>测试机: {formatUnitPrice(testMachineCost)}<br/></>}
+                  {secondDeviceCost > 0 && <>{type === 'cp' ? '探针台' : '分选机'}: {formatUnitPrice(secondDeviceCost)}</>}
+                </div>
+              )}
+            </div>
+          );
+        } else {
+          // 非测试工序：计算单设备成本
+          const machineCost = calculateProcessMachineCostForDevice(record, 'testMachine');
+          const totalCost = laborCost + machineCost;
+          
+          return (
+            <div>
+              <div>{formatUnitPrice(totalCost)}</div>
+              {machineCost > 0 && (
+                <div style={{ fontSize: '11px', color: '#666' }}>
+                  人工: {formatUnitPrice(laborCost)}<br/>
+                  设备: {formatUnitPrice(machineCost)}
+                </div>
+              )}
+            </div>
+          );
+        }
+      }
+    });
+
+    baseColumns.push({
+      title: '板卡配置',
+      dataIndex: 'cardQuantities',
+      render: (cardQuantities, record) => {
+        // 获取双设备的板卡信息
+        const testMachineCards = record.testMachineData ? 
+          cardTypes.filter(card => card.machine_id === record.testMachineData.id) : [];
+        const secondDeviceCards = record[`${type === 'cp' ? 'prober' : 'handler'}Data`] ? 
+          cardTypes.filter(card => card.machine_id === record[`${type === 'cp' ? 'prober' : 'handler'}Data`].id) : [];
+        
+        const totalAvailableCards = testMachineCards.length + secondDeviceCards.length;
+        if (totalAvailableCards === 0) {
+          return <span style={{ color: '#999' }}>请先选择设备</span>;
+        }
+        
+        const testMachineSelectedCount = Object.keys(record.testMachineCardQuantities || {}).length;
+        const secondDeviceSelectedCount = Object.keys(record[`${type === 'cp' ? 'prober' : 'handler'}CardQuantities`] || {}).length;
+        const totalSelectedCount = testMachineSelectedCount + secondDeviceSelectedCount;
+        
         return (
           <div>
-            <div>{formatUnitPrice(totalCost)}</div>
-            {machineCost > 0 && (
+            <div style={{ color: totalSelectedCount > 0 ? '#1890ff' : '#999', fontSize: '12px' }}>
+              已选择 {totalSelectedCount} / {totalAvailableCards} 张板卡
+            </div>
+            {testMachineCards.length > 0 && (
               <div style={{ fontSize: '11px', color: '#666' }}>
-                人工: {formatUnitPrice(laborCost)}<br/>
-                机器: {formatUnitPrice(machineCost)}
+                测试机: {testMachineSelectedCount} / {testMachineCards.length}
+              </div>
+            )}
+            {secondDeviceCards.length > 0 && (
+              <div style={{ fontSize: '11px', color: '#666' }}>
+                {type === 'cp' ? '探针台' : '分选机'}: {secondDeviceSelectedCount} / {secondDeviceCards.length}
               </div>
             )}
           </div>
         );
       }
-    },
-    {
-      title: '板卡配置',
-      dataIndex: 'cardQuantities',
-      render: (cardQuantities, record) => {
-        if (!record.machineData) {
-          return <span style={{ color: '#999' }}>请先选择设备</span>;
-        }
-        
-        const availableCards = cardTypes.filter(card => card.machine_id === record.machineData.id);
-        if (availableCards.length === 0) {
-          return <span style={{ color: '#999' }}>无可用板卡</span>;
-        }
-        
-        const selectedCount = Object.keys(cardQuantities).length;
-        const totalCards = availableCards.length;
-        
-        return (
-          <span style={{ color: selectedCount > 0 ? '#1890ff' : '#999' }}>
-            已选择 {selectedCount} / {totalCards} 张板卡
-          </span>
-        );
-      }
-    },
-    {
+    });
+
+    baseColumns.push({
       title: '操作',
       render: (_, record) => (
         <Button
@@ -580,87 +685,105 @@ const ProcessQuote = () => {
           删除
         </Button>
       )
-    }
-  ];
+    });
 
-  // 渲染单个工序的板卡选择区域（用于展开行）
+    return baseColumns;
+  };
+
+  // 渲染单个工序的板卡选择区域（用于展开行）- 支持双设备
   const renderCardSelectionForProcess = (processType, process) => {
-    if (!process.machineData) return null;
+    const testMachineCards = process.testMachineData ? 
+      cardTypes.filter(card => card.machine_id === process.testMachineData.id) : [];
+    const secondDeviceName = processType === 'cp' ? 'prober' : 'handler';
+    const secondDeviceCards = process[`${secondDeviceName}Data`] ? 
+      cardTypes.filter(card => card.machine_id === process[`${secondDeviceName}Data`].id) : [];
     
-    const availableCards = cardTypes.filter(card => card.machine_id === process.machineData.id);
-    if (availableCards.length === 0) return null;
+    if (testMachineCards.length === 0 && secondDeviceCards.length === 0) return null;
     
-    // 获取已选择的板卡ID列表
-    const selectedCardIds = Object.keys(process.cardQuantities).map(id => parseInt(id));
-    
-    // 板卡表格列定义
-    const cardColumns = () => {
-      const columns = [
-        { 
-          title: 'Part Number', 
-          dataIndex: 'part_number',
-          width: '25%'
-        },
-        { 
-          title: 'Board Name', 
-          dataIndex: 'board_name',
-          width: user?.role === 'admin' || user?.role === 'super_admin' ? '35%' : '55%',
-          render: (text) => (
-            <span style={{ fontWeight: '500', color: '#333' }}>
-              {text}
-            </span>
-          )
+    // 渲染单个设备的板卡表格
+    const renderDeviceCardTable = (deviceName, deviceDisplayName, cards, cardQuantities) => {
+      if (cards.length === 0) return null;
+      
+      const selectedCardIds = Object.keys(cardQuantities || {}).map(id => parseInt(id));
+      
+      const cardColumns = () => {
+        const columns = [
+          { 
+            title: 'Part Number', 
+            dataIndex: 'part_number',
+            width: '25%'
+          },
+          { 
+            title: 'Board Name', 
+            dataIndex: 'board_name',
+            width: user?.role === 'admin' || user?.role === 'super_admin' ? '35%' : '55%',
+            render: (text) => (
+              <span style={{ fontWeight: '500', color: '#333' }}>
+                {text}
+              </span>
+            )
+          }
+        ];
+        
+        // 只有管理员以上权限才能看到价格
+        if (user?.role === 'admin' || user?.role === 'super_admin') {
+          columns.push({ 
+            title: 'Unit Price', 
+            dataIndex: 'unit_price',
+            width: '20%',
+            render: (value) => formatQuotePrice(value || 0, formData.currency)
+          });
         }
-      ];
-      
-      // 只有管理员以上权限才能看到价格
-      if (user?.role === 'admin' || user?.role === 'super_admin') {
+        
         columns.push({ 
-          title: 'Unit Price', 
-          dataIndex: 'unit_price',
+          title: 'Quantity', 
+          dataIndex: 'id',
           width: '20%',
-          render: (value) => formatQuotePrice(value || 0, formData.currency)
+          render: (cardId, record) => (
+            <InputNumber
+              size="small"
+              min={1}
+              value={cardQuantities?.[cardId] || 1}
+              onChange={(value) => handleCardQuantityChange(processType, process.id, cardId, value || 1, deviceName)}
+              style={{ width: '80px' }}
+              placeholder="数量"
+            />
+          )
         });
-      }
+        
+        return columns;
+      };
       
-      columns.push({ 
-        title: 'Quantity', 
-        dataIndex: 'id',
-        width: '20%',
-        render: (cardId, record) => (
-          <InputNumber
+      return (
+        <div style={{ marginBottom: 15 }}>
+          <h6 style={{ marginBottom: 10, color: '#1890ff', fontSize: '14px' }}>
+            {deviceDisplayName} 板卡配置
+          </h6>
+          <Table
+            dataSource={cards}
+            columns={cardColumns()}
+            rowKey="id"
+            rowSelection={{
+              type: 'checkbox',
+              selectedRowKeys: selectedCardIds,
+              onChange: (selectedRowKeys, selectedRows) => 
+                handleCardSelection(processType, process.id, selectedRowKeys, selectedRows, deviceName)
+            }}
+            pagination={false}
             size="small"
-            min={1}
-            value={process.cardQuantities[cardId] || 1}
-            onChange={(value) => handleCardQuantityChange(processType, process.id, cardId, value || 1)}
-            style={{ width: '80px' }}
-            placeholder="数量"
+            bordered
           />
-        )
-      });
-      
-      return columns;
+        </div>
+      );
     };
     
     return (
       <div style={{ padding: '10px 0' }}>
-        <h5 style={{ marginBottom: 10, color: '#1890ff' }}>
-          {process.name} - {process.machine} 板卡配置
+        <h5 style={{ marginBottom: 15, color: '#1890ff' }}>
+          {process.name} 板卡配置
         </h5>
-        <Table
-          dataSource={availableCards}
-          columns={cardColumns()}
-          rowKey="id"
-          rowSelection={{
-            type: 'checkbox',
-            selectedRowKeys: selectedCardIds,
-            onChange: (selectedRowKeys, selectedRows) => 
-              handleCardSelection(processType, process.id, selectedRowKeys, selectedRows)
-          }}
-          pagination={false}
-          size="small"
-          bordered
-        />
+        {renderDeviceCardTable('testMachine', '测试机', testMachineCards, process.testMachineCardQuantities)}
+        {renderDeviceCardTable(secondDeviceName, processType === 'cp' ? '探针台' : '分选机', secondDeviceCards, process[`${secondDeviceName}CardQuantities`])}
       </div>
     );
   };
@@ -804,7 +927,13 @@ const ProcessQuote = () => {
             size="small"
             expandable={{
               expandedRowRender: (record) => renderCardSelectionForProcess('cp', record),
-              rowExpandable: (record) => record.machineData && cardTypes.filter(card => card.machine_id === record.machineData.id).length > 0,
+              rowExpandable: (record) => {
+                const testMachineCards = record.testMachineData ? 
+                  cardTypes.filter(card => card.machine_id === record.testMachineData.id).length : 0;
+                const proberCards = record.proberData ? 
+                  cardTypes.filter(card => card.machine_id === record.proberData.id).length : 0;
+                return testMachineCards > 0 || proberCards > 0;
+              },
               expandRowByClick: false
             }}
           />
@@ -830,7 +959,13 @@ const ProcessQuote = () => {
             size="small"
             expandable={{
               expandedRowRender: (record) => renderCardSelectionForProcess('ft', record),
-              rowExpandable: (record) => record.machineData && cardTypes.filter(card => card.machine_id === record.machineData.id).length > 0,
+              rowExpandable: (record) => {
+                const testMachineCards = record.testMachineData ? 
+                  cardTypes.filter(card => card.machine_id === record.testMachineData.id).length : 0;
+                const handlerCards = record.handlerData ? 
+                  cardTypes.filter(card => card.machine_id === record.handlerData.id).length : 0;
+                return testMachineCards > 0 || handlerCards > 0;
+              },
               expandRowByClick: false
             }}
           />
@@ -914,197 +1049,6 @@ const ProcessQuote = () => {
         </div>
       </div>
 
-      {/* 费用明细预览 */}
-      {(formData.selectedTypes.includes('cp') && formData.cpProcesses.some(p => p.machineData) || 
-        formData.selectedTypes.includes('ft') && formData.ftProcesses.some(p => p.machineData)) && (
-        <div className="quote-summary" style={{ marginBottom: 20 }}>
-          <h3>费用明细预览</h3>
-          
-          {/* CP工序费用详情 */}
-          {formData.selectedTypes.includes('cp') && formData.cpProcesses.some(p => p.machineData) && (
-            <div style={{ marginBottom: 30 }}>
-              <h5 style={{ 
-                color: '#52c41a', 
-                marginBottom: 15,
-                fontSize: '16px',
-                fontWeight: 'bold',
-                borderBottom: '2px solid #52c41a',
-                paddingBottom: '8px'
-              }}>🔬 CP工序</h5>
-              {formData.cpProcesses.filter(process => process.machineData).map((process, index) => (
-                <div key={index} style={{ 
-                  marginBottom: 20, 
-                  border: '1px solid #d9f7be', 
-                  borderRadius: '8px', 
-                  padding: '20px',
-                  backgroundColor: '#f6ffed'
-                }}>
-                  <div style={{ 
-                    fontWeight: 'bold', 
-                    marginBottom: 15, 
-                    color: '#52c41a',
-                    fontSize: '16px'
-                  }}>
-                    {process.name}
-                  </div>
-                  
-                  {/* 设备成本 */}
-                  <div style={{ marginBottom: 15 }}>
-                    <h6 style={{ color: '#389e0d', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>💻 设备成本</h6>
-                    <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '8px', fontSize: '13px' }}>
-                        <div><strong>设备类型:</strong> {process.machineData?.supplier?.machine_type?.name || 'CP测试机'}</div>
-                        <div><strong>设备型号:</strong> {process.machineData?.name || process.machine}</div>
-                        <div><strong>机时费率:</strong> 
-                          <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
-                            {(() => {
-                              const cardCost = calculateProcessCardCost(process, cardTypes);
-                              const hourlyRate = cardCost * (process.uph || 1);
-                              return formatPrice(hourlyRate);
-                            })()}
-                          </span>
-                        </div>
-                        <div><strong>UPH:</strong> {process.uph || 0}</div>
-                        <div><strong>单颗报价:</strong> 
-                          <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
-                            {formatUnitPrice(calculateProcessCardCost(process, cardTypes))}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* 人工成本 */}
-                  {(process.unitCost && process.unitCost > 0) ? (
-                    <div style={{ marginBottom: 10 }}>
-                      <h6 style={{ color: '#389e0d', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>👥 人工成本</h6>
-                      <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                          <span>人工成本:</span>
-                          <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
-                            {formatUnitPrice(process.unitCost)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                  
-                  {/* 总成本汇总 */}
-                  <div style={{ 
-                    marginTop: 15,
-                    paddingTop: 12,
-                    borderTop: '2px solid #52c41a',
-                    textAlign: 'right'
-                  }}>
-                    <div style={{ 
-                      fontSize: '16px', 
-                      fontWeight: 'bold', 
-                      color: '#52c41a'
-                    }}>
-                      工序总成本: {formatUnitPrice((process.unitCost || 0) + calculateProcessCardCost(process, cardTypes))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div style={{ textAlign: 'center', marginTop: 15, fontSize: '13px', color: '#666', fontStyle: 'italic', backgroundColor: '#f0f0f0', padding: '8px', borderRadius: '4px' }}>
-                💡 注：CP工序各道工序报价不可直接相加，请根据实际工艺流程选择
-              </div>
-            </div>
-          )}
-          
-          {/* FT工序费用详情 */}
-          {formData.selectedTypes.includes('ft') && formData.ftProcesses.some(p => p.machineData) && (
-            <div style={{ marginBottom: 30 }}>
-              <h5 style={{ 
-                color: '#1890ff', 
-                marginBottom: 15,
-                fontSize: '16px',
-                fontWeight: 'bold',
-                borderBottom: '2px solid #1890ff',
-                paddingBottom: '8px'
-              }}>📱 FT工序</h5>
-              {formData.ftProcesses.filter(process => process.machineData).map((process, index) => (
-                <div key={index} style={{ 
-                  marginBottom: 20, 
-                  border: '1px solid #91d5ff', 
-                  borderRadius: '8px', 
-                  padding: '20px',
-                  backgroundColor: '#e6f7ff'
-                }}>
-                  <div style={{ 
-                    fontWeight: 'bold', 
-                    marginBottom: 15, 
-                    color: '#1890ff',
-                    fontSize: '16px'
-                  }}>
-                    {process.name}
-                  </div>
-                  
-                  {/* 设备成本 */}
-                  <div style={{ marginBottom: 15 }}>
-                    <h6 style={{ color: '#096dd9', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>💻 设备成本</h6>
-                    <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '8px', fontSize: '13px' }}>
-                        <div><strong>设备类型:</strong> {process.machineData?.supplier?.machine_type?.name || 'FT测试机'}</div>
-                        <div><strong>设备型号:</strong> {process.machineData?.name || process.machine}</div>
-                        <div><strong>机时费率:</strong> 
-                          <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
-                            {(() => {
-                              const cardCost = calculateProcessCardCost(process, cardTypes);
-                              const hourlyRate = cardCost * (process.uph || 1);
-                              return formatPrice(hourlyRate);
-                            })()}
-                          </span>
-                        </div>
-                        <div><strong>UPH:</strong> {process.uph || 0}</div>
-                        <div><strong>单颗报价:</strong> 
-                          <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
-                            {formatUnitPrice(calculateProcessCardCost(process, cardTypes))}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* 人工成本 */}
-                  {(process.unitCost && process.unitCost > 0) ? (
-                    <div style={{ marginBottom: 10 }}>
-                      <h6 style={{ color: '#096dd9', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>👥 人工成本</h6>
-                      <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                          <span>人工成本:</span>
-                          <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
-                            {formatUnitPrice(process.unitCost)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                  
-                  {/* 总成本汇总 */}
-                  <div style={{ 
-                    marginTop: 15,
-                    paddingTop: 12,
-                    borderTop: '2px solid #1890ff',
-                    textAlign: 'right'
-                  }}>
-                    <div style={{ 
-                      fontSize: '16px', 
-                      fontWeight: 'bold', 
-                      color: '#1890ff'
-                    }}>
-                      工序总成本: {formatUnitPrice((process.unitCost || 0) + calculateProcessCardCost(process, cardTypes))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div style={{ textAlign: 'center', marginTop: 15, fontSize: '13px', color: '#666', fontStyle: 'italic', backgroundColor: '#f0f0f0', padding: '8px', borderRadius: '4px' }}>
-                💡 注：FT工序各道工序报价不可直接相加，请根据实际工艺流程选择
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* 报价说明 */}
       <div className="quote-summary">

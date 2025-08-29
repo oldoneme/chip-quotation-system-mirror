@@ -177,19 +177,23 @@ const QuoteResult = () => {
     return rate;
   };
   
-  // 计算单个工序的板卡成本（用于工序报价）
-  const calculateProcessCardCost = (process, cardTypes) => {
-    if (!process.machineData || !process.cardQuantities || !cardTypes) return 0;
+  // 计算单个设备的板卡成本（用于工序报价） - 支持双设备
+  const calculateProcessCardCostForDevice = (process, deviceName, cardTypes) => {
+    const machineDataKey = `${deviceName}Data`;
+    const cardQuantitiesKey = `${deviceName}CardQuantities`;
+    
+    const machineData = process[machineDataKey];
+    const cardQuantities = process[cardQuantitiesKey];
+    
+    if (!machineData || !cardQuantities || !cardTypes) return 0;
     
     const quoteCurrency = quoteData.currency || 'CNY';
     const quoteExchangeRate = quoteData.exchangeRate || 7.2;
-    console.log('QuoteResult calculateProcessCardCost - quoteCurrency:', quoteCurrency);
-    console.log('QuoteResult calculateProcessCardCost - quoteExchangeRate:', quoteExchangeRate);
-    console.log('QuoteResult calculateProcessCardCost - process:', process);
-    console.log('QuoteResult calculateProcessCardCost - machine exchange_rate:', process.machineData?.exchange_rate);
+    console.log(`QuoteResult calculateProcessCardCostForDevice ${deviceName} - quoteCurrency:`, quoteCurrency);
+    console.log(`QuoteResult calculateProcessCardCostForDevice ${deviceName} - quoteExchangeRate:`, quoteExchangeRate);
     
     let cardCost = 0;
-    Object.entries(process.cardQuantities).forEach(([cardId, quantity]) => {
+    Object.entries(cardQuantities).forEach(([cardId, quantity]) => {
       const card = cardTypes.find(c => c.id === parseInt(cardId));
       if (card && quantity > 0) {
         // 板卡单价除以10000，然后按照工程机时的逻辑进行币种转换
@@ -197,23 +201,39 @@ const QuoteResult = () => {
         
         // 根据报价币种和机器币种进行转换（参考EngineeringQuote.js逻辑）
         if (quoteCurrency === 'USD') {
-          if (process.machineData.currency === 'CNY' || process.machineData.currency === 'RMB') {
+          if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
             // RMB机器转USD：除以报价汇率
             adjustedPrice = adjustedPrice / quoteExchangeRate;
           }
           // USD机器：不做汇率转换，直接使用unit_price
         } else {
           // 报价币种是CNY，保持原逻辑
-          adjustedPrice = adjustedPrice * (process.machineData.exchange_rate || 1.0);
+          adjustedPrice = adjustedPrice * (machineData.exchange_rate || 1.0);
         }
         
-        const cardHourlyCost = adjustedPrice * (process.machineData.discount_rate || 1.0) * quantity;
+        const cardHourlyCost = adjustedPrice * (machineData.discount_rate || 1.0) * quantity;
         const cardUnitCost = process.uph > 0 ? cardHourlyCost / process.uph : 0;
         cardCost += cardUnitCost;
       }
     });
     
     return cardCost;
+  };
+
+  // 计算单个工序的双设备板卡总成本（用于工序报价）
+  const calculateProcessCardCost = (process, cardTypes) => {
+    // 计算测试机成本
+    const testMachineCost = calculateProcessCardCostForDevice(process, 'testMachine', cardTypes);
+    
+    // 根据工序类型计算第二台设备成本
+    let secondDeviceCost = 0;
+    if (process.name && process.name.includes('CP')) {
+      secondDeviceCost = calculateProcessCardCostForDevice(process, 'prober', cardTypes);
+    } else if (process.name && process.name.includes('FT')) {
+      secondDeviceCost = calculateProcessCardCostForDevice(process, 'handler', cardTypes);
+    }
+    
+    return testMachineCost + secondDeviceCost;
   };
 
   // 确认报价，创建数据库记录
@@ -258,10 +278,10 @@ const QuoteResult = () => {
             unit: '颗',
             unit_price: totalCost, // 保持原始格式，后端会处理转换
             total_price: totalCost,
-            supplier: process.machineData?.supplier?.name || '',
-            configuration: `设备:${process.machine || 'ETS-88'}, UPH:${process.uph || 0}`,
-            machine_model: process.machine || 'ETS-88',
-            machine_type: 'CP测试机'
+            supplier: process.testMachineData?.supplier?.name || process.proberData?.supplier?.name || '',
+            configuration: `测试机:${process.testMachine || '未选择'}, 探针台:${process.prober || '未选择'}, UPH:${process.uph || 0}`,
+            machine_model: `${process.testMachine || '未选择'}/${process.prober || '未选择'}`,
+            machine_type: 'CP测试机+探针台'
           });
         });
       }
@@ -279,10 +299,10 @@ const QuoteResult = () => {
             unit: '颗',
             unit_price: totalCost, // 保持原始格式，后端会处理转换
             total_price: totalCost,
-            supplier: process.machineData?.supplier?.name || '',
-            configuration: `设备:${process.machine || 'ETS-88'}, UPH:${process.uph || 0}`,
-            machine_model: process.machine || 'ETS-88',
-            machine_type: 'FT测试机'
+            supplier: process.testMachineData?.supplier?.name || process.handlerData?.supplier?.name || '',
+            configuration: `测试机:${process.testMachine || '未选择'}, 分选机:${process.handler || '未选择'}, UPH:${process.uph || 0}`,
+            machine_model: `${process.testMachine || '未选择'}/${process.handler || '未选择'}`,
+            machine_type: 'FT测试机+分选机'
           });
         });
       }
@@ -878,8 +898,12 @@ const QuoteResult = () => {
                         <div style={{ marginBottom: 15 }}>
                           <h6 style={{ color: '#389e0d', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>💻 设备成本</h6>
                           <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '13px' }}>
-                              <div><strong>设备型号:</strong> {process.machine || process.machineData?.model || 'ETS-88'}</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '13px', marginBottom: '8px' }}>
+                              <div><strong>测试机:</strong> {process.testMachine || process.testMachineData?.name || '未选择'}</div>
+                              <div><strong>探针台:</strong> {process.prober || process.proberData?.name || '未选择'}</div>
+                              <div><strong>UPH:</strong> {process.uph || 0}</div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
                               <div><strong>设备机时费:</strong> 
                                 <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
                                   {(() => {
@@ -889,7 +913,6 @@ const QuoteResult = () => {
                                   })()}
                                 </span>
                               </div>
-                              <div><strong>UPH:</strong> {process.uph || 0}</div>
                               <div><strong>单颗报价:</strong> 
                                 <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
                                   {formatUnitPrice(calculateProcessCardCost(process, quoteData.cardTypes))}
@@ -969,8 +992,12 @@ const QuoteResult = () => {
                         <div style={{ marginBottom: 15 }}>
                           <h6 style={{ color: '#096dd9', marginBottom: 8, fontSize: '14px', fontWeight: 'bold' }}>💻 设备成本</h6>
                           <div style={{ paddingLeft: 15, backgroundColor: '#fff', borderRadius: '4px', padding: '12px' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', fontSize: '13px' }}>
-                              <div><strong>设备型号:</strong> {process.machine || process.machineData?.model || 'ETS-88'}</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '13px', marginBottom: '8px' }}>
+                              <div><strong>测试机:</strong> {process.testMachine || process.testMachineData?.name || '未选择'}</div>
+                              <div><strong>分选机:</strong> {process.handler || process.handlerData?.name || '未选择'}</div>
+                              <div><strong>UPH:</strong> {process.uph || 0}</div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
                               <div><strong>设备机时费:</strong> 
                                 <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
                                   {(() => {
@@ -980,7 +1007,6 @@ const QuoteResult = () => {
                                   })()}
                                 </span>
                               </div>
-                              <div><strong>UPH:</strong> {process.uph || 0}</div>
                               <div><strong>单颗报价:</strong> 
                                 <span style={{ color: '#1890ff', fontWeight: 'bold' }}>
                                   {formatUnitPrice(calculateProcessCardCost(process, quoteData.cardTypes))}
