@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Table, Button, Card, Divider, message } from 'antd';
+import { Button, Card, Divider, message } from 'antd';
 import { formatQuotePrice } from '../utils';
 import '../App.css';
 
@@ -264,12 +264,46 @@ const QuoteResult = () => {
         payment_terms: '30_days'
       };
       
+      // 判断是否为测试工序（需要双设备）
+      const isTestProcess = (processName) => {
+        if (!processName) return false;
+        return (processName.includes('CP') && (processName.includes('1') || processName.includes('2') || processName.includes('3'))) ||
+               (processName.includes('FT') && (processName.includes('1') || processName.includes('2') || processName.includes('3')));
+      };
+
       // 添加工序项目到items
       if (quoteData.cpProcesses) {
         quoteData.cpProcesses.forEach((process, index) => {
           const laborCost = process.unitCost || 0;
           const cardCost = calculateProcessCardCost(process, quoteData.cardTypes);
           const totalCost = laborCost + cardCost;
+          const isTest = isTestProcess(process.name);
+          
+          // 根据工序类型设置不同的设备信息
+          let machineType, machineModel, configuration;
+          
+          if (isTest) {
+            // 测试工序：双设备
+            machineType = '测试机+探针台';
+            machineModel = `${process.testMachine || '未选择'}/${process.prober || '未选择'}`;
+            configuration = `测试机:${process.testMachine || '未选择'}, 探针台:${process.prober || '未选择'}, UPH:${process.uph || 0}`;
+          } else {
+            // 非测试工序：单设备（根据工序名称判断设备类型）
+            if (process.name.includes('AOI')) {
+              machineType = 'AOI';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            } else if (process.name.includes('烘烤')) {
+              machineType = '烘烤设备';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            } else if (process.name.includes('编带')) {
+              machineType = '编带机';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            } else {
+              machineType = '其他设备';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            }
+            configuration = `设备:${machineModel}, UPH:${process.uph || 0}`;
+          }
           
           finalQuoteData.items.push({
             item_name: `CP-${process.name}`,
@@ -279,9 +313,11 @@ const QuoteResult = () => {
             unit_price: totalCost, // 保持原始格式，后端会处理转换
             total_price: totalCost,
             supplier: process.testMachineData?.supplier?.name || process.proberData?.supplier?.name || '',
-            configuration: `测试机:${process.testMachine || '未选择'}, 探针台:${process.prober || '未选择'}, UPH:${process.uph || 0}`,
-            machine_model: `${process.testMachine || '未选择'}/${process.prober || '未选择'}`,
-            machine_type: 'CP测试机+探针台'
+            configuration: configuration,
+            machine_model: machineModel,
+            machine_type: machineType,
+            uph: process.uph || 0,
+            hourly_rate: `¥${((process.testMachineData?.price_rate || 0) + (process.proberData?.price_rate || 0)).toFixed(2)}/小时`
           });
         });
       }
@@ -291,6 +327,39 @@ const QuoteResult = () => {
           const laborCost = process.unitCost || 0;
           const cardCost = calculateProcessCardCost(process, quoteData.cardTypes);
           const totalCost = laborCost + cardCost;
+          const isTest = isTestProcess(process.name);
+          
+          // 根据工序类型设置不同的设备信息
+          let machineType, machineModel, configuration;
+          
+          if (isTest) {
+            // 测试工序：双设备
+            machineType = '测试机+分选机';
+            machineModel = `${process.testMachine || '未选择'}/${process.handler || '未选择'}`;
+            configuration = `测试机:${process.testMachine || '未选择'}, 分选机:${process.handler || '未选择'}, UPH:${process.uph || 0}`;
+          } else {
+            // 非测试工序：单设备（根据工序名称判断设备类型）
+            if (process.name.includes('AOI')) {
+              machineType = 'AOI';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            } else if (process.name.includes('烘烤')) {
+              machineType = '烘烤设备';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            } else if (process.name.includes('编带')) {
+              machineType = '编带机';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            } else if (process.name.includes('老化')) {
+              machineType = '老化设备';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            } else if (process.name.includes('包装')) {
+              machineType = '包装设备';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            } else {
+              machineType = '其他设备';
+              machineModel = process.testMachine || process.testMachineData?.name || '未选择';
+            }
+            configuration = `设备:${machineModel}, UPH:${process.uph || 0}`;
+          }
           
           finalQuoteData.items.push({
             item_name: `FT-${process.name}`,
@@ -300,9 +369,11 @@ const QuoteResult = () => {
             unit_price: totalCost, // 保持原始格式，后端会处理转换
             total_price: totalCost,
             supplier: process.testMachineData?.supplier?.name || process.handlerData?.supplier?.name || '',
-            configuration: `测试机:${process.testMachine || '未选择'}, 分选机:${process.handler || '未选择'}, UPH:${process.uph || 0}`,
-            machine_model: `${process.testMachine || '未选择'}/${process.handler || '未选择'}`,
-            machine_type: 'FT测试机+分选机'
+            configuration: configuration,
+            machine_model: machineModel,
+            machine_type: machineType,
+            uph: process.uph || 0,
+            hourly_rate: `¥${((process.testMachineData?.price_rate || 0) + (process.handlerData?.price_rate || 0)).toFixed(2)}/小时`
           });
         });
       }
