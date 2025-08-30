@@ -105,54 +105,67 @@ const QuoteManagement = () => {
       title: '报价单号',
       dataIndex: 'id',
       key: 'id',
+      width: 160,
       render: (text) => <Button type="link" onClick={() => handleView(text)}>{text}</Button>
     },
     {
       title: '报价标题',
       dataIndex: 'title',
       key: 'title',
+      width: 200,
       ellipsis: true
     },
     {
       title: '报价类型',
       dataIndex: 'type',
       key: 'type',
+      width: 120,
       render: (type) => getTypeTag(type)
     },
     {
       title: '客户',
       dataIndex: 'customer',
       key: 'customer',
+      width: 150,
       ellipsis: true
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 100,
       render: (status) => getStatusTag(status)
     },
     {
       title: '创建人',
       dataIndex: 'createdBy',
-      key: 'createdBy'
+      key: 'createdBy',
+      width: 100,
+      ellipsis: true
     },
     {
       title: '创建时间',
       dataIndex: 'createdAt',
-      key: 'createdAt'
+      key: 'createdAt',
+      width: 150,
+      ellipsis: true
     },
     {
       title: '有效期至',
       dataIndex: 'validUntil',
-      key: 'validUntil'
+      key: 'validUntil',
+      width: 120
     },
     {
       title: '操作',
       key: 'action',
+      width: 180,
+      fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Space size="small">
           <Button 
             type="link" 
+            size="small"
             icon={<EyeOutlined />} 
             onClick={() => handleView(record.id)}
           >
@@ -162,6 +175,7 @@ const QuoteManagement = () => {
             <>
               <Button 
                 type="link" 
+                size="small"
                 icon={<EditOutlined />} 
                 onClick={() => handleEdit(record)}
               >
@@ -169,6 +183,7 @@ const QuoteManagement = () => {
               </Button>
               <Button 
                 type="link" 
+                size="small"
                 danger
                 icon={<DeleteOutlined />} 
                 onClick={() => handleDelete(record)}
@@ -852,6 +867,7 @@ const QuoteManagement = () => {
           dataSource={quotes}
           rowKey="id"
           loading={loading}
+          scroll={{ x: 1200, y: 600 }}
           expandable={{
             expandedRowRender: (record) => renderQuoteDetailsTable(record),
             rowExpandable: (record) => record.quoteDetails && record.quoteDetails.length > 0,
@@ -863,6 +879,7 @@ const QuoteManagement = () => {
             showTotal: (total) => `共 ${total} 条记录`,
             pageSize: 10
           }}
+          size="middle"
         />
       </Card>
     </div>
