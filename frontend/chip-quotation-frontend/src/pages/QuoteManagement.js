@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Table, Card, Button, Space, Tag, Row, Col, Statistic, message, Modal
+  Table, Card, Button, Space, Tag, Row, Col, Statistic, message, Modal, List, Dropdown
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined,
-  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined
+  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
+  MoreOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
@@ -16,6 +17,7 @@ const QuoteManagement = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [quotes, setQuotes] = useState([]);
+  const [isMobile, setIsMobile] = useState(false);
   
   // 统计数据
   const [statistics, setStatistics] = useState({
@@ -67,6 +69,18 @@ const QuoteManagement = () => {
       message.error('获取统计信息失败');
     }
   };
+
+  // 检测移动端
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkIsMobile();
+    window.addEventListener('resize', checkIsMobile);
+    
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
 
   useEffect(() => {
     fetchQuotes();
@@ -225,6 +239,136 @@ const QuoteManagement = () => {
       }
     });
   };
+
+  // 移动端操作菜单
+  const getMobileActionItems = (record) => {
+    const items = [
+      {
+        key: 'view',
+        label: '查看',
+        icon: <EyeOutlined />,
+        onClick: () => handleView(record.id)
+      }
+    ];
+
+    if (record.status === 'draft') {
+      items.push(
+        {
+          key: 'edit',
+          label: '编辑',
+          icon: <EditOutlined />,
+          onClick: () => handleEdit(record)
+        },
+        {
+          key: 'delete',
+          label: '删除',
+          icon: <DeleteOutlined />,
+          danger: true,
+          onClick: () => handleDelete(record)
+        }
+      );
+    }
+
+    return { items };
+  };
+
+  // 移动端列表渲染
+  const renderMobileList = () => (
+    <List
+      loading={loading}
+      dataSource={quotes}
+      renderItem={(item) => (
+        <List.Item
+          key={item.id}
+          style={{ 
+            padding: '12px', 
+            marginBottom: '8px', 
+            backgroundColor: '#fff', 
+            borderRadius: '8px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}
+        >
+          <div style={{ width: '100%' }}>
+            {/* 头部信息 */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'flex-start',
+              marginBottom: '8px'
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ 
+                  fontSize: '16px', 
+                  fontWeight: 'bold', 
+                  color: '#1890ff',
+                  marginBottom: '4px'
+                }}>
+                  {item.id}
+                </div>
+                <div style={{ 
+                  fontSize: '14px', 
+                  color: '#333',
+                  marginBottom: '4px',
+                  wordBreak: 'break-all'
+                }}>
+                  {item.title}
+                </div>
+              </div>
+              <Dropdown menu={getMobileActionItems(item)} trigger={['click']}>
+                <Button type="text" icon={<MoreOutlined />} />
+              </Dropdown>
+            </div>
+
+            {/* 标签行 */}
+            <div style={{ marginBottom: '8px' }}>
+              <Space size={[4, 4]} wrap>
+                {getTypeTag(item.type)}
+                {getStatusTag(item.status)}
+              </Space>
+            </div>
+
+            {/* 详细信息 */}
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              <div style={{ marginBottom: '2px' }}>客户：{item.customer}</div>
+              <div style={{ marginBottom: '2px' }}>创建人：{item.createdBy}</div>
+              <div style={{ marginBottom: '2px' }}>创建时间：{item.createdAt}</div>
+              <div>有效期至：{item.validUntil}</div>
+            </div>
+
+            {/* 展开明细按钮 */}
+            {item.quoteDetails && item.quoteDetails.length > 0 && (
+              <div style={{ marginTop: '8px' }}>
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={() => {
+                    // 使用一个简单的方式显示明细
+                    Modal.info({
+                      title: '报价明细',
+                      content: renderQuoteDetailsTable(item),
+                      width: '90%',
+                      okText: '关闭'
+                    });
+                  }}
+                >
+                  查看明细
+                </Button>
+              </div>
+            )}
+          </div>
+        </List.Item>
+      )}
+      pagination={{
+        current: 1,
+        pageSize: 10,
+        total: quotes.length,
+        showSizeChanger: false,
+        showQuickJumper: false,
+        showTotal: (total) => `共 ${total} 条`,
+        size: 'small'
+      }}
+    />
+  );
 
   const renderQuoteDetailsTable = (record) => {
     if (!record.quoteDetails || record.quoteDetails.length === 0) {
@@ -809,15 +953,32 @@ const QuoteManagement = () => {
   };
 
   return (
-    <div className="quote-management">
+    <div className="quote-management" style={{ 
+      padding: isMobile ? '8px' : '24px',
+      backgroundColor: isMobile ? '#f5f5f5' : 'inherit'
+    }}>
       {/* 页面标题 */}
-      <div className="page-header">
-        <h1>报价单管理</h1>
+      <div className="page-header" style={{ 
+        marginBottom: isMobile ? '12px' : '24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? '12px' : '0'
+      }}>
+        <h1 style={{ 
+          fontSize: isMobile ? '20px' : '28px',
+          margin: '0'
+        }}>
+          报价单管理
+        </h1>
         <Space>
           <Button 
             type="primary" 
-            icon={<PlusOutlined />} 
+            icon={<PlusOutlined />}
+            size={isMobile ? "middle" : "default"}
             onClick={() => navigate('/quote-type-selection')}
+            style={{ width: isMobile ? '100%' : 'auto' }}
           >
             新建报价单
           </Button>
@@ -825,63 +986,87 @@ const QuoteManagement = () => {
       </div>
 
       {/* 统计卡片 */}
-      <Row gutter={16} className="statistics-cards">
-        <Col xs={24} sm={12} md={6}>
-          <Card>
-            <Statistic title="总报价单" value={statistics.total} />
+      <Row gutter={isMobile ? [8, 8] : [16, 16]} className="statistics-cards">
+        <Col xs={12} sm={12} md={6}>
+          <Card size={isMobile ? "small" : "default"}>
+            <Statistic 
+              title="总报价单" 
+              value={statistics.total}
+              valueStyle={{ fontSize: isMobile ? '20px' : '24px' }}
+            />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card>
+        <Col xs={12} sm={12} md={6}>
+          <Card size={isMobile ? "small" : "default"}>
             <Statistic 
               title="待审批" 
               value={statistics.pending} 
-              valueStyle={{ color: '#1890ff' }}
+              valueStyle={{ 
+                color: '#1890ff',
+                fontSize: isMobile ? '20px' : '24px'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card>
+        <Col xs={12} sm={12} md={6}>
+          <Card size={isMobile ? "small" : "default"}>
             <Statistic 
               title="已批准" 
               value={statistics.approved}
-              valueStyle={{ color: '#52c41a' }}
+              valueStyle={{ 
+                color: '#52c41a',
+                fontSize: isMobile ? '20px' : '24px'
+              }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card>
+        <Col xs={12} sm={12} md={6}>
+          <Card size={isMobile ? "small" : "default"}>
             <Statistic 
               title="已拒绝" 
               value={statistics.rejected}
-              valueStyle={{ color: '#f5222d' }}
+              valueStyle={{ 
+                color: '#f5222d',
+                fontSize: isMobile ? '20px' : '24px'
+              }}
             />
           </Card>
         </Col>
       </Row>
 
       {/* 报价单列表 */}
-      <Card title="报价单列表" style={{ marginBottom: 16 }}>
-        <Table
-          columns={columns}
-          dataSource={quotes}
-          rowKey="id"
-          loading={loading}
-          scroll={{ x: 1200, y: 600 }}
-          expandable={{
-            expandedRowRender: (record) => renderQuoteDetailsTable(record),
-            rowExpandable: (record) => record.quoteDetails && record.quoteDetails.length > 0,
-            expandRowByClick: false
-          }}
-          pagination={{
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
-            pageSize: 10
-          }}
-          size="middle"
-        />
-      </Card>
+      {isMobile ? (
+        <Card 
+          title="报价单列表" 
+          style={{ marginBottom: 16 }}
+          size="small"
+          bodyStyle={{ padding: '8px' }}
+        >
+          {renderMobileList()}
+        </Card>
+      ) : (
+        <Card title="报价单列表" style={{ marginBottom: 16 }}>
+          <Table
+            columns={columns}
+            dataSource={quotes}
+            rowKey="id"
+            loading={loading}
+            scroll={{ x: 1200, y: 600 }}
+            expandable={{
+              expandedRowRender: (record) => renderQuoteDetailsTable(record),
+              rowExpandable: (record) => record.quoteDetails && record.quoteDetails.length > 0,
+              expandRowByClick: false
+            }}
+            pagination={{
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 条记录`,
+              pageSize: 10
+            }}
+            size="middle"
+          />
+        </Card>
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Card, Descriptions, Table, Button, Space, Tag, 
-  Divider, Row, Col, Modal, message, 
+  Divider, Row, Col, Modal, message, List,
   Spin, Empty
 } from 'antd';
 import { 
@@ -21,6 +21,19 @@ const QuoteDetail = () => {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
   const [quote, setQuote] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // 检测移动端
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkIsMobile();
+    window.addEventListener('resize', checkIsMobile);
+    
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
 
   useEffect(() => {
     fetchQuoteDetail();
@@ -172,6 +185,55 @@ const QuoteDetail = () => {
     }
   ];
 
+  // 移动端列表渲染
+  const renderMobileItemList = (items) => {
+    if (!items || items.length === 0) {
+      return <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>暂无数据</div>;
+    }
+
+    return (
+      <List
+        dataSource={items}
+        size="small"
+        renderItem={(item, index) => (
+          <List.Item 
+            key={index}
+            style={{ 
+              padding: '12px 0',
+              borderBottom: index < items.length - 1 ? '1px solid #f0f0f0' : 'none'
+            }}
+          >
+            <div style={{ width: '100%' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                marginBottom: '4px'
+              }}>
+                <span style={{ 
+                  fontWeight: 'bold', 
+                  color: '#1890ff',
+                  fontSize: '14px'
+                }}>
+                  {item.itemName || '-'}
+                </span>
+                <span style={{ 
+                  fontWeight: 'bold', 
+                  color: '#52c41a' 
+                }}>
+                  {item.unitPrice ? `¥${item.unitPrice.toLocaleString()}/小时` : '-'}
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>
+                <div>设备类型：{item.machineType || '-'}</div>
+                <div>设备型号：{item.machine || '-'}</div>
+              </div>
+            </div>
+          </List.Item>
+        )}
+      />
+    );
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '50px' }}>
@@ -192,49 +254,133 @@ const QuoteDetail = () => {
   }
 
   return (
-    <div className="quote-detail">
+    <div className="quote-detail" style={{ 
+      padding: isMobile ? '8px' : '24px',
+      backgroundColor: isMobile ? '#f5f5f5' : 'inherit'
+    }}>
       {/* Header */}
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
-              返回
-            </Button>
-            <h2 style={{ margin: 0 }}>{quote.title}</h2>
-            {getStatusTag(quote.status)}
-            {getTypeTag(quote.type)}
+        {isMobile ? (
+          <div>
+            {/* 移动端标题行 */}
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+              <Button 
+                icon={<ArrowLeftOutlined />} 
+                size="small"
+                onClick={() => navigate(-1)}
+                style={{ marginRight: '8px' }}
+              >
+                返回
+              </Button>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h3 style={{ 
+                  margin: 0, 
+                  fontSize: '16px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {quote.title}
+                </h3>
+              </div>
+            </div>
+            
+            {/* 移动端标签行 */}
+            <div style={{ marginBottom: '12px' }}>
+              <Space size={[4, 4]} wrap>
+                {getStatusTag(quote.status)}
+                {getTypeTag(quote.type)}
+              </Space>
+            </div>
+            
+            {/* 移动端操作按钮 */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <Button 
+                size="small"
+                icon={<DownloadOutlined />} 
+                onClick={handleDownload}
+              >
+                下载
+              </Button>
+              {quote.status === 'draft' && (
+                <>
+                  <Button 
+                    size="small"
+                    icon={<EditOutlined />} 
+                    onClick={handleEdit}
+                  >
+                    编辑
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    size="small"
+                    icon={<SendOutlined />} 
+                    onClick={handleSubmitApproval}
+                  >
+                    提交审批
+                  </Button>
+                  <Button 
+                    danger 
+                    size="small"
+                    icon={<DeleteOutlined />} 
+                    onClick={handleDelete}
+                  >
+                    删除
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
-          
-          <Space>
-            <Button icon={<DownloadOutlined />} onClick={handleDownload}>
-              下载
-            </Button>
-            {quote.status === 'draft' && (
-              <>
-                <Button icon={<EditOutlined />} onClick={handleEdit}>
-                  编辑
-                </Button>
-                <Button 
-                  type="primary" 
-                  icon={<SendOutlined />} 
-                  onClick={handleSubmitApproval}
-                >
-                  提交审批
-                </Button>
-                <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-                  删除
-                </Button>
-              </>
-            )}
-          </Space>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
+                返回
+              </Button>
+              <h2 style={{ margin: 0 }}>{quote.title}</h2>
+              {getStatusTag(quote.status)}
+              {getTypeTag(quote.type)}
+            </div>
+            
+            <Space>
+              <Button icon={<DownloadOutlined />} onClick={handleDownload}>
+                下载
+              </Button>
+              {quote.status === 'draft' && (
+                <>
+                  <Button icon={<EditOutlined />} onClick={handleEdit}>
+                    编辑
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    icon={<SendOutlined />} 
+                    onClick={handleSubmitApproval}
+                  >
+                    提交审批
+                  </Button>
+                  <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+                    删除
+                  </Button>
+                </>
+              )}
+            </Space>
+          </div>
+        )}
       </Card>
 
-      <Row gutter={16} style={{ marginTop: '16px' }}>
+      <Row gutter={isMobile ? [8, 8] : [16, 16]} style={{ marginTop: '16px' }}>
         {/* Basic Information */}
         <Col xs={24}>
-          <Card title="基本信息">
-            <Descriptions column={2} bordered>
+          <Card 
+            title="基本信息" 
+            size={isMobile ? "small" : "default"}
+          >
+            <Descriptions 
+              column={isMobile ? 1 : 2} 
+              bordered={!isMobile}
+              size={isMobile ? "small" : "default"}
+              layout={isMobile ? "vertical" : "horizontal"}
+            >
               <Descriptions.Item label="报价单号">{quote.id}</Descriptions.Item>
               <Descriptions.Item label="客户">{quote.customer}</Descriptions.Item>
               <Descriptions.Item label="报价类型">{quote.type}</Descriptions.Item>
@@ -255,8 +401,14 @@ const QuoteDetail = () => {
               <>
                 <Divider />
                 <div>
-                  <h4>报价说明：</h4>
-                  <p>{quote.description}</p>
+                  <h4 style={{ fontSize: isMobile ? '14px' : '16px' }}>报价说明：</h4>
+                  <p style={{ 
+                    fontSize: isMobile ? '12px' : '14px',
+                    lineHeight: '1.5',
+                    wordBreak: 'break-all'
+                  }}>
+                    {quote.description}
+                  </p>
                 </div>
               </>
             )}
@@ -267,8 +419,8 @@ const QuoteDetail = () => {
       {/* Items Detail */}
       <Card title="报价明细" style={{ marginTop: '16px' }}>
         {(quote.type === '工装夹具报价') ? (
-          <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
-            <h4 style={{ marginBottom: '16px' }}>报价明细</h4>
+          <div style={{ padding: isMobile ? '8px' : '16px', backgroundColor: '#fafafa' }}>
+            <h4 style={{ marginBottom: '16px', fontSize: isMobile ? '14px' : '16px' }}>报价明细</h4>
             
             {/* 1. 工装夹具清单 */}
             {(() => {
@@ -278,55 +430,91 @@ const QuoteDetail = () => {
               
               return toolingItems && toolingItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <h5>🔧 1. 工装夹具清单</h5>
-                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1.5fr', 
-                      gap: '10px',
-                      padding: '8px 12px',
-                      backgroundColor: '#fafafa',
-                      borderBottom: '1px solid #d9d9d9',
-                      fontWeight: 'bold',
-                      fontSize: '12px'
-                    }}>
-                      <span>类别</span>
-                      <span>类型</span>
-                      <span>单价</span>
-                      <span>数量</span>
-                      <span>小计</span>
+                  <h5 style={{ fontSize: isMobile ? '13px' : '14px' }}>🔧 1. 工装夹具清单</h5>
+                  {isMobile ? (
+                    // Mobile: Card-based layout
+                    <div>
+                      {toolingItems.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.itemName || '-'}</span>
+                            <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>¥{(item.totalPrice || 0).toFixed(2)}</span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            <div>类别: 工装夹具</div>
+                            <div>单价: ¥{(item.unitPrice || 0).toFixed(2)}</div>
+                            <div>数量: {item.quantity || 0}</div>
+                          </div>
+                        </div>
+                      ))}
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#f0f9ff',
+                        borderRadius: '6px',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        color: '#1890ff'
+                      }}>
+                        工装夹具总价: ¥{toolingItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
+                      </div>
                     </div>
-                    {toolingItems.map((item, index) => (
-                      <div key={index} style={{ 
+                  ) : (
+                    // Desktop: Table layout
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      <div style={{ 
                         display: 'grid', 
                         gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1.5fr', 
                         gap: '10px',
                         padding: '8px 12px',
-                        borderBottom: index < toolingItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        backgroundColor: '#fafafa',
+                        borderBottom: '1px solid #d9d9d9',
+                        fontWeight: 'bold',
                         fontSize: '12px'
                       }}>
-                        <span>工装夹具</span>
-                        <span>{item.itemName || '-'}</span>
-                        <span>¥{(item.unitPrice || 0).toFixed(2)}</span>
-                        <span>{item.quantity || 0}</span>
-                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          ¥{(item.totalPrice || 0).toFixed(2)}
-                        </span>
+                        <span>类别</span>
+                        <span>类型</span>
+                        <span>单价</span>
+                        <span>数量</span>
+                        <span>小计</span>
                       </div>
-                    ))}
-                    <div style={{ 
-                      padding: '8px 12px',
-                      backgroundColor: '#f0f9ff',
-                      borderTop: '1px solid #d9d9d9',
-                      display: 'flex',
-                      justifyContent: 'flex-end',
-                      fontWeight: 'bold',
-                      fontSize: '12px',
-                      color: '#1890ff'
-                    }}>
-                      工装夹具总价: ¥{toolingItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
+                      {toolingItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1.5fr', 
+                          gap: '10px',
+                          padding: '8px 12px',
+                          borderBottom: index < toolingItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '12px'
+                        }}>
+                          <span>工装夹具</span>
+                          <span>{item.itemName || '-'}</span>
+                          <span>¥{(item.unitPrice || 0).toFixed(2)}</span>
+                          <span>{item.quantity || 0}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            ¥{(item.totalPrice || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                      <div style={{ 
+                        padding: '8px 12px',
+                        backgroundColor: '#f0f9ff',
+                        borderTop: '1px solid #d9d9d9',
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        fontWeight: 'bold',
+                        fontSize: '12px',
+                        color: '#1890ff'
+                      }}>
+                        工装夹具总价: ¥{toolingItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })()}
@@ -340,35 +528,69 @@ const QuoteDetail = () => {
               
               return engineeringItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <h5>⚙️ 2. 工程费用</h5>
-                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
-                    {engineeringItems.map((item, index) => (
-                      <div key={index} style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        borderBottom: index < engineeringItems.length - 1 ? '1px solid #f0f0f0' : 'none',
-                        fontSize: '12px'
+                  <h5 style={{ fontSize: isMobile ? '13px' : '14px' }}>⚙️ 2. 工程费用</h5>
+                  {isMobile ? (
+                    // Mobile: Card-based layout
+                    <div>
+                      {engineeringItems.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <span style={{ fontWeight: '500', fontSize: '13px' }}>{item.itemName}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                            ¥{item.totalPrice?.toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#f0f9ff',
+                        borderRadius: '6px',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        color: '#1890ff'
                       }}>
-                        <span>{item.itemName}</span>
-                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          ¥{item.totalPrice?.toFixed(2)}
-                        </span>
+                        工程费用总价: ¥{engineeringItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
                       </div>
-                    ))}
-                    <div style={{ 
-                      padding: '8px 12px',
-                      backgroundColor: '#f0f9ff',
-                      borderTop: '1px solid #d9d9d9',
-                      display: 'flex',
-                      justifyContent: 'flex-end',
-                      fontWeight: 'bold',
-                      fontSize: '12px',
-                      color: '#1890ff'
-                    }}>
-                      工程费用总价: ¥{engineeringItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
                     </div>
-                  </div>
+                  ) : (
+                    // Desktop: Table layout
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      {engineeringItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          borderBottom: index < engineeringItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '12px'
+                        }}>
+                          <span>{item.itemName}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            ¥{item.totalPrice?.toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                      <div style={{ 
+                        padding: '8px 12px',
+                        backgroundColor: '#f0f9ff',
+                        borderTop: '1px solid #d9d9d9',
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        fontWeight: 'bold',
+                        fontSize: '12px',
+                        color: '#1890ff'
+                      }}>
+                        工程费用总价: ¥{engineeringItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -382,42 +604,76 @@ const QuoteDetail = () => {
               
               return productionItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <h5>🏭 3. 量产准备费用</h5>
-                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
-                    {productionItems.map((item, index) => (
-                      <div key={index} style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        borderBottom: index < productionItems.length - 1 ? '1px solid #f0f0f0' : 'none',
-                        fontSize: '12px'
+                  <h5 style={{ fontSize: isMobile ? '13px' : '14px' }}>🏭 3. 量产准备费用</h5>
+                  {isMobile ? (
+                    // Mobile: Card-based layout
+                    <div>
+                      {productionItems.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <span style={{ fontWeight: '500', fontSize: '13px' }}>{item.itemName}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                            ¥{item.totalPrice?.toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#f0f9ff',
+                        borderRadius: '6px',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        color: '#1890ff'
                       }}>
-                        <span>{item.itemName}</span>
-                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          ¥{item.totalPrice?.toFixed(2)}
-                        </span>
+                        量产准备费用总价: ¥{productionItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
                       </div>
-                    ))}
-                    <div style={{ 
-                      padding: '8px 12px',
-                      backgroundColor: '#f0f9ff',
-                      borderTop: '1px solid #d9d9d9',
-                      display: 'flex',
-                      justifyContent: 'flex-end',
-                      fontWeight: 'bold',
-                      fontSize: '12px',
-                      color: '#1890ff'
-                    }}>
-                      量产准备费用总价: ¥{productionItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
                     </div>
-                  </div>
+                  ) : (
+                    // Desktop: Table layout
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      {productionItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          borderBottom: index < productionItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '12px'
+                        }}>
+                          <span>{item.itemName}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            ¥{item.totalPrice?.toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                      <div style={{ 
+                        padding: '8px 12px',
+                        backgroundColor: '#f0f9ff',
+                        borderTop: '1px solid #d9d9d9',
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        fontWeight: 'bold',
+                        fontSize: '12px',
+                        color: '#1890ff'
+                      }}>
+                        量产准备费用总价: ¥{productionItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
           </div>
         ) : quote.type === '工程机时报价' ? (
-          <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
-            <h4 style={{ marginBottom: '16px' }}>报价明细</h4>
+          <div style={{ padding: isMobile ? '8px' : '16px', backgroundColor: '#fafafa' }}>
+            <h4 style={{ marginBottom: '16px', fontSize: isMobile ? '14px' : '16px' }}>报价明细</h4>
             
             {/* 1. 机器设备 */}
             {(() => {
@@ -427,39 +683,65 @@ const QuoteDetail = () => {
               
               return machineItems && machineItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <h5>🔧 1. 机器设备</h5>
-                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '2fr 2fr 2fr', 
-                      gap: '10px',
-                      padding: '8px 12px',
-                      backgroundColor: '#fafafa',
-                      borderBottom: '1px solid #d9d9d9',
-                      fontWeight: 'bold',
-                      fontSize: '12px'
-                    }}>
-                      <span>设备类型</span>
-                      <span>设备型号</span>
-                      <span>小时费率</span>
+                  <h5 style={{ fontSize: isMobile ? '13px' : '14px' }}>🔧 1. 机器设备</h5>
+                  {isMobile ? (
+                    // Mobile: Card-based layout
+                    <div>
+                      {machineItems.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.machineModel || item.itemName}</span>
+                            <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                              ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            设备类型: {item.machineType}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    {machineItems.map((item, index) => (
-                      <div key={index} style={{ 
+                  ) : (
+                    // Desktop: Table layout
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      <div style={{ 
                         display: 'grid', 
                         gridTemplateColumns: '2fr 2fr 2fr', 
                         gap: '10px',
                         padding: '8px 12px',
-                        borderBottom: index < machineItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        backgroundColor: '#fafafa',
+                        borderBottom: '1px solid #d9d9d9',
+                        fontWeight: 'bold',
                         fontSize: '12px'
                       }}>
-                        <span>{item.machineType}</span>
-                        <span>{item.machineModel || item.itemName}</span>
-                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          ¥{(item.unitPrice || 0).toFixed(2)}/小时
-                        </span>
+                        <span>设备类型</span>
+                        <span>设备型号</span>
+                        <span>小时费率</span>
                       </div>
-                    ))}
-                  </div>
+                      {machineItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '2fr 2fr 2fr', 
+                          gap: '10px',
+                          padding: '8px 12px',
+                          borderBottom: index < machineItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '12px'
+                        }}>
+                          <span>{item.machineType}</span>
+                          <span>{item.machineModel || item.itemName}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -473,44 +755,68 @@ const QuoteDetail = () => {
               
               return personnelItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <h5>👨‍💼 2. 人员费用</h5>
-                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '3fr 3fr', 
-                      gap: '10px',
-                      padding: '8px 12px',
-                      backgroundColor: '#fafafa',
-                      borderBottom: '1px solid #d9d9d9',
-                      fontWeight: 'bold',
-                      fontSize: '12px'
-                    }}>
-                      <span>人员类别</span>
-                      <span>小时费率</span>
+                  <h5 style={{ fontSize: isMobile ? '13px' : '14px' }}>👨‍💼 2. 人员费用</h5>
+                  {isMobile ? (
+                    // Mobile: Card-based layout
+                    <div>
+                      {personnelItems.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <span style={{ fontWeight: '500', fontSize: '13px' }}>{item.itemName || item.machineModel}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    {personnelItems.map((item, index) => (
-                      <div key={index} style={{ 
+                  ) : (
+                    // Desktop: Table layout
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      <div style={{ 
                         display: 'grid', 
                         gridTemplateColumns: '3fr 3fr', 
                         gap: '10px',
                         padding: '8px 12px',
-                        borderBottom: index < personnelItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        backgroundColor: '#fafafa',
+                        borderBottom: '1px solid #d9d9d9',
+                        fontWeight: 'bold',
                         fontSize: '12px'
                       }}>
-                        <span>{item.itemName || item.machineModel}</span>
-                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          ¥{(item.unitPrice || 0).toFixed(2)}/小时
-                        </span>
+                        <span>人员类别</span>
+                        <span>小时费率</span>
                       </div>
-                    ))}
-                  </div>
+                      {personnelItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '3fr 3fr', 
+                          gap: '10px',
+                          padding: '8px 12px',
+                          borderBottom: index < personnelItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '12px'
+                        }}>
+                          <span>{item.itemName || item.machineModel}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
           </div>
         ) : quote.type === '量产机时报价' ? (
-          <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
-            <h4 style={{ marginBottom: '16px' }}>报价明细</h4>
+          <div style={{ padding: isMobile ? '8px' : '16px', backgroundColor: '#fafafa' }}>
+            <h4 style={{ marginBottom: '16px', fontSize: isMobile ? '14px' : '16px' }}>报价明细</h4>
             
             {/* FT测试设备 */}
             {(() => {
@@ -520,56 +826,92 @@ const QuoteDetail = () => {
               
               return ftItems && ftItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <h5>📱 FT测试设备</h5>
-                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '2fr 2fr 2fr', 
-                      gap: '10px',
-                      padding: '8px 12px',
-                      backgroundColor: '#fafafa',
-                      borderBottom: '1px solid #d9d9d9',
-                      fontWeight: 'bold',
-                      fontSize: '12px'
-                    }}>
-                      <span>设备类型</span>
-                      <span>设备型号</span>
-                      <span>小时费率</span>
+                  <h5 style={{ fontSize: isMobile ? '13px' : '14px' }}>📱 FT测试设备</h5>
+                  {isMobile ? (
+                    // Mobile: Card-based layout
+                    <div>
+                      {ftItems.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.machine || item.itemName || '-'}</span>
+                            <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                              ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            设备类型: {item.machineType || '-'}
+                          </div>
+                        </div>
+                      ))}
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#f0f9ff',
+                        borderRadius: '6px',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        color: '#1890ff'
+                      }}>
+                        FT设备小计: ¥{ftItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
+                      </div>
                     </div>
-                    {ftItems.map((item, index) => (
-                      <div key={index} style={{ 
+                  ) : (
+                    // Desktop: Table layout
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      <div style={{ 
                         display: 'grid', 
                         gridTemplateColumns: '2fr 2fr 2fr', 
                         gap: '10px',
                         padding: '8px 12px',
-                        borderBottom: index < ftItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        backgroundColor: '#fafafa',
+                        borderBottom: '1px solid #d9d9d9',
+                        fontWeight: 'bold',
                         fontSize: '12px'
                       }}>
-                        <span>{item.machineType || '-'}</span>
-                        <span>{item.machine || item.itemName || '-'}</span>
-                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                        <span>设备类型</span>
+                        <span>设备型号</span>
+                        <span>小时费率</span>
+                      </div>
+                      {ftItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '2fr 2fr 2fr', 
+                          gap: '10px',
+                          padding: '8px 12px',
+                          borderBottom: index < ftItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '12px'
+                        }}>
+                          <span>{item.machineType || '-'}</span>
+                          <span>{item.machine || item.itemName || '-'}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          </span>
+                        </div>
+                      ))}
+                      {/* FT小计 */}
+                      <div style={{ 
+                        padding: '8px 12px',
+                        backgroundColor: '#f0f9ff',
+                        borderTop: '1px solid #d9d9d9',
+                        display: 'grid',
+                        gridTemplateColumns: '2fr 2fr 2fr',
+                        gap: '10px',
+                        fontWeight: 'bold',
+                        fontSize: '12px'
+                      }}>
+                        <span></span>
+                        <span>FT设备小计:</span>
+                        <span style={{ color: '#1890ff' }}>
+                          ¥{ftItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
                         </span>
                       </div>
-                    ))}
-                    {/* FT小计 */}
-                    <div style={{ 
-                      padding: '8px 12px',
-                      backgroundColor: '#f0f9ff',
-                      borderTop: '1px solid #d9d9d9',
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 2fr 2fr',
-                      gap: '10px',
-                      fontWeight: 'bold',
-                      fontSize: '12px'
-                    }}>
-                      <span></span>
-                      <span>FT设备小计:</span>
-                      <span style={{ color: '#1890ff' }}>
-                        ¥{ftItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
-                      </span>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })()}
@@ -582,56 +924,92 @@ const QuoteDetail = () => {
               
               return cpItems && cpItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <h5>🔬 CP测试设备</h5>
-                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '2fr 2fr 2fr', 
-                      gap: '10px',
-                      padding: '8px 12px',
-                      backgroundColor: '#fafafa',
-                      borderBottom: '1px solid #d9d9d9',
-                      fontWeight: 'bold',
-                      fontSize: '12px'
-                    }}>
-                      <span>设备类型</span>
-                      <span>设备型号</span>
-                      <span>小时费率</span>
+                  <h5 style={{ fontSize: isMobile ? '13px' : '14px' }}>🔬 CP测试设备</h5>
+                  {isMobile ? (
+                    // Mobile: Card-based layout
+                    <div>
+                      {cpItems.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.machine || item.itemName || '-'}</span>
+                            <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                              ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            设备类型: {item.machineType || '-'}
+                          </div>
+                        </div>
+                      ))}
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#f0f9ff',
+                        borderRadius: '6px',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        color: '#1890ff'
+                      }}>
+                        CP设备小计: ¥{cpItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
+                      </div>
                     </div>
-                    {cpItems.map((item, index) => (
-                      <div key={index} style={{ 
+                  ) : (
+                    // Desktop: Table layout
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      <div style={{ 
                         display: 'grid', 
                         gridTemplateColumns: '2fr 2fr 2fr', 
                         gap: '10px',
                         padding: '8px 12px',
-                        borderBottom: index < cpItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        backgroundColor: '#fafafa',
+                        borderBottom: '1px solid #d9d9d9',
+                        fontWeight: 'bold',
                         fontSize: '12px'
                       }}>
-                        <span>{item.machineType || '-'}</span>
-                        <span>{item.machine || item.itemName || '-'}</span>
-                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                        <span>设备类型</span>
+                        <span>设备型号</span>
+                        <span>小时费率</span>
+                      </div>
+                      {cpItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '2fr 2fr 2fr', 
+                          gap: '10px',
+                          padding: '8px 12px',
+                          borderBottom: index < cpItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '12px'
+                        }}>
+                          <span>{item.machineType || '-'}</span>
+                          <span>{item.machine || item.itemName || '-'}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          </span>
+                        </div>
+                      ))}
+                      {/* CP小计 */}
+                      <div style={{ 
+                        padding: '8px 12px',
+                        backgroundColor: '#f0f9ff',
+                        borderTop: '1px solid #d9d9d9',
+                        display: 'grid',
+                        gridTemplateColumns: '2fr 2fr 2fr',
+                        gap: '10px',
+                        fontWeight: 'bold',
+                        fontSize: '12px'
+                      }}>
+                        <span></span>
+                        <span>CP设备小计:</span>
+                        <span style={{ color: '#1890ff' }}>
+                          ¥{cpItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
                         </span>
                       </div>
-                    ))}
-                    {/* CP小计 */}
-                    <div style={{ 
-                      padding: '8px 12px',
-                      backgroundColor: '#f0f9ff',
-                      borderTop: '1px solid #d9d9d9',
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 2fr 2fr',
-                      gap: '10px',
-                      fontWeight: 'bold',
-                      fontSize: '12px'
-                    }}>
-                      <span></span>
-                      <span>CP设备小计:</span>
-                      <span style={{ color: '#1890ff' }}>
-                        ¥{cpItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
-                      </span>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })()}
@@ -646,46 +1024,87 @@ const QuoteDetail = () => {
               
               return auxItems && auxItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <h5>🔧 辅助设备</h5>
-                  <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '2fr 2fr 2fr', 
-                      gap: '10px',
-                      padding: '8px 12px',
-                      backgroundColor: '#fafafa',
-                      borderBottom: '1px solid #d9d9d9',
-                      fontWeight: 'bold',
-                      fontSize: '12px'
-                    }}>
-                      <span>设备类型</span>
-                      <span>设备型号</span>
-                      <span>小时费率</span>
+                  <h5 style={{ fontSize: isMobile ? '13px' : '14px' }}>🔧 辅助设备</h5>
+                  {isMobile ? (
+                    // Mobile: Card-based layout
+                    <div>
+                      {auxItems.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.machine || item.itemName || '-'}</span>
+                            <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                              ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            设备类型: {item.machineType || '-'}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    {auxItems.map((item, index) => (
-                      <div key={index} style={{ 
+                  ) : (
+                    // Desktop: Table layout
+                    <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
+                      <div style={{ 
                         display: 'grid', 
                         gridTemplateColumns: '2fr 2fr 2fr', 
                         gap: '10px',
                         padding: '8px 12px',
-                        borderBottom: index < auxItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        backgroundColor: '#fafafa',
+                        borderBottom: '1px solid #d9d9d9',
+                        fontWeight: 'bold',
                         fontSize: '12px'
                       }}>
-                        <span>{item.machineType || '-'}</span>
-                        <span>{item.machine || item.itemName || '-'}</span>
-                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                          ¥{(item.unitPrice || 0).toFixed(2)}/小时
-                        </span>
+                        <span>设备类型</span>
+                        <span>设备型号</span>
+                        <span>小时费率</span>
                       </div>
-                    ))}
-                  </div>
+                      {auxItems.map((item, index) => (
+                        <div key={index} style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '2fr 2fr 2fr', 
+                          gap: '10px',
+                          padding: '8px 12px',
+                          borderBottom: index < auxItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '12px'
+                        }}>
+                          <span>{item.machineType || '-'}</span>
+                          <span>{item.machine || item.itemName || '-'}</span>
+                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
           </div>
         ) : (quote.type === '量产工序报价' || quote.type === '工序报价' || quote.quote_type === 'process') ? (
           (() => {
-            // 定义工序表格列
+            // 分离CP和FT工序
+            const cpProcesses = quote.items.filter(item => {
+              const name = item.itemName || '';
+              const description = item.itemDescription || '';
+              const machineType = item.machineType || '';
+              return name.includes('CP') || description.includes('CP') || machineType.includes('CP');
+            });
+
+            const ftProcesses = quote.items.filter(item => {
+              const name = item.itemName || '';
+              const description = item.itemDescription || '';
+              const machineType = item.machineType || '';
+              return name.includes('FT') || description.includes('FT') || machineType.includes('FT');
+            });
+
+            // 定义工序表格列（仅桌面端使用）
             const processColumns = [
               {
                 title: '工序名称',
@@ -725,73 +1144,158 @@ const QuoteDetail = () => {
               }
             ];
 
-            // 分离CP和FT工序
-            const cpProcesses = quote.items.filter(item => {
-              const name = item.itemName || '';
-              const description = item.itemDescription || '';
-              const machineType = item.machineType || '';
-              return name.includes('CP') || description.includes('CP') || machineType.includes('CP');
-            });
-
-            const ftProcesses = quote.items.filter(item => {
-              const name = item.itemName || '';
-              const description = item.itemDescription || '';
-              const machineType = item.machineType || '';
-              return name.includes('FT') || description.includes('FT') || machineType.includes('FT');
-            });
+            // 移动端卡片渲染函数
+            const renderProcessCards = (processes, title, color, emoji) => {
+              if (processes.length === 0) return null;
+              
+              return (
+                <div style={{ marginBottom: '20px' }}>
+                  <h5 style={{ marginBottom: '12px', color: color, fontSize: isMobile ? '13px' : '14px' }}>
+                    {emoji} {title}
+                  </h5>
+                  {isMobile ? (
+                    // 移动端：卡片布局
+                    <div>
+                      {processes.map((item, index) => (
+                        <div key={index} style={{
+                          border: '1px solid #d9d9d9',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                          marginBottom: '8px',
+                          padding: '12px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                            <div>
+                              <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>
+                                {item.itemName || '-'}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#666' }}>
+                                {item.machineType || '-'}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                                {item.unitPrice ? `¥${item.unitPrice.toFixed(4)}` : '¥0.0000'}
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#999' }}>
+                                单颗报价
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#666', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div>设备: {item.machine || item.itemName?.split('-')[1] || '-'}</div>
+                            <div>UPH: {item.uph || '-'}</div>
+                          </div>
+                          {item.hourlyRate && (
+                            <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                              机时费率: {item.hourlyRate}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <div style={{
+                        padding: '10px',
+                        backgroundColor: '#f0f9ff',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        color: '#666',
+                        fontStyle: 'italic',
+                        textAlign: 'center'
+                      }}>
+                        💡 注：{title}各道工序报价不可直接相加，请根据实际工艺流程选择
+                      </div>
+                    </div>
+                  ) : (
+                    // 桌面端：表格布局
+                    <div>
+                      <Table
+                        columns={processColumns}
+                        dataSource={processes}
+                        pagination={false}
+                        size="small"
+                        bordered
+                        rowKey={(item, index) => `${title.toLowerCase()}_${index}`}
+                        style={{ marginBottom: '8px' }}
+                      />
+                      <div style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
+                        💡 注：{title}各道工序报价不可直接相加，请根据实际工艺流程选择
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            };
 
             return (
-              <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
-                <h4 style={{ marginBottom: '16px', color: '#1890ff' }}>报价明细</h4>
+              <div style={{ padding: isMobile ? '8px' : '16px', backgroundColor: '#fafafa' }}>
+                <h4 style={{ marginBottom: '16px', color: '#1890ff', fontSize: isMobile ? '14px' : '16px' }}>报价明细</h4>
                 
-                {/* CP工序表格 */}
-                {cpProcesses.length > 0 && (
-                  <div style={{ marginBottom: '20px' }}>
-                    <h5 style={{ marginBottom: '8px', color: '#52c41a' }}>🔬 CP工序</h5>
-                    <Table
-                      columns={processColumns}
-                      dataSource={cpProcesses}
-                      pagination={false}
-                      size="small"
-                      bordered
-                      rowKey={(item, index) => `cp_${index}`}
-                      style={{ marginBottom: '8px' }}
-                    />
-                    <div style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
-                      💡 注：CP工序各道工序报价不可直接相加，请根据实际工艺流程选择
-                    </div>
-                  </div>
-                )}
+                {/* CP工序 */}
+                {renderProcessCards(cpProcesses, 'CP工序', '#52c41a', '🔬')}
                 
-                {/* FT工序表格 */}
-                {ftProcesses.length > 0 && (
-                  <div>
-                    <h5 style={{ marginBottom: '8px', color: '#1890ff' }}>📱 FT工序</h5>
-                    <Table
-                      columns={processColumns}
-                      dataSource={ftProcesses}
-                      pagination={false}
-                      size="small"
-                      bordered
-                      rowKey={(item, index) => `ft_${index}`}
-                      style={{ marginBottom: '8px' }}
-                    />
-                    <div style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
-                      💡 注：FT工序各道工序报价不可直接相加，请根据实际工艺流程选择
-                    </div>
-                  </div>
-                )}
+                {/* FT工序 */}
+                {renderProcessCards(ftProcesses, 'FT工序', '#1890ff', '📱')}
               </div>
             );
           })()
         ) : (
           // 其他报价类型使用普通表格显示
-          <Table
-            columns={itemColumns}
-            dataSource={quote.items}
-            pagination={false}
-            bordered
-          />
+          <div style={{ padding: isMobile ? '8px' : '16px' }}>
+            {isMobile ? (
+              // 移动端：卡片布局
+              <div>
+                {quote.items && quote.items.length > 0 ? (
+                  quote.items.map((item, index) => (
+                    <div key={index} style={{
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '6px',
+                      backgroundColor: '#fff',
+                      marginBottom: '8px',
+                      padding: '12px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '13px' }}>
+                          {item.itemName || item.name || '-'}
+                        </span>
+                        <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                          ¥{(item.unitPrice || item.totalPrice || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.4' }}>
+                        {item.description && (
+                          <div style={{ marginBottom: '4px' }}>{item.description}</div>
+                        )}
+                        {item.quantity && (
+                          <div>数量: {item.quantity} {item.unit || ''}</div>
+                        )}
+                        {item.remarks && (
+                          <div style={{ marginTop: '4px', color: '#999' }}>备注: {item.remarks}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '40px 20px',
+                    color: '#999',
+                    fontSize: '14px'
+                  }}>
+                    暂无报价明细
+                  </div>
+                )}
+              </div>
+            ) : (
+              // 桌面端：表格布局
+              <Table
+                columns={itemColumns}
+                dataSource={quote.items}
+                pagination={false}
+                bordered
+                size="small"
+              />
+            )}
+          </div>
         )}
       </Card>
     </div>
