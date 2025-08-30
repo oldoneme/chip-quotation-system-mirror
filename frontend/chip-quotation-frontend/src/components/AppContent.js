@@ -23,6 +23,7 @@ import VersionControl from '../pages/VersionControl';
 import QuoteManagement from '../pages/QuoteManagement';
 import QuoteDetail from '../pages/QuoteDetail';
 import ApprovalWorkflow from '../pages/ApprovalWorkflow';
+import WeComApprovalPage from '../pages/WeComApprovalPage';
 import DebugPanel from './DebugPanel';
 
 const { Header, Content, Footer } = Layout;
@@ -70,6 +71,7 @@ const AppContent = () => {
                 <Route path="/quote-management" element={<QuoteManagement />} />
                 <Route path="/quotes" element={<QuoteManagement />} />
                 <Route path="/quote-detail/:id" element={<QuoteDetail />} />
+                <Route path="/approval/:token" element={<WeComApprovalPage />} />
                 <Route path="/quote-templates" element={<QuoteTemplate />} />
                 <Route path="/approval-workflow" element={<ApprovalWorkflow />} />
                 <Route path="/analytics" element={<AnalyticsDashboard />} />

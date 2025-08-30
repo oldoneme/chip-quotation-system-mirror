@@ -6,8 +6,10 @@
 import os
 import json
 import requests
+import secrets
+import string
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -353,6 +355,277 @@ class WeComApprovalService:
             
         except requests.RequestException:
             return {"records": []}
+    
+    # ======================== 新增：6种审批动作方法 ========================
+    
+    def approve_quote(self, quote_id: int, approver_id: int, comments: Optional[str] = None) -> Dict[str, Any]:
+        """
+        批准报价单
+        """
+        quote = self._get_quote_and_validate_approval(quote_id, approver_id)
+        
+        # 更新报价单状态
+        quote.approval_status = 'approved'
+        quote.status = 'approved'
+        quote.approved_at = datetime.now()
+        quote.approved_by = approver_id
+        quote.current_approver_id = None
+        
+        # 创建审批记录
+        approval_record = ApprovalRecord(
+            quote_id=quote_id,
+            action='approve',
+            status='completed',
+            approver_id=approver_id,
+            comments=comments or '审批通过',
+            processed_at=datetime.now(),
+            is_final_step=True
+        )
+        self.db.add(approval_record)
+        self.db.commit()
+        
+        return {"quote_id": quote_id, "status": "approved", "message": "报价单已批准"}
+    
+    def reject_quote(self, quote_id: int, approver_id: int, comments: str) -> Dict[str, Any]:
+        """
+        拒绝报价单
+        """
+        quote = self._get_quote_and_validate_approval(quote_id, approver_id)
+        
+        # 更新报价单状态
+        quote.approval_status = 'rejected'
+        quote.status = 'rejected'
+        quote.rejection_reason = comments
+        quote.current_approver_id = None
+        
+        # 创建审批记录
+        approval_record = ApprovalRecord(
+            quote_id=quote_id,
+            action='reject',
+            status='completed',
+            approver_id=approver_id,
+            comments=comments,
+            processed_at=datetime.now(),
+            is_final_step=True
+        )
+        self.db.add(approval_record)
+        self.db.commit()
+        
+        return {"quote_id": quote_id, "status": "rejected", "message": "报价单已拒绝"}
+    
+    def approve_with_changes(self, quote_id: int, approver_id: int, comments: Optional[str], 
+                           modified_data: Dict[str, Any], change_summary: Optional[str] = None) -> Dict[str, Any]:
+        """
+        修改后批准
+        """
+        quote = self._get_quote_and_validate_approval(quote_id, approver_id)
+        
+        # 保存原始数据
+        original_data = {
+            "total_amount": quote.total_amount,
+            "discount": quote.discount,
+            "tax_rate": quote.tax_rate,
+            "description": quote.description,
+            "notes": quote.notes
+        }
+        
+        # 应用修改数据（这里可以根据实际需求扩展）
+        if "total_amount" in modified_data:
+            quote.total_amount = modified_data["total_amount"]
+        if "discount" in modified_data:
+            quote.discount = modified_data["discount"]
+        if "description" in modified_data:
+            quote.description = modified_data["description"]
+        if "notes" in modified_data:
+            quote.notes = modified_data["notes"]
+        
+        # 更新审批状态
+        quote.approval_status = 'approved_with_changes'
+        quote.status = 'approved'
+        quote.approved_at = datetime.now()
+        quote.approved_by = approver_id
+        quote.current_approver_id = None
+        
+        # 创建审批记录
+        approval_record = ApprovalRecord(
+            quote_id=quote_id,
+            action='approve_with_changes',
+            status='completed',
+            approver_id=approver_id,
+            comments=comments or '修改后批准',
+            modified_data=json.dumps(modified_data),
+            original_data=json.dumps(original_data),
+            change_summary=change_summary,
+            processed_at=datetime.now(),
+            is_final_step=True
+        )
+        self.db.add(approval_record)
+        self.db.commit()
+        
+        return {"quote_id": quote_id, "status": "approved_with_changes", "message": "报价单已修改并批准"}
+    
+    def return_for_revision(self, quote_id: int, approver_id: int, comments: str, 
+                          change_summary: Optional[str] = None) -> Dict[str, Any]:
+        """
+        退回修改
+        """
+        quote = self._get_quote_and_validate_approval(quote_id, approver_id)
+        
+        # 更新报价单状态
+        quote.approval_status = 'returned_for_revision'
+        quote.status = 'draft'  # 回到草稿状态供修改
+        quote.current_approver_id = None
+        
+        # 创建审批记录
+        approval_record = ApprovalRecord(
+            quote_id=quote_id,
+            action='return_for_revision',
+            status='completed',
+            approver_id=approver_id,
+            comments=comments,
+            change_summary=change_summary,
+            processed_at=datetime.now(),
+            is_final_step=False
+        )
+        self.db.add(approval_record)
+        self.db.commit()
+        
+        return {"quote_id": quote_id, "status": "returned_for_revision", "message": "报价单已退回修改"}
+    
+    def forward_approval(self, quote_id: int, approver_id: int, forwarded_to_id: int, 
+                        forward_reason: str, comments: Optional[str] = None) -> Dict[str, Any]:
+        """
+        转交审批
+        """
+        quote = self._get_quote_and_validate_approval(quote_id, approver_id)
+        
+        # 验证转交目标用户
+        from ..models import User
+        forwarded_to_user = self.db.query(User).filter(User.id == forwarded_to_id).first()
+        if not forwarded_to_user:
+            raise HTTPException(status_code=400, detail="转交目标用户不存在")
+        
+        # 更新当前审批人
+        quote.current_approver_id = forwarded_to_id
+        quote.approval_status = 'forwarded'
+        
+        # 创建审批记录
+        approval_record = ApprovalRecord(
+            quote_id=quote_id,
+            action='forward',
+            status='completed',
+            approver_id=approver_id,
+            forwarded_to_id=forwarded_to_id,
+            forward_reason=forward_reason,
+            comments=comments or f'已转交给 {forwarded_to_user.name}',
+            processed_at=datetime.now(),
+            is_final_step=False
+        )
+        self.db.add(approval_record)
+        self.db.commit()
+        
+        return {"quote_id": quote_id, "status": "forwarded", "message": f"审批已转交给 {forwarded_to_user.name}"}
+    
+    def request_input(self, quote_id: int, approver_id: int, comments: str, 
+                     input_deadline: Optional[str] = None) -> Dict[str, Any]:
+        """
+        征求意见
+        """
+        quote = self._get_quote_and_validate_approval(quote_id, approver_id)
+        
+        # 解析截止时间
+        deadline = None
+        if input_deadline:
+            try:
+                deadline = datetime.fromisoformat(input_deadline.replace('Z', '+00:00'))
+            except ValueError:
+                deadline = datetime.now() + timedelta(days=7)  # 默认7天后
+        else:
+            deadline = datetime.now() + timedelta(days=7)
+        
+        # 更新报价单状态
+        quote.approval_status = 'input_requested'
+        
+        # 创建审批记录
+        approval_record = ApprovalRecord(
+            quote_id=quote_id,
+            action='request_input',
+            status='pending',
+            approver_id=approver_id,
+            comments=comments,
+            input_deadline=deadline,
+            input_received=False,
+            processed_at=datetime.now(),
+            is_final_step=False
+        )
+        self.db.add(approval_record)
+        self.db.commit()
+        
+        return {"quote_id": quote_id, "status": "input_requested", "message": "已征求意见", "deadline": deadline.isoformat()}
+    
+    def generate_approval_link(self, quote_id: int, user_id: int) -> Dict[str, Any]:
+        """
+        生成审批链接Token
+        """
+        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        if not quote:
+            raise HTTPException(status_code=404, detail="报价单不存在")
+        
+        # 生成随机Token
+        token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+        
+        # 更新报价单Token
+        quote.approval_link_token = token
+        self.db.commit()
+        
+        # 构造审批链接（这里需要根据实际前端路径调整）
+        base_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+        approval_url = f"{base_url}/approval/{token}"
+        
+        return {
+            "token": token,
+            "approval_url": approval_url,
+            "expires_at": (datetime.now() + timedelta(days=7)).isoformat(),  # 7天有效期
+            "quote_id": quote_id
+        }
+    
+    def get_quote_by_approval_token(self, token: str) -> Dict[str, Any]:
+        """
+        通过审批Token获取报价单信息
+        """
+        quote = self.db.query(Quote).filter(Quote.approval_link_token == token).first()
+        if not quote:
+            raise HTTPException(status_code=404, detail="审批链接无效或已过期")
+        
+        return {
+            "quote_id": quote.id,
+            "quote_number": quote.quote_number,
+            "title": quote.title,
+            "customer_name": quote.customer_name,
+            "total_amount": quote.total_amount,
+            "status": quote.status,
+            "approval_status": quote.approval_status,
+            "current_approver_id": quote.current_approver_id,
+            "created_at": quote.created_at.isoformat() if quote.created_at else None
+        }
+    
+    def _get_quote_and_validate_approval(self, quote_id: int, approver_id: int) -> Quote:
+        """
+        获取报价单并验证审批权限
+        """
+        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        if not quote:
+            raise HTTPException(status_code=404, detail="报价单不存在")
+        
+        # 检查审批状态
+        if quote.approval_status not in ['pending', 'forwarded', 'input_requested']:
+            raise HTTPException(status_code=400, detail="报价单当前状态不允许审批操作")
+        
+        # 检查审批权限（如果设置了当前审批人）
+        if quote.current_approver_id and quote.current_approver_id != approver_id:
+            raise HTTPException(status_code=403, detail="您没有审批权限")
+        
+        return quote
 
 
 class WeComApprovalCallbackHandler:

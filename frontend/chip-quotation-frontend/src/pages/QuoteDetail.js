@@ -12,6 +12,10 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
+import ApprovalApiService from '../services/approvalApi';
+import ApprovalPanel from '../components/ApprovalPanel';
+import ApprovalHistory from '../components/ApprovalHistory';
+import { useAuth } from '../contexts/AuthContext';
 import '../styles/QuoteDetail.css';
 
 const { confirm } = Modal;
@@ -19,9 +23,12 @@ const { confirm } = Modal;
 const QuoteDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [approvalLoading, setApprovalLoading] = useState(false);
   const [quote, setQuote] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [approvers, setApprovers] = useState([]);
 
   // 检测移动端
   useEffect(() => {
@@ -42,7 +49,11 @@ const QuoteDetail = () => {
   const fetchQuoteDetail = async () => {
     setLoading(true);
     try {
-      const quoteData = await QuoteApiService.getQuoteDetailTest(id);
+      // 智能识别参数类型：纯数字为ID，包含字母的为报价单号
+      const isNumericId = /^\d+$/.test(id);
+      const quoteData = isNumericId 
+        ? await QuoteApiService.getQuoteDetailById(id)
+        : await QuoteApiService.getQuoteDetailTest(id);
       
       if (quoteData.error) {
         throw new Error(quoteData.error);
@@ -66,6 +77,9 @@ const QuoteDetail = () => {
         totalAmount: quoteData.total_amount || 0,
         discount: quoteData.discount || 0,
         description: quoteData.description,
+        approvalStatus: quoteData.approval_status || 'not_submitted',
+        currentApproverId: quoteData.current_approver_id,
+        currentApproverName: quoteData.current_approver_name,
         items: quoteData.items?.map(item => ({
           key: item.id?.toString(),
           itemName: item.item_name,
@@ -157,6 +171,40 @@ const QuoteDetail = () => {
       message.error('提交审批失败');
     }
   };
+
+  // 处理审批操作
+  const handleApprovalAction = async (action, data) => {
+    setApprovalLoading(true);
+    try {
+      await ApprovalApiService.performApprovalAction(action, quote.quoteId, data);
+      message.success(`${ApprovalApiService.getActionText(action)}成功`);
+      await fetchQuoteDetail(); // 重新获取报价单数据
+    } catch (error) {
+      console.error(`${action}操作失败:`, error);
+      throw error; // 重新抛出错误让组件处理
+    } finally {
+      setApprovalLoading(false);
+    }
+  };
+
+  // 获取可用的审批人列表
+  const fetchApprovers = async () => {
+    try {
+      // 这里应该调用API获取审批人列表
+      // 暂时使用模拟数据
+      setApprovers([
+        { id: 1, name: '张经理', role: 'manager' },
+        { id: 2, name: '李主管', role: 'supervisor' },
+        { id: 3, name: '王总监', role: 'director' }
+      ]);
+    } catch (error) {
+      console.error('获取审批人列表失败:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchApprovers();
+  }, []);
 
   const itemColumns = [
     {
@@ -1298,6 +1346,27 @@ const QuoteDetail = () => {
           </div>
         )}
       </Card>
+
+      {/* 审批操作面板 */}
+      <ApprovalPanel
+        quote={{
+          ...quote,
+          approval_status: quote?.approvalStatus,
+          current_approver_id: quote?.currentApproverId,
+          current_approver_name: quote?.currentApproverName
+        }}
+        currentUser={currentUser}
+        onApprovalAction={handleApprovalAction}
+        loading={approvalLoading}
+        approvers={approvers}
+      />
+
+      {/* 审批历史记录 */}
+      <ApprovalHistory
+        quoteId={quote?.quoteId}
+        onRefresh={fetchQuoteDetail}
+        approvalService={ApprovalApiService}
+      />
     </div>
   );
 };

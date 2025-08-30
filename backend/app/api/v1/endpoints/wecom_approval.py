@@ -3,14 +3,28 @@
 企业微信审批API端点
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from ....database import get_db
 from ....services.wecom_approval_service import WeComApprovalService, WeComApprovalCallbackHandler
 from ....auth import get_current_user
 from ....models import User
+
+# 请求数据模型
+class ApprovalActionRequest(BaseModel):
+    comments: Optional[str] = None
+    modified_data: Optional[Dict[str, Any]] = None
+    change_summary: Optional[str] = None
+
+class ForwardRequest(ApprovalActionRequest):
+    forwarded_to_id: int
+    forward_reason: str
+
+class RequestInputRequest(ApprovalActionRequest):
+    input_deadline: Optional[str] = None  # ISO datetime string
 
 router = APIRouter()
 
@@ -92,6 +106,214 @@ async def sync_approval_status(
         return {
             "message": "同步完成",
             "status": status_info
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ======================== 新增：6种审批动作API ========================
+
+@router.post("/approve/{quote_id}")
+async def approve_quote(
+    quote_id: int,
+    request: ApprovalActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    批准报价单
+    """
+    service = WeComApprovalService(db)
+    try:
+        result = service.approve_quote(
+            quote_id=quote_id,
+            approver_id=current_user.id,
+            comments=request.comments
+        )
+        return {
+            "message": "报价单已批准",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reject/{quote_id}")
+async def reject_quote(
+    quote_id: int,
+    request: ApprovalActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    拒绝报价单
+    """
+    if not request.comments:
+        raise HTTPException(status_code=400, detail="拒绝时必须提供拒绝原因")
+    
+    service = WeComApprovalService(db)
+    try:
+        result = service.reject_quote(
+            quote_id=quote_id,
+            approver_id=current_user.id,
+            comments=request.comments
+        )
+        return {
+            "message": "报价单已拒绝",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/approve-with-changes/{quote_id}")
+async def approve_with_changes(
+    quote_id: int,
+    request: ApprovalActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    修改后批准
+    """
+    if not request.modified_data:
+        raise HTTPException(status_code=400, detail="修改后批准必须提供修改数据")
+    
+    service = WeComApprovalService(db)
+    try:
+        result = service.approve_with_changes(
+            quote_id=quote_id,
+            approver_id=current_user.id,
+            comments=request.comments,
+            modified_data=request.modified_data,
+            change_summary=request.change_summary
+        )
+        return {
+            "message": "报价单已修改并批准",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/return-for-revision/{quote_id}")
+async def return_for_revision(
+    quote_id: int,
+    request: ApprovalActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    退回修改
+    """
+    if not request.comments:
+        raise HTTPException(status_code=400, detail="退回修改时必须提供修改建议")
+    
+    service = WeComApprovalService(db)
+    try:
+        result = service.return_for_revision(
+            quote_id=quote_id,
+            approver_id=current_user.id,
+            comments=request.comments,
+            change_summary=request.change_summary
+        )
+        return {
+            "message": "报价单已退回修改",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/forward/{quote_id}")
+async def forward_quote(
+    quote_id: int,
+    request: ForwardRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    转交审批
+    """
+    service = WeComApprovalService(db)
+    try:
+        result = service.forward_approval(
+            quote_id=quote_id,
+            approver_id=current_user.id,
+            forwarded_to_id=request.forwarded_to_id,
+            forward_reason=request.forward_reason,
+            comments=request.comments
+        )
+        return {
+            "message": "审批已转交",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/request-input/{quote_id}")
+async def request_input(
+    quote_id: int,
+    request: RequestInputRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    征求意见
+    """
+    if not request.comments:
+        raise HTTPException(status_code=400, detail="征求意见时必须说明需要什么信息")
+    
+    service = WeComApprovalService(db)
+    try:
+        result = service.request_input(
+            quote_id=quote_id,
+            approver_id=current_user.id,
+            comments=request.comments,
+            input_deadline=request.input_deadline
+        )
+        return {
+            "message": "已征求意见",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ======================== 审批链接相关API ========================
+
+@router.get("/approval-link/{token}")
+async def get_approval_by_token(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    通过审批链接Token获取报价单信息（企业微信回调使用）
+    """
+    service = WeComApprovalService(db)
+    try:
+        quote_info = service.get_quote_by_approval_token(token)
+        return quote_info
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="审批链接无效或已过期")
+
+
+@router.post("/generate-approval-link/{quote_id}")
+async def generate_approval_link(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    生成审批链接
+    """
+    service = WeComApprovalService(db)
+    try:
+        link_info = service.generate_approval_link(quote_id, current_user.id)
+        return {
+            "message": "审批链接已生成",
+            "approval_link": link_info
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

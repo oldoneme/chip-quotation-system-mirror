@@ -85,6 +85,20 @@ export class QuoteApiService {
   }
 
   /**
+   * 根据报价单ID获取报价单详情（包含创建者姓名）
+   * @param {number} quoteId - 报价单ID
+   */
+  static async getQuoteDetailById(quoteId) {
+    try {
+      const response = await api.get(`${QUOTE_BASE_URL}/detail/by-id/${quoteId}`);
+      return response.data;
+    } catch (error) {
+      console.error('获取报价单详情失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 创建新报价单
    * @param {Object} quoteData - 报价单数据
    */

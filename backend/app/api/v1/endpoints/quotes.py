@@ -151,6 +151,97 @@ async def get_quotes_test(
         traceback.print_exc()
         return {"error": str(e)}
 
+@router.get("/detail/by-id/{quote_id}")
+async def get_quote_detail_by_id(
+    quote_id: int,
+    db: Session = Depends(get_db)
+):
+    """按ID获取报价单详情（包含创建者姓名）"""
+    try:
+        from ....models import Quote, User, QuoteItem
+        from sqlalchemy.orm import selectinload
+        
+        # 获取报价单详情，关联用户和明细项
+        quote = (db.query(Quote)
+                .options(selectinload(Quote.items), selectinload(Quote.creator))
+                .filter(Quote.id == quote_id)
+                .first())
+        
+        if not quote:
+            return {"error": "报价单不存在"}
+        
+        # 获取创建者姓名
+        creator_name = "未知"
+        if quote.creator:
+            creator_name = quote.creator.name
+        
+        # 格式化报价明细
+        quote_items = []
+        for item in quote.items:
+            # 从configuration中解析UPH和计算机时费率
+            uph = None
+            hourly_rate = None
+            if item.configuration:
+                import re
+                uph_match = re.search(r'UPH:(\d+)', item.configuration)
+                if uph_match:
+                    uph = int(uph_match.group(1))
+                    hourly_rate = f"¥{(item.unit_price * uph):.2f}/小时" if item.unit_price else "¥0.00/小时"
+            
+            quote_items.append({
+                "id": item.id,
+                "item_name": item.item_name,
+                "item_description": item.item_description,
+                "machine_type": item.machine_type,
+                "supplier": item.supplier,
+                "machine_model": item.machine_model,
+                "configuration": item.configuration,
+                "quantity": item.quantity,
+                "unit": item.unit,
+                "unit_price": item.unit_price,
+                "total_price": item.total_price,
+                "uph": uph,
+                "hourly_rate": hourly_rate
+            })
+        
+        return {
+            "id": quote.id,
+            "quote_number": quote.quote_number,
+            "title": quote.title,
+            "quote_type": quote.quote_type,
+            "customer_name": quote.customer_name,
+            "customer_contact": quote.customer_contact,
+            "customer_phone": quote.customer_phone,
+            "customer_email": quote.customer_email,
+            "customer_address": quote.customer_address,
+            "currency": quote.currency,
+            "subtotal": quote.subtotal,
+            "discount": quote.discount,
+            "tax_rate": quote.tax_rate,
+            "tax_amount": quote.tax_amount,
+            "total_amount": quote.total_amount,
+            "valid_until": quote.valid_until.isoformat() if quote.valid_until else None,
+            "payment_terms": quote.payment_terms,
+            "description": quote.description,
+            "notes": quote.notes,
+            "status": quote.status,
+            "version": quote.version,
+            "submitted_at": quote.submitted_at.isoformat() if quote.submitted_at else None,
+            "approved_at": quote.approved_at.isoformat() if quote.approved_at else None,
+            "approved_by": quote.approved_by,
+            "rejection_reason": quote.rejection_reason,
+            "wecom_approval_id": quote.wecom_approval_id,
+            "created_by": quote.created_by,
+            "creator_name": creator_name,
+            "created_at": quote.created_at.isoformat() if quote.created_at else None,
+            "updated_at": quote.updated_at.isoformat() if quote.updated_at else None,
+            "items": quote_items
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
 @router.get("/detail/{quote_number}")
 async def get_quote_detail_test(
     quote_number: str,

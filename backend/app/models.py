@@ -113,15 +113,19 @@ class Quote(Base):
     notes = Column(Text)  # 备注
     
     # 状态管理
-    status = Column(String, default="draft", index=True)  # 状态: draft, pending, approved, rejected
+    status = Column(String, default="draft", index=True)  # 状态: draft, pending, approved, rejected, returned, forwarded
     version = Column(String, default="V1.0")  # 版本号
     
     # 审批相关
+    approval_status = Column(String, default="not_submitted", index=True)  # 审批状态: not_submitted, pending, approved, rejected, approved_with_changes, returned_for_revision, forwarded, input_requested
+    current_approver_id = Column(Integer, ForeignKey("users.id"))  # 当前审批人
     submitted_at = Column(DateTime)  # 提交审批时间
     approved_at = Column(DateTime)  # 审批通过时间
-    approved_by = Column(Integer, ForeignKey("users.id"))  # 审批人
+    approved_by = Column(Integer, ForeignKey("users.id"))  # 最终审批人
     rejection_reason = Column(Text)  # 拒绝原因
-    wecom_approval_id = Column(String)  # 企业微信审批单ID
+    wecom_approval_id = Column(String, unique=True)  # 企业微信审批单ID
+    wecom_approval_template_id = Column(String)  # 企业微信审批模板ID
+    approval_link_token = Column(String, unique=True)  # 审批链接Token
     
     # 系统字段
     created_by = Column(Integer, ForeignKey("users.id"))
@@ -131,6 +135,7 @@ class Quote(Base):
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
     approver = relationship("User", foreign_keys=[approved_by])
+    current_approver = relationship("User", foreign_keys=[current_approver_id])
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
     approval_records = relationship("ApprovalRecord", back_populates="quote", cascade="all, delete-orphan")
 
@@ -174,22 +179,42 @@ class ApprovalRecord(Base):
     quote_id = Column(Integer, ForeignKey("quotes.id"))
     
     # 审批信息
-    action = Column(String)  # 操作: submit, approve, reject, withdraw
-    status = Column(String)  # 状态: pending, approved, rejected
+    action = Column(String, index=True)  # 操作: approve, reject, approve_with_changes, return_for_revision, forward, request_input, submit, withdraw
+    status = Column(String, index=True)  # 状态: pending, completed, cancelled
     approver_id = Column(Integer, ForeignKey("users.id"))  # 审批人
     comments = Column(Text)  # 审批意见
+    
+    # 审批步骤信息
+    step_order = Column(Integer, default=1)  # 审批步骤顺序
+    is_final_step = Column(Boolean, default=True)  # 是否最终步骤
+    
+    # 修改相关（针对 approve_with_changes 和 return_for_revision）
+    modified_data = Column(Text)  # 修改的数据（JSON格式）
+    original_data = Column(Text)  # 原始数据（JSON格式）
+    change_summary = Column(Text)  # 修改摘要
+    
+    # 转交相关（针对 forward）
+    forwarded_to_id = Column(Integer, ForeignKey("users.id"))  # 转交给的用户
+    forward_reason = Column(Text)  # 转交原因
+    
+    # 征求意见相关（针对 request_input）
+    input_deadline = Column(DateTime)  # 输入截止时间
+    input_received = Column(Boolean, default=False)  # 是否已收到输入
     
     # 企业微信审批相关
     wecom_approval_id = Column(String)  # 企业微信审批单ID
     wecom_sp_no = Column(String)  # 企业微信审批编号
+    wecom_callback_data = Column(Text)  # 企业微信回调数据（JSON格式）
     
     # 时间信息
     created_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime)  # 处理时间
+    deadline = Column(DateTime)  # 审批截止时间
     
     # Relationships
     quote = relationship("Quote", back_populates="approval_records")
-    approver = relationship("User")
+    approver = relationship("User", foreign_keys=[approver_id])
+    forwarded_to = relationship("User", foreign_keys=[forwarded_to_id])
 
 
 class QuoteTemplate(Base):
