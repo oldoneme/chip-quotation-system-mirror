@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from ....database import get_db
 from ....services.wecom_approval_service import WeComApprovalService, WeComApprovalCallbackHandler
+from ....services.wecom_integration import WeComApprovalIntegration
 from ....auth import get_current_user
 from ....models import User
 
@@ -315,5 +316,88 @@ async def generate_approval_link(
             "message": "审批链接已生成",
             "approval_link": link_info
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 企业微信集成端点 ====================
+
+@router.post("/create-wecom-approval/{quote_id}")
+async def create_wecom_approval(
+    quote_id: int,
+    approver_userid: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    创建企业微信审批申请
+    """
+    integration = WeComApprovalIntegration(db)
+    try:
+        result = await integration.create_approval(quote_id, approver_userid)
+        return {
+            "message": "企业微信审批申请已创建",
+            "sp_no": result.get("sp_no")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/send-notification/{quote_id}")
+async def send_approval_notification(
+    quote_id: int,
+    approver_userid: str,
+    message_type: str = "pending",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    发送企业微信审批通知
+    """
+    integration = WeComApprovalIntegration(db)
+    try:
+        success = await integration.send_approval_notification(
+            quote_id=quote_id,
+            approver_userid=approver_userid,
+            message_type=message_type
+        )
+        if success:
+            return {"message": "通知发送成功"}
+        else:
+            return {"message": "通知发送失败"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-status/{quote_id}")
+async def sync_approval_status(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    同步企业微信审批状态
+    """
+    integration = WeComApprovalIntegration(db)
+    try:
+        result = await integration.sync_approval_status(quote_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/wecom-detail/{sp_no}")
+async def get_wecom_approval_detail(
+    sp_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取企业微信审批单详情
+    """
+    integration = WeComApprovalIntegration(db)
+    try:
+        result = await integration.get_approval_detail(sp_no)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

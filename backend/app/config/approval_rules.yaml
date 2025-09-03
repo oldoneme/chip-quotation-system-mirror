@@ -1,0 +1,31 @@
+templates:
+  InquiryQuote: "TPL_inquiry"
+  ToolingQuote: "TPL_tooling"
+  EngineeringQuote: "TPL_engineering"
+  MassProductionQuote: "TPL_massprod"
+  ProcessQuote: "TPL_process"
+  ComprehensiveQuote: "TPL_comprehensive"
+
+routing:
+  by_amount:
+    - when: "amount_total >= 500000"
+      approvers: ["finance_head", "ops_head", "ceo"]
+    - when: "amount_total < 500000"
+      approvers: ["finance_mgr", "ops_mgr"]
+
+delegation: []   # 预留：可维护委托关系
+
+fields:
+  common:
+    - key: "quote_no"
+      label: "报价单号"
+    - key: "customer_name"
+      label: "客户名称"
+    - key: "quote_type"
+      label: "报价类型"
+    - key: "amount_total"
+      label: "金额(含税)"
+  extras:
+    ProcessQuote:
+      - key: "process_steps"
+        label: "工序概览"

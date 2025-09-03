@@ -14,7 +14,10 @@ from .endpoints import (
     statistics,
     confirmations,
     quotes,
-    wecom_approval
+    wecom_approval,
+    wecom_callback,
+    quote_approval_trigger,
+    auth
 )
 
 api_router = APIRouter()
@@ -35,3 +38,6 @@ api_router.include_router(operation_logs.router, prefix="", tags=["operation-log
 api_router.include_router(statistics.router, prefix="", tags=["statistics"])
 api_router.include_router(confirmations.router, prefix="", tags=["confirmations"])
 api_router.include_router(wecom_approval.router, prefix="/wecom-approval", tags=["wecom-approval"])
+api_router.include_router(wecom_callback.router, prefix="/wecom-callback", tags=["wecom-callback"])
+api_router.include_router(quote_approval_trigger.router, prefix="", tags=["quote-approval-trigger"])
+api_router.include_router(auth.router, prefix="", tags=["auth"])

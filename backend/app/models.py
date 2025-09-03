@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Table, DateTime, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import json
+import hashlib
 from .database import Base
 
 class MachineType(Base):
@@ -206,6 +208,11 @@ class ApprovalRecord(Base):
     wecom_sp_no = Column(String)  # 企业微信审批编号
     wecom_callback_data = Column(Text)  # 企业微信回调数据（JSON格式）
     
+    # 幂等性支持
+    event_time = Column(DateTime)  # 事件时间（用于幂等性检查）
+    processed = Column(Boolean, default=False)  # 是否已处理
+    callback_signature = Column(String)  # 回调签名（用于去重）
+    
     # 时间信息
     created_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime)  # 处理时间
@@ -215,6 +222,121 @@ class ApprovalRecord(Base):
     quote = relationship("Quote", back_populates="approval_records")
     approver = relationship("User", foreign_keys=[approver_id])
     forwarded_to = relationship("User", foreign_keys=[forwarded_to_id])
+
+
+class QuoteSnapshot(Base):
+    """报价快照表 - 提交审批时的数据冻结"""
+    __tablename__ = "quote_snapshots"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quote_id = Column(Integer, ForeignKey("quotes.id"), nullable=False)
+    data = Column(Text, nullable=False)  # JSON格式的快照数据
+    hash = Column(String(64), nullable=False)  # SHA256哈希
+    template_id = Column(String, nullable=False)  # 使用的审批模板ID
+    approvers = Column(Text)  # JSON格式的审批人列表
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    quote = relationship("Quote")
+    creator = relationship("User")
+    
+    def calc_hash(self) -> str:
+        """计算数据哈希"""
+        # 确保JSON序列化的稳定性
+        data_str = json.dumps(json.loads(self.data), sort_keys=True, separators=(',', ':'))
+        return hashlib.sha256(data_str.encode('utf-8')).hexdigest()
+    
+    @classmethod
+    def from_quote(cls, quote, template_id: str, approvers: list, creator_id: int = None):
+        """从Quote对象创建快照"""
+        # 序列化Quote数据
+        data = {
+            "id": quote.id,
+            "quote_number": quote.quote_number,
+            "title": quote.title,
+            "quote_type": quote.quote_type,
+            "customer_name": quote.customer_name,
+            "customer_contact": quote.customer_contact,
+            "customer_phone": quote.customer_phone,
+            "customer_email": quote.customer_email,
+            "total_amount": quote.total_amount,
+            "currency": quote.currency,
+            "description": quote.description,
+            "items": [
+                {
+                    "item_name": item.item_name,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "total_price": item.total_price
+                }
+                for item in quote.items
+            ]
+        }
+        
+        data_json = json.dumps(data, sort_keys=True, separators=(',', ':'))
+        snapshot = cls(
+            quote_id=quote.id,
+            data=data_json,
+            template_id=template_id,
+            approvers=json.dumps(approvers),
+            created_by=creator_id
+        )
+        snapshot.hash = snapshot.calc_hash()
+        return snapshot
+
+
+class EffectiveQuote(Base):
+    """生效报价单表 - 审批通过后的正式版本"""
+    __tablename__ = "effective_quotes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quote_id = Column(Integer, ForeignKey("quotes.id"), nullable=False)
+    snapshot_id = Column(Integer, ForeignKey("quote_snapshots.id"), nullable=False)
+    version = Column(String, nullable=False, default="1.0")  # 版本号
+    
+    # 导出文件信息
+    export_file_url = Column(String)  # 导出文件URL
+    export_file_type = Column(String)  # 文件类型: pdf, excel
+    export_checksum = Column(String)  # 文件校验和
+    
+    # 生效信息
+    effective_at = Column(DateTime, default=datetime.utcnow)  # 生效时间
+    expires_at = Column(DateTime)  # 过期时间
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    quote = relationship("Quote")
+    snapshot = relationship("QuoteSnapshot")
+    creator = relationship("User")
+    
+    @property
+    def version_number(self) -> float:
+        """获取数值版本号用于比较"""
+        try:
+            return float(self.version)
+        except (ValueError, TypeError):
+            return 1.0
+    
+    @classmethod
+    def create_next_version(cls, quote_id: int, snapshot_id: int, creator_id: int = None):
+        """创建下一个版本的生效报价单"""
+        from sqlalchemy.orm import Session
+        # 这里需要注入session，实际使用时在service层处理
+        # 获取当前最新版本
+        # latest = session.query(cls).filter(cls.quote_id == quote_id).order_by(cls.version_number.desc()).first()
+        # next_version = str(latest.version_number + 0.1) if latest else "1.0"
+        
+        # 暂时使用简单递增
+        next_version = "1.0"  # 实际实现中需要查询数据库
+        
+        return cls(
+            quote_id=quote_id,
+            snapshot_id=snapshot_id,
+            version=next_version,
+            created_by=creator_id
+        )
 
 
 class QuoteTemplate(Base):

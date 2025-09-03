@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>状态显示测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status-item { 
+            padding: 10px; 
+            margin: 10px 0; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+        }
+        .rejected { background-color: #fff2f0; border-color: #ffccc7; }
+        .approved { background-color: #f6ffed; border-color: #b7eb8f; }
+        .pending { background-color: #e6f7ff; border-color: #91d5ff; }
+    </style>
+</head>
+<body>
+    <h2>报价单状态显示测试</h2>
+    <div id="quotes"></div>
+
+    <script>
+        async function loadQuotes() {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/v1/quotes/test');
+                const data = await response.json();
+                const quotesDiv = document.getElementById('quotes');
+                
+                data.items.forEach(quote => {
+                    if (quote.quote_number.includes('KS2025')) {
+                        const div = document.createElement('div');
+                        div.className = `status-item ${quote.status}`;
+                        
+                        let displayStatus = '';
+                        if (quote.status === 'rejected' && quote.approval_status === 'pending') {
+                            displayStatus = '重新审批中';
+                        } else if (quote.status === 'rejected') {
+                            displayStatus = '已驳回 (可重新提交)';
+                        } else if (quote.status === 'approved') {
+                            displayStatus = '已批准';
+                        } else if (quote.status === 'pending') {
+                            displayStatus = '待审批';
+                        } else {
+                            displayStatus = '草稿';
+                        }
+                        
+                        div.innerHTML = `
+                            <h4>${quote.quote_number}</h4>
+                            <p><strong>后端状态:</strong> ${quote.status} / ${quote.approval_status || 'null'}</p>
+                            <p><strong>显示状态:</strong> <span style="font-weight:bold;color:#d32f2f;">${displayStatus}</span></p>
+                            <p><strong>更新时间:</strong> ${quote.created_at}</p>
+                        `;
+                        quotesDiv.appendChild(div);
+                    }
+                });
+            } catch (error) {
+                document.getElementById('quotes').innerHTML = `<p style="color:red;">加载失败: ${error}</p>`;
+            }
+        }
+        
+        loadQuotes();
+        
+        // 每30秒自动刷新
+        setInterval(loadQuotes, 30000);
+    </script>
+</body>
+</html>

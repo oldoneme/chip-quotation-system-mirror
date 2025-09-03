@@ -43,6 +43,7 @@ const QuoteManagement = () => {
         customer: quote.customer_name,
         currency: quote.currency || 'CNY',
         status: QuoteApiService.mapStatusFromBackend(quote.status),
+        approvalStatus: quote.approval_status, // 添加审批状态字段
         createdBy: quote.creator_name || `用户${quote.created_by}`,
         createdAt: new Date(quote.created_at).toLocaleString('zh-CN'),
         updatedAt: new Date(quote.updated_at).toLocaleString('zh-CN'),
@@ -87,16 +88,35 @@ const QuoteManagement = () => {
     fetchStatistics();
   }, []);
 
-  const getStatusTag = (status) => {
+  const getStatusTag = (status, approvalStatus) => {
     const statusConfig = {
       draft: { color: 'default', text: '草稿', icon: <EditOutlined /> },
       pending: { color: 'processing', text: '待审批', icon: <ClockCircleOutlined /> },
       approved: { color: 'success', text: '已批准', icon: <CheckCircleOutlined /> },
-      rejected: { color: 'error', text: '已拒绝', icon: <CloseCircleOutlined /> }
+      rejected: { color: 'error', text: '已驳回', icon: <CloseCircleOutlined /> }
     };
+    
+    // 特殊处理：被驳回后重新提交审批的状态
+    if (status === 'rejected' && approvalStatus === 'pending') {
+      return (
+        <Tag color="processing" icon={<ClockCircleOutlined />} style={{ fontSize: '14px', padding: '4px 12px' }}>
+          重新审批中
+        </Tag>
+      );
+    }
+    
+    // 被驳回但未重新提交
+    if (status === 'rejected') {
+      return (
+        <Tag color="warning" icon={<CloseCircleOutlined />} style={{ fontSize: '14px', padding: '4px 12px' }}>
+          已驳回 (可重新提交)
+        </Tag>
+      );
+    }
+    
     const config = statusConfig[status];
     return (
-      <Tag color={config.color} icon={config.icon}>
+      <Tag color={config.color} icon={config.icon} style={{ fontSize: '14px', padding: '4px 12px' }}>
         {config.text}
       </Tag>
     );
@@ -148,7 +168,7 @@ const QuoteManagement = () => {
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status) => getStatusTag(status)
+      render: (status, record) => getStatusTag(status, record.approvalStatus)
     },
     {
       title: '创建人',
@@ -323,7 +343,7 @@ const QuoteManagement = () => {
             <div style={{ marginBottom: '8px' }}>
               <Space size={[4, 4]} wrap>
                 {getTypeTag(item.type)}
-                {getStatusTag(item.status)}
+                {getStatusTag(item.status, item.approvalStatus)}
               </Space>
             </div>
 

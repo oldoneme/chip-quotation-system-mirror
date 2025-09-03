@@ -15,6 +15,7 @@ import QuoteApiService from '../services/quoteApi';
 import ApprovalApiService from '../services/approvalApi';
 import ApprovalPanel from '../components/ApprovalPanel';
 import ApprovalHistory from '../components/ApprovalHistory';
+import SubmitApprovalModal from '../components/SubmitApprovalModal';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/QuoteDetail.css';
 
@@ -29,6 +30,7 @@ const QuoteDetail = () => {
   const [quote, setQuote] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [approvers, setApprovers] = useState([]);
+  const [submitApprovalModalVisible, setSubmitApprovalModalVisible] = useState(false);
 
   // 检测移动端
   useEffect(() => {
@@ -107,13 +109,35 @@ const QuoteDetail = () => {
     }
   };
 
-  const getStatusTag = (status) => {
+  const getStatusTag = (status, approvalStatus) => {
+    console.log('getStatusTag called with:', { status, approvalStatus });
+    
     const statusConfig = {
       draft: { color: 'default', text: '草稿', icon: <FileTextOutlined /> },
       pending: { color: 'processing', text: '待审批', icon: <ClockCircleOutlined /> },
       approved: { color: 'success', text: '已批准', icon: <CheckCircleOutlined /> },
-      rejected: { color: 'error', text: '已拒绝', icon: <CloseCircleOutlined /> }
+      rejected: { color: 'error', text: '已驳回', icon: <CloseCircleOutlined /> }
     };
+    
+    // 特殊处理：被驳回后重新提交审批的状态
+    if (status === 'rejected' && approvalStatus === 'pending') {
+      console.log('显示重新审批中状态');
+      return (
+        <Tag color="processing" icon={<ClockCircleOutlined />} style={{ fontSize: '14px', padding: '4px 12px' }}>
+          重新审批中
+        </Tag>
+      );
+    }
+    
+    // 被驳回但未重新提交
+    if (status === 'rejected') {
+      return (
+        <Tag color="warning" icon={<CloseCircleOutlined />} style={{ fontSize: '14px', padding: '4px 12px' }}>
+          已驳回 (可重新提交)
+        </Tag>
+      );
+    }
+    
     const config = statusConfig[status];
     return (
       <Tag color={config.color} icon={config.icon} style={{ fontSize: '14px', padding: '4px 12px' }}>
@@ -135,7 +159,29 @@ const QuoteDetail = () => {
   };
 
   const handleEdit = () => {
-    message.info(`编辑报价单 ${quote.id}`);
+    // 根据报价类型跳转到对应的编辑页面
+    const quoteTypeToPath = {
+      '询价报价': '/inquiry-quote',
+      '工装夹具报价': '/tooling-quote', 
+      '工程机时报价': '/engineering-quote',
+      '量产机时报价': '/mass-production-quote',
+      '量产工序报价': '/process-quote',
+      '综合报价': '/comprehensive-quote'
+    };
+    
+    const editPath = quoteTypeToPath[quote.type];
+    if (editPath) {
+      // 传递报价单数据到编辑页面
+      navigate(editPath, { 
+        state: { 
+          editingQuote: quote,
+          isEditing: true,
+          quoteId: quote.id 
+        } 
+      });
+    } else {
+      message.error('未知的报价类型，无法编辑');
+    }
   };
 
   const handleDelete = () => {
@@ -161,15 +207,26 @@ const QuoteDetail = () => {
     message.info(`下载报价单 ${quote.id}`);
   };
 
-  const handleSubmitApproval = async () => {
-    try {
-      await QuoteApiService.submitForApproval(quote.quoteId);
-      message.success('审批提交成功！审批人将在企业微信中收到通知。');
-      fetchQuoteDetail(); // 重新获取数据
-    } catch (error) {
-      console.error('提交审批失败:', error);
-      message.error('提交审批失败');
-    }
+  const handleSubmitApproval = () => {
+    setSubmitApprovalModalVisible(true);
+  };
+
+  const handleSubmitApprovalSuccess = (result) => {
+    setSubmitApprovalModalVisible(false);
+    
+    // 立即更新本地状态，显示为审批中
+    setQuote(prevQuote => ({
+      ...prevQuote,
+      status: 'pending', // 更新为审批中
+      approval_status: 'pending' // 设置为审批中
+    }));
+    
+    // 然后重新获取最新数据
+    fetchQuoteDetail();
+  };
+
+  const handleSubmitApprovalCancel = () => {
+    setSubmitApprovalModalVisible(false);
   };
 
   // 处理审批操作
@@ -336,7 +393,7 @@ const QuoteDetail = () => {
             {/* 移动端标签行 */}
             <div style={{ marginBottom: '12px' }}>
               <Space size={[4, 4]} wrap>
-                {getStatusTag(quote.status)}
+                {getStatusTag(quote.status, quote.approval_status)}
                 {getTypeTag(quote.type)}
               </Space>
             </div>
@@ -350,7 +407,7 @@ const QuoteDetail = () => {
               >
                 下载
               </Button>
-              {quote.status === 'draft' && (
+              {(quote.status === 'draft' || quote.status === 'rejected') && (
                 <>
                   <Button 
                     size="small"
@@ -386,7 +443,7 @@ const QuoteDetail = () => {
                 返回
               </Button>
               <h2 style={{ margin: 0 }}>{quote.title}</h2>
-              {getStatusTag(quote.status)}
+              {getStatusTag(quote.status, quote.approval_status)}
               {getTypeTag(quote.type)}
             </div>
             
@@ -394,7 +451,7 @@ const QuoteDetail = () => {
               <Button icon={<DownloadOutlined />} onClick={handleDownload}>
                 下载
               </Button>
-              {quote.status === 'draft' && (
+              {(quote.status === 'draft' || quote.status === 'rejected') && (
                 <>
                   <Button icon={<EditOutlined />} onClick={handleEdit}>
                     编辑
@@ -1366,6 +1423,20 @@ const QuoteDetail = () => {
         quoteId={quote?.quoteId}
         onRefresh={fetchQuoteDetail}
         approvalService={ApprovalApiService}
+      />
+
+      {/* 提交审批模态框 */}
+      <SubmitApprovalModal
+        visible={submitApprovalModalVisible}
+        onCancel={handleSubmitApprovalCancel}
+        onSuccess={handleSubmitApprovalSuccess}
+        quoteData={{
+          id: quote?.quoteId,
+          quote_number: quote?.id,
+          customer_name: quote?.customer,
+          total_amount: quote?.totalAmount,
+          quote_type: quote?.type
+        }}
       />
     </div>
   );

@@ -134,6 +134,7 @@ async def get_quotes_test(
                 "quote_type": quote.quote_type,
                 "customer_name": quote.customer_name,
                 "status": quote.status,
+                "approval_status": quote.approval_status,  # 添加审批状态字段
                 "created_at": quote.created_at.isoformat(),
                 "total_amount": quote.total_amount,
                 "creator_name": creator_name,
@@ -225,6 +226,7 @@ async def get_quote_detail_by_id(
             "description": quote.description,
             "notes": quote.notes,
             "status": quote.status,
+            "approval_status": quote.approval_status,  # 添加审批状态字段
             "version": quote.version,
             "submitted_at": quote.submitted_at.isoformat() if quote.submitted_at else None,
             "approved_at": quote.approved_at.isoformat() if quote.approved_at else None,
@@ -316,6 +318,7 @@ async def get_quote_detail_test(
             "description": quote.description,
             "notes": quote.notes,
             "status": quote.status,
+            "approval_status": quote.approval_status,  # 添加审批状态字段
             "version": quote.version,
             "submitted_at": quote.submitted_at.isoformat() if quote.submitted_at else None,
             "approved_at": quote.approved_at.isoformat() if quote.approved_at else None,
@@ -658,4 +661,92 @@ async def reject_quote(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"拒绝操作失败: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/export/pdf")
+async def export_quote_pdf(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """导出报价单PDF - 占位实现"""
+    try:
+        service = QuoteService(db)
+        quote = service.get_quote_by_id(quote_id)
+        
+        if not quote:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="报价单不存在"
+            )
+        
+        # 检查访问权限
+        if (quote.created_by != current_user.id and 
+            current_user.role not in ['admin', 'super_admin']):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权限导出此报价单"
+            )
+        
+        # TODO: 实现PDF生成逻辑
+        from ....services.outbox import outbox
+        outbox.add("generate_export", {"quote_id": quote_id, "format": "pdf"})
+        
+        return {
+            "message": "PDF导出任务已创建",
+            "quote_id": quote_id,
+            "format": "pdf",
+            "status": "processing"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF导出失败: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/export/excel")
+async def export_quote_excel(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """导出报价单Excel - 占位实现"""
+    try:
+        service = QuoteService(db)
+        quote = service.get_quote_by_id(quote_id)
+        
+        if not quote:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="报价单不存在"
+            )
+        
+        # 检查访问权限
+        if (quote.created_by != current_user.id and 
+            current_user.role not in ['admin', 'super_admin']):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权限导出此报价单"
+            )
+        
+        # TODO: 实现Excel生成逻辑
+        from ....services.outbox import outbox
+        outbox.add("generate_export", {"quote_id": quote_id, "format": "excel"})
+        
+        return {
+            "message": "Excel导出任务已创建",
+            "quote_id": quote_id,
+            "format": "excel", 
+            "status": "processing"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Excel导出失败: {str(e)}"
         )
