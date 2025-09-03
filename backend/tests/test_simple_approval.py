@@ -7,7 +7,7 @@
 import asyncio
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from sqlalchemy.orm import Session
 from app.database import get_db, engine

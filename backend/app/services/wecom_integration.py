@@ -110,23 +110,12 @@ class WeComApprovalIntegration:
         # 构建企业微信OAuth链接，点击后直接在企业微信内打开应用
         detail_link = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={oauth_redirect_url}&response_type=code&scope=snsapi_base&state={detail_state}#wechat_redirect"
         
-        # 创建包含链接的文件内容
-        file_content = f"""报价单详情
-
-报价单号: {quote.quote_number}
-客户名称: {quote.customer_name}
-报价类型: {quote.quote_type or "标准报价"}
-总金额: ¥{quote.total_amount:.2f}
-描述: {quote.description or ""}
-
-点击查看详情:
-{detail_link}
-
-或复制链接在企业微信中打开
-"""
+        # 构建简洁的描述信息（由于Text字段长度限制）
+        description_with_link = f"{quote.description or ''}。💰总金额¥{quote.total_amount:.2f}。📋详情链接见附件"
         
-        # 上传文件获取media_id
-        media_id = await self.upload_temp_file(file_content, f"{quote.quote_number}_详情.txt")
+        # 创建简洁的链接文件
+        link_file_content = f"报价单详情链接：\n{detail_link}\n\n点击上方链接查看详情"
+        media_id = await self.upload_temp_file(link_file_content, f"{quote.quote_number}_链接.txt")
         
         # 构建审批申请数据 - 使用真实的模板字段ID
         approval_data = {
@@ -139,7 +128,7 @@ class WeComApprovalIntegration:
                     {"control": "Text", "id": "Text-1756706105289", "value": {"text": quote.quote_type or "标准报价"}},
                     {"control": "Text", "id": "Text-1756705975378", "value": {"text": quote.quote_number}},
                     {"control": "Text", "id": "Text-1756706001498", "value": {"text": quote.customer_name}},
-                    {"control": "Text", "id": "Text-1756706160253", "value": {"text": quote.description or ""}},
+                    {"control": "Text", "id": "Text-1756706160253", "value": {"text": description_with_link}},
                     {"control": "File", "id": "File-1756706130702", "value": {"files": [{"file_id": media_id}]}},
                     {"control": "File", "id": "File-1756709748491", "value": {"files": []}}
                 ]
