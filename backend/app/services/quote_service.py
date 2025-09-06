@@ -221,12 +221,19 @@ class QuoteService:
         
         # 检查权限
         user = self.db.query(User).filter(User.id == user_id).first()
-        if not user or (quote.created_by != user_id and user.role not in ['admin', 'super_admin']):
+        if not user:
+            raise PermissionError("用户不存在")
+        
+        # 权限检查：管理员可以删除任何报价单，普通用户只能删除自己创建的
+        is_admin = user.role in ['admin', 'super_admin']
+        is_owner = quote.created_by == user_id
+        
+        if not is_admin and not is_owner:
             raise PermissionError("无权限删除此报价单")
         
-        # 检查状态：只有草稿状态可以删除
-        if quote.status != 'draft':
-            raise ValueError("只有草稿状态的报价单可以删除")
+        # 状态检查：普通用户只能删除草稿状态，管理员可以删除任何状态
+        if not is_admin and quote.status != 'draft':
+            raise ValueError("普通用户只能删除草稿状态的报价单")
         
         # 删除关联的明细项和审批记录会通过级联删除自动处理
         self.db.delete(quote)

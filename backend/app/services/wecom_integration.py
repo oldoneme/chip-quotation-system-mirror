@@ -28,6 +28,9 @@ class WeComApprovalIntegration:
         self.secret = settings.WECOM_SECRET
         self.approval_template_id = settings.WECOM_APPROVAL_TEMPLATE_ID
         self.callback_url = settings.WECOM_CALLBACK_URL
+        self.base_url = settings.WECOM_BASE_URL
+        self.callback_token = settings.WECOM_CALLBACK_TOKEN
+        self.encoding_aes_key = settings.WECOM_ENCODING_AES_KEY
         self._access_token = None
         self._token_expires_at = None
         
@@ -103,23 +106,24 @@ class WeComApprovalIntegration:
         
         # 生成报价单详情的企业微信应用内链接
         # 使用企业微信OAuth认证自动跳转到报价单详情页
-        base_url = self.callback_url if self.callback_url else "http://127.0.0.1:8000"
-        oauth_redirect_url = f"{base_url}/api/v1/auth/callback"
+        oauth_redirect_url = f"{settings.API_BASE_URL}/v1/auth/callback"
         detail_state = f"quote_detail_{quote.id}"
         
         # 构建企业微信OAuth链接，点击后直接在企业微信内打开应用
         detail_link = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={oauth_redirect_url}&response_type=code&scope=snsapi_base&state={detail_state}#wechat_redirect"
         
         # 构建简洁的描述信息（由于Text字段长度限制）
-        description_with_link = f"{quote.description or ''}。💰总金额¥{quote.total_amount:.2f}。📋详情链接见附件"
+        total_amount = quote.total_amount or 0.0
+        description_with_link = f"{quote.description or ''}。💰总金额¥{total_amount:.2f}。📋详情链接见附件"
         
         # 创建简洁的链接文件
         link_file_content = f"报价单详情链接：\n{detail_link}\n\n点击上方链接查看详情"
         media_id = await self.upload_temp_file(link_file_content, f"{quote.quote_number}_链接.txt")
         
         # 构建审批申请数据 - 使用真实的模板字段ID
+        creator_userid = quote.creator.userid if quote.creator else ""
         approval_data = {
-            "creator_userid": quote.creator.userid if quote.creator else "",
+            "creator_userid": creator_userid,
             "template_id": self.approval_template_id,
             "use_template_approver": 1,  # 使用模板中定义的审批人
             "third_no": str(quote.id),  # 添加第三方单号用于回调映射
@@ -129,7 +133,7 @@ class WeComApprovalIntegration:
                     {"control": "Text", "id": "Text-1756705975378", "value": {"text": quote.quote_number}},
                     {"control": "Text", "id": "Text-1756706001498", "value": {"text": quote.customer_name}},
                     {"control": "Text", "id": "Text-1756706160253", "value": {"text": description_with_link}},
-                    {"control": "File", "id": "File-1756706130702", "value": {"files": [{"file_id": media_id}]}},
+                    {"control": "Text", "id": "Text-1756897248857", "value": {"text": detail_link}},
                     {"control": "File", "id": "File-1756709748491", "value": {"files": []}}
                 ]
             }
@@ -160,19 +164,22 @@ class WeComApprovalIntegration:
         quote.wecom_approval_id = result["sp_no"]
         quote.approval_status = "pending"
         
-        # 保存审批实例映射（用于回调时查找）
+        # 先提交SQLAlchemy的更改
+        self.db.commit()
+        
+        # 保存审批实例映射（用于回调时查找）- 在SQLAlchemy提交后进行
         import sqlite3
         conn = sqlite3.connect('app/test.db')
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO approval_instance 
-            (quotation_id, sp_no, third_no, status) 
-            VALUES (?, ?, ?, ?)
-        """, (quote.id, result["sp_no"], str(quote.id), "pending"))
-        conn.commit()
-        conn.close()
-        
-        self.db.commit()
+        try:
+            cursor.execute("""
+                INSERT OR REPLACE INTO approval_instance 
+                (quotation_id, sp_no, third_no, status) 
+                VALUES (?, ?, ?, ?)
+            """, (quote.id, result["sp_no"], str(quote.id), "pending"))
+            conn.commit()
+        finally:
+            conn.close()
         
         return {
             "success": True,
@@ -232,7 +239,7 @@ class WeComApprovalIntegration:
         
         # 生成企业微信应用内链接，直接跳转到报价单详情页面
         # 使用企业微信的应用跳转协议
-        app_url = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={self.callback_url}/auth/callback&response_type=code&scope=snsapi_base&state=quote_detail_{quote_id}"
+        app_url = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={settings.API_BASE_URL}/v1/auth/callback&response_type=code&scope=snsapi_base&state=quote_detail_{quote_id}"
         
         # 如果有审批链接token，也可以提供备用链接
         if hasattr(quote, 'approval_link_token') and quote.approval_link_token:
@@ -380,7 +387,8 @@ class WeComApprovalIntegration:
         msg_signature: str,
         timestamp: str,
         nonce: str,
-        echostr: str = None
+        echostr: str = None,
+        encrypted_msg: str = None
     ) -> bool:
         """
         验证企业微信回调签名
@@ -390,25 +398,42 @@ class WeComApprovalIntegration:
             timestamp: 时间戳
             nonce: 随机数
             echostr: 回显字符串（仅验证URL时使用）
+            encrypted_msg: 加密消息（POST回调时使用）
             
         Returns:
             签名是否有效
         """
+        from ..utils.wecom_crypto import wecom_signature
+        
         token = settings.WECOM_CALLBACK_TOKEN
         
-        # 构建签名字符串
-        if echostr:
-            sign_list = [token, timestamp, nonce, echostr]
-        else:
-            sign_list = [token, timestamp, nonce]
-            
-        sign_list.sort()
-        sign_str = "".join(sign_list)
+        if not token:
+            print(f"❌ WECOM_CALLBACK_TOKEN 未配置")
+            return False
         
-        # 计算SHA1签名
-        calculated_signature = hashlib.sha1(sign_str.encode()).hexdigest()
+        # 确定第四个参数
+        fourth = echostr or encrypted_msg
+        if not fourth:
+            print(f"❌ 缺少签名参数：echostr 或 encrypted_msg")
+            return False
         
-        return calculated_signature == msg_signature
+        # 计算签名
+        calculated_signature = wecom_signature(token, timestamp, nonce, fourth)
+        
+        # 验证签名
+        is_valid = calculated_signature == msg_signature
+        
+        # 审计日志（脱敏）
+        print(f"🔍 企业微信回调签名验证:")
+        print(f"   msg_signature: {msg_signature}")
+        print(f"   timestamp: {timestamp}")
+        print(f"   nonce: {nonce}")
+        print(f"   fourth(len): {len(echostr or encrypted_msg or '') if (echostr or encrypted_msg) else 'None'}")
+        print(f"   calculated: {calculated_signature}")
+        print(f"   result: {'✅ PASS' if is_valid else '❌ FAIL'}")
+        
+        # 严禁开发模式跳过验证
+        return is_valid
     
     async def sync_approval_status(self, quote_id: int) -> Dict:
         """

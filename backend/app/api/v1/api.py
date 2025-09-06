@@ -15,9 +15,10 @@ from .endpoints import (
     confirmations,
     quotes,
     wecom_approval,
-    wecom_callback,
+    wecom_ops,
     quote_approval_trigger,
-    auth
+    auth,
+    debug
 )
 
 api_router = APIRouter()
@@ -38,6 +39,8 @@ api_router.include_router(operation_logs.router, prefix="", tags=["operation-log
 api_router.include_router(statistics.router, prefix="", tags=["statistics"])
 api_router.include_router(confirmations.router, prefix="", tags=["confirmations"])
 api_router.include_router(wecom_approval.router, prefix="/wecom-approval", tags=["wecom-approval"])
-api_router.include_router(wecom_callback.router, prefix="/wecom-callback", tags=["wecom-callback"])
+# 注意: 企业微信回调路由已移至 main.py 中的 /wecom/callback (唯一安全入口)
+api_router.include_router(wecom_ops.router, prefix="/wecom-ops", tags=["wecom-ops"])
 api_router.include_router(quote_approval_trigger.router, prefix="", tags=["quote-approval-trigger"])
 api_router.include_router(auth.router, prefix="", tags=["auth"])
+api_router.include_router(debug.router, prefix="", tags=["debug"])

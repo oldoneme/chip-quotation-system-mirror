@@ -51,14 +51,15 @@ async def auth_callback(
         if state and state.startswith("quote_detail_"):
             # 提取报价单ID
             quote_id = state.replace("quote_detail_", "")
-            # 重定向到报价单详情页面
-            redirect_url = f"/#/quote-detail/{quote_id}?userid={user_info.userid}"
+            # 重定向到报价单详情页面（注意：前端使用BrowserRouter，不需要#）
+            redirect_url = f"/quote-detail/{quote_id}?userid={user_info.userid}"
         else:
             # 默认重定向到首页
             redirect_url = f"/?userid={user_info.userid}"
         
-        # 构建完整的重定向URL（包含域名）
-        base_url = "http://127.0.0.1:3000"  # 前端地址
+        # 构建完整的重定向URL（使用环境变量中的前端地址）
+        from app.config import settings
+        base_url = settings.FRONTEND_BASE_URL if hasattr(settings, 'FRONTEND_BASE_URL') else "http://localhost:3000"
         full_redirect_url = f"{base_url}{redirect_url}"
         
         return RedirectResponse(url=full_redirect_url)
@@ -78,8 +79,10 @@ async def login_redirect(
     # URL编码重定向路径
     encoded_redirect = quote(redirect_path)
     
-    # 构建OAuth授权URL
-    callback_url = "http://127.0.0.1:8000/api/v1/auth/callback"
+    # 构建OAuth授权URL - 使用环境变量中的API基础URL
+    from app.config import settings
+    api_base_url = settings.API_BASE_URL if hasattr(settings, 'API_BASE_URL') else "http://localhost:8000"
+    callback_url = f"{api_base_url}/v1/auth/callback"
     oauth_url = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={wecom_auth.corp_id}&redirect_uri={quote(callback_url)}&response_type=code&scope=snsapi_base&state={encoded_redirect}"
     
     return {"login_url": oauth_url}

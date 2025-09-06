@@ -578,8 +578,9 @@ class WeComApprovalService:
         quote.approval_link_token = token
         self.db.commit()
         
-        # 构造审批链接（这里需要根据实际前端路径调整）
-        base_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+        # 构造审批链接 - 使用配置文件中的前端基础URL
+        from app.config import settings
+        base_url = settings.FRONTEND_BASE_URL
         approval_url = f"{base_url}/approval/{token}"
         
         return {

@@ -457,3 +457,30 @@ class OperationLog(Base):
     
     # Relationships
     user = relationship("User")
+
+
+class ApprovalTimeline(Base):
+    """审批时间线模型 - 用于企业微信回调幂等处理"""
+    __tablename__ = "approval_timeline"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(String, unique=True, index=True)  # 企业微信EventID，确保唯一
+    sp_no = Column(String, index=True)  # 审批编号
+    third_no = Column(String, index=True)  # 第三方编号（报价单ID）
+    status = Column(Integer)  # 审批状态：1=审批中，2=已同意，3=已拒绝，4=已取消
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class ApprovalTimelineErrors(Base):
+    """审批时间线错误表 - 记录处理异常的回调事件"""
+    __tablename__ = "approval_timeline_errors"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(String, index=True)  # 企业微信EventID
+    sp_no = Column(String, index=True)  # 审批编号
+    third_no = Column(String, index=True)  # 第三方编号
+    error_type = Column(String, index=True)  # 错误类型
+    error_message = Column(Text)  # 错误消息
+    stack_trace = Column(Text)  # 异常栈
+    raw_payload = Column(Text)  # 原始回调数据
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

@@ -135,7 +135,9 @@ class MessageHandler:
         
         try:
             # 调用API查询设备
-            response = requests.get('http://127.0.0.1:8000/api/v1/machines/')
+            from app.config import settings
+            api_base_url = settings.API_BASE_URL if hasattr(settings, 'API_BASE_URL') else "http://localhost:8000"
+            response = requests.get(f'{api_base_url}/api/v1/machines/')
             if response.status_code == 200:
                 machines = response.json()
                 
@@ -169,7 +171,9 @@ class MessageHandler:
         
         try:
             # 调用API查询设备
-            response = requests.get('http://127.0.0.1:8000/api/v1/machines/')
+            from app.config import settings
+            api_base_url = settings.API_BASE_URL if hasattr(settings, 'API_BASE_URL') else "http://localhost:8000"
+            response = requests.get(f'{api_base_url}/api/v1/machines/')
             if response.status_code == 200:
                 machines = response.json()
                 
@@ -211,7 +215,9 @@ class MessageHandler:
         """处理供应商查询命令"""
         try:
             # 调用API获取供应商列表
-            response = requests.get('http://127.0.0.1:8000/api/v1/suppliers/')
+            from app.config import settings
+            api_base_url = settings.API_BASE_URL if hasattr(settings, 'API_BASE_URL') else "http://localhost:8000"
+            response = requests.get(f'{api_base_url}/api/v1/suppliers/')
             if response.status_code == 200:
                 suppliers = response.json()
                 
