@@ -23,6 +23,20 @@ export class QuoteApiService {
   }
 
   /**
+   * 按UUID获取报价单详情（带JWT兜底）
+   * 用于企业微信审批链接访问
+   */
+  static async getQuoteDetailByUuid(uuid, params = {}) {
+    try {
+      const response = await api.get(`${QUOTE_BASE_URL}/by-uuid/${uuid}`, { params });
+      return response.data;
+    } catch (error) {
+      console.error('按UUID获取报价单详情失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 获取报价单列表
    * @param {Object} params - 查询参数
    * @param {string} params.status - 状态筛选
@@ -74,9 +88,9 @@ export class QuoteApiService {
    * 根据报价单号获取报价单详情（测试端点，包含创建者姓名）
    * @param {string} quoteNumber - 报价单号
    */
-  static async getQuoteDetailTest(quoteNumber) {
+  static async getQuoteDetailTest(quoteNumber, params = {}) {
     try {
-      const response = await api.get(`${QUOTE_BASE_URL}/detail/${quoteNumber}`);
+      const response = await api.get(`${QUOTE_BASE_URL}/detail/${quoteNumber}`, { params });
       return response.data;
     } catch (error) {
       console.error('获取报价单详情失败:', error);
@@ -87,10 +101,11 @@ export class QuoteApiService {
   /**
    * 根据报价单ID获取报价单详情（包含创建者姓名）
    * @param {number} quoteId - 报价单ID
+   * @param {Object} params - 查询参数（支持jwt兜底）
    */
-  static async getQuoteDetailById(quoteId) {
+  static async getQuoteDetailById(quoteId, params = {}) {
     try {
-      const response = await api.get(`${QUOTE_BASE_URL}/detail/by-id/${quoteId}`);
+      const response = await api.get(`${QUOTE_BASE_URL}/detail/by-id/${quoteId}`, { params });
       return response.data;
     } catch (error) {
       console.error('获取报价单详情失败:', error);
@@ -318,6 +333,19 @@ export class QuoteApiService {
       return response.data;
     } catch (error) {
       console.error('拒绝报价单失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 检查认证状态
+   */
+  static async checkAuth() {
+    try {
+      const response = await api.get('/auth/whoami');
+      return response.data;
+    } catch (error) {
+      console.error('认证状态检查失败:', error);
       throw error;
     }
   }

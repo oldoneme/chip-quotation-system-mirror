@@ -3,39 +3,105 @@
 临时实现用于测试API
 """
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional
+import jwt
+import os
+from datetime import datetime
 
 from .database import get_db
 from .models import User
 
 security = HTTPBearer(auto_error=False)
 
+# JWT配置（与auth.py保持一致）
+JWT_SECRET = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+JWT_ALG = "HS256"
+
+def decode_jwt(token: str):
+    """解码JWT令牌"""
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="认证已过期，请重新登录"
+        )
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"无效的认证令牌: {str(e)}"
+        )
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
     """
-    获取当前用户
-    临时实现：如果没有提供token，返回默认测试用户
+    获取当前用户 - 三段兜底认证
+    1. Authorization: Bearer xxx
+    2. Cookie: auth_token=xxx
+    3. Query: ?jwt=xxx (兜底，用于首屏)
     """
+    payload = None
     
-    # 如果提供了token，尝试解析（这里简化处理）
-    if credentials:
-        # TODO: 实现真实的token验证逻辑
-        # 目前简单检查token是否是"test"
-        if credentials.credentials == "test":
-            user = db.query(User).filter(User.userid == "test_user_001").first()
-            if user:
-                return user
+    # 1) Authorization: Bearer xxx
+    if credentials and credentials.credentials:
+        try:
+            payload = decode_jwt(credentials.credentials)
+        except HTTPException:
+            # Authorization token 无效，继续尝试其他方式
+            pass
     
-    # 如果没有token或token无效，返回第一个现有用户（兼容模式）
+    # 2) Cookie: auth_token=xxx
+    if not payload:
+        cookie_token = request.cookies.get("auth_token")
+        if cookie_token:
+            try:
+                payload = decode_jwt(cookie_token)
+            except HTTPException:
+                # Cookie token 无效，继续尝试查询参数
+                pass
+    
+    # 3) Query: ?jwt=xxx (兜底，用于首屏)
+    if not payload:
+        qtoken = request.query_params.get("jwt")
+        if qtoken:
+            payload = decode_jwt(qtoken)
+        else:
+            # 所有认证方式都失败，尝试兼容模式
+            user = db.query(User).first()
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="请先通过企业微信登录创建用户"
+                )
+            return user
+    
+    # 从payload提取用户信息
+    if payload:
+        userid = payload.get("sub")
+        if not userid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="认证令牌中缺少用户标识"
+            )
+        
+        user = db.query(User).filter(User.userid == userid).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户不存在，请重新登录"
+            )
+        
+        return user
+    
+    # 最后的兜底：返回第一个用户（兼容模式）
     user = db.query(User).first()
     if not user:
-        # 如果没有用户，说明需要先通过企业微信登录
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="请先通过企业微信登录创建用户"

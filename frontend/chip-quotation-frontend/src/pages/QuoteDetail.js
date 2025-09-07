@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Card, Descriptions, Table, Button, Space, Tag, 
   Divider, Row, Col, Modal, message, List,
@@ -10,7 +10,7 @@ import {
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
   FileTextOutlined
 } from '@ant-design/icons';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
 import ApprovalApiService from '../services/approvalApi';
 import ApprovalPanel from '../components/ApprovalPanel';
@@ -24,6 +24,7 @@ const { confirm } = Modal;
 const QuoteDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const location = useLocation();
   const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [approvalLoading, setApprovalLoading] = useState(false);
@@ -31,6 +32,12 @@ const QuoteDetail = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [approvers, setApprovers] = useState([]);
   const [submitApprovalModalVisible, setSubmitApprovalModalVisible] = useState(false);
+
+  // 解析URL上的JWT参数
+  const urlJwt = useMemo(() => {
+    const searchParams = new URLSearchParams(location.search);
+    return searchParams.get('jwt');
+  }, [location.search]);
 
   // 检测移动端
   useEffect(() => {
@@ -45,21 +52,74 @@ const QuoteDetail = () => {
   }, []);
 
   useEffect(() => {
-    fetchQuoteDetail();
-  }, [id]);
+    (async () => {
+      try {
+        // 1) 如果有JWT，先存起来并清理URL（防止反复触发）
+        if (urlJwt) {
+          console.log('🔑 发现URL中的JWT，正在保存...');
+          localStorage.setItem('jwt_token', urlJwt);
+          
+          // 清理地址栏中的jwt参数
+          const searchParams = new URLSearchParams(location.search);
+          searchParams.delete('jwt');
+          const cleanUrl = `${location.pathname}${searchParams.toString() ? `?${searchParams}` : ''}`;
+          window.history.replaceState({}, '', cleanUrl);
+          console.log('✅ JWT已保存，URL已清理');
+        }
+
+        // 2) 先探测登录状态（可选但推荐）
+        try {
+          console.log('🔍 检查认证状态...');
+          await QuoteApiService.checkAuth();
+          console.log('✅ 认证状态正常');
+        } catch (e) {
+          console.log('⚠️ 认证状态检查失败，将使用JWT兜底:', e.message);
+        }
+
+        // 3) 获取报价单详情，同时传递jwt作为兜底
+        console.log('📋 开始获取报价单详情...');
+        await fetchQuoteDetail();
+        
+      } catch (error) {
+        console.error('❌ 初始化失败:', error);
+        setLoading(false);
+      }
+    })();
+  }, [id, urlJwt, location.pathname, location.search]);
 
   const fetchQuoteDetail = async () => {
     setLoading(true);
     try {
-      // 智能识别参数类型：纯数字为ID，包含字母的为报价单号
+      // 识别三类：UUID / 纯数字ID / 报价单号
       const isNumericId = /^\d+$/.test(id);
-      const quoteData = isNumericId 
-        ? await QuoteApiService.getQuoteDetailById(id)
-        : await QuoteApiService.getQuoteDetailTest(id);
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      
+      // 获取存储的JWT作为兜底参数
+      const storedJwt = localStorage.getItem('jwt_token');
+      const params = storedJwt ? { jwt: storedJwt } : {};
+      
+      console.log('🔄 发起API请求:', { isUUID, isNumericId, id, hasJwtParam: !!params.jwt });
+      
+      let quoteData;
+      if (isUUID) {
+        // UUID格式，调用by-uuid接口（企业微信审批链接场景）
+        console.log('📱 检测到UUID格式，调用by-uuid接口');
+        quoteData = await QuoteApiService.getQuoteDetailByUuid(id, params);
+      } else if (isNumericId) {
+        // 纯数字，调用by-id接口
+        console.log('🔢 检测到数字ID，调用by-id接口');
+        quoteData = await QuoteApiService.getQuoteDetailById(id, params);
+      } else {
+        // 报价单号（如CIS-SH20250907001），调用detail接口
+        console.log('📋 检测到报价单号，调用detail接口');
+        quoteData = await QuoteApiService.getQuoteDetailTest(id, params);
+      }
       
       if (quoteData.error) {
         throw new Error(quoteData.error);
       }
+      
+      console.log('✅ 报价单详情获取成功:', quoteData.quote_number);
       
       // 格式化数据显示
       const formattedQuote = {
@@ -101,8 +161,16 @@ const QuoteDetail = () => {
       
       setQuote(formattedQuote);
     } catch (error) {
-      console.error('获取报价单详情失败:', error);
-      message.error('获取报价单详情失败');
+      console.error('❌ 获取报价单详情失败:', error);
+      
+      // 更友好的错误区分
+      if (error?.response?.status === 401) {
+        message.error('认证未生效，请返回企业微信重新进入');
+      } else if (error?.response?.status === 404) {
+        message.error('报价单不存在或已删除');
+      } else {
+        message.error('获取报价单详情失败，请稍后再试');
+      }
       setQuote(null);
     } finally {
       setLoading(false);

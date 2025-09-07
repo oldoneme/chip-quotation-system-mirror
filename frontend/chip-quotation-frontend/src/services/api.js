@@ -12,6 +12,25 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     console.log('API Request:', config.method?.toUpperCase(), config.url);
+    
+    // 从URL参数或localStorage获取JWT token
+    const urlParams = new URLSearchParams(window.location.search);
+    const jwtFromUrl = urlParams.get('jwt');
+    
+    if (jwtFromUrl) {
+      // 如果URL中有JWT，保存到localStorage并使用
+      localStorage.setItem('jwt_token', jwtFromUrl);
+      config.headers.Authorization = `Bearer ${jwtFromUrl}`;
+      console.log('Using JWT from URL');
+    } else {
+      // 否则从localStorage获取
+      const storedJwt = localStorage.getItem('jwt_token');
+      if (storedJwt) {
+        config.headers.Authorization = `Bearer ${storedJwt}`;
+        console.log('Using JWT from localStorage');
+      }
+    }
+    
     return config;
   },
   (error) => {

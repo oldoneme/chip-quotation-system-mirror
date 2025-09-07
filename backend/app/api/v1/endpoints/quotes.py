@@ -27,10 +27,28 @@ async def create_quote(
 ):
     """创建新报价单"""
     try:
+        # 🚨 紧急调试：记录完整的创建请求数据
+        print(f"🚨 CREATE_QUOTE_DEBUG:")
+        print(f"   用户ID: {current_user.id}")
+        print(f"   报价类型: {quote_data.quote_type}")
+        print(f"   项目数量: {len(quote_data.items) if quote_data.items else 0}")
+        
+        if quote_data.items:
+            print(f"   项目明细:")
+            for i, item in enumerate(quote_data.items, 1):
+                print(f"     {i}. {item.item_name} | 描述:{getattr(item, 'item_description', 'N/A')} | 数量:{item.quantity}")
+        
         service = QuoteService(db)
         quote = service.create_quote(quote_data, current_user.id)
+        
+        # 调试：打印返回的quote对象
+        print(f"✅ 报价单创建完成: ID={quote.id}, 序列ID={quote.sequence_id}")
+        
         return quote
     except Exception as e:
+        print(f"🚨 创建报价单异常: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"创建报价单失败: {str(e)}"
@@ -87,8 +105,8 @@ async def get_quotes_test(
         from sqlalchemy import desc
         from sqlalchemy.orm import selectinload
         
-        # 获取所有报价单，按创建时间倒序排列，并关联用户信息和报价项目
-        quotes = db.query(Quote).options(
+        # 获取所有未删除的报价单，按创建时间倒序排列，并关联用户信息和报价项目
+        quotes = db.query(Quote).filter(Quote.is_deleted == False).options(
             selectinload(Quote.items)
         ).join(User, Quote.created_by == User.id, isouter=True).order_by(desc(Quote.created_at)).all()
         
@@ -152,9 +170,23 @@ async def get_quotes_test(
         traceback.print_exc()
         return {"error": str(e)}
 
+@router.get("/by-uuid/{quote_uuid}")
+async def get_quote_by_uuid(
+    quote_uuid: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    按UUID查询报价单详情（完整数据）
+    用于企业微信审批链接访问
+    """
+    # 直接调用已存在的detail/by-id接口的逻辑
+    return await get_quote_detail_by_id(quote_uuid, db)
+
+
 @router.get("/detail/by-id/{quote_id}")
 async def get_quote_detail_by_id(
-    quote_id: int,
+    quote_id: str,
     db: Session = Depends(get_db)
 ):
     """按ID获取报价单详情（包含创建者姓名）"""
@@ -358,7 +390,7 @@ async def get_quote_statistics(
 
 @router.get("/{quote_id}", response_model=Quote)
 async def get_quote(
-    quote_id: int,
+    quote_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -428,7 +460,7 @@ async def get_quote_by_number(
 
 @router.put("/{quote_id}", response_model=Quote)
 async def update_quote(
-    quote_id: int,
+    quote_id: str,
     quote_data: QuoteUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -464,7 +496,7 @@ async def update_quote(
 
 @router.delete("/{quote_id}")
 async def delete_quote(
-    quote_id: int,
+    quote_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -499,7 +531,7 @@ async def delete_quote(
 
 @router.patch("/{quote_id}/status", response_model=Quote)
 async def update_quote_status(
-    quote_id: int,
+    quote_id: str,
     status_update: QuoteStatusUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -530,7 +562,7 @@ async def update_quote_status(
 
 @router.post("/{quote_id}/submit", response_model=Quote)
 async def submit_quote_for_approval(
-    quote_id: int,
+    quote_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -565,7 +597,7 @@ async def submit_quote_for_approval(
 
 @router.get("/{quote_id}/approval-records", response_model=List[ApprovalRecord])
 async def get_quote_approval_records(
-    quote_id: int,
+    quote_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -601,7 +633,7 @@ async def get_quote_approval_records(
 
 @router.post("/{quote_id}/approve")
 async def approve_quote(
-    quote_id: int,
+    quote_id: str,
     approval_data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -630,7 +662,7 @@ async def approve_quote(
 
 @router.post("/{quote_id}/reject")
 async def reject_quote(
-    quote_id: int,
+    quote_id: str,
     rejection_data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -666,7 +698,7 @@ async def reject_quote(
 
 @router.get("/{quote_id}/export/pdf")
 async def export_quote_pdf(
-    quote_id: int,
+    quote_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -710,7 +742,7 @@ async def export_quote_pdf(
 
 @router.get("/{quote_id}/export/excel")
 async def export_quote_excel(
-    quote_id: int,
+    quote_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
