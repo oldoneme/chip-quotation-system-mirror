@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
+from fastapi import HTTPException
 
 from ..database import get_db
 from ..models import Quote, ApprovalTimeline, ApprovalTimelineErrors
@@ -20,12 +21,79 @@ from ..config import settings
 class WeComCompensationService:
     """企业微信审批补偿服务"""
     
+    # 重试配置
+    MAX_RETRIES = 3
+    BASE_DELAY = 1.0  # 基础延迟时间(秒)
+    MAX_DELAY = 10.0  # 最大延迟时间(秒)
+    TIMEOUT = 30.0    # 请求超时时间(秒)
+    
     def __init__(self, db: Session = None):
         self.db = db or next(get_db())
         self.corp_id = settings.WECOM_CORP_ID
         self.secret = settings.WECOM_SECRET
         self._access_token = None
         self._token_expires_at = None
+    
+    async def _retry_request(self, method: str, url: str, **kwargs) -> Dict:
+        """
+        带重试机制的HTTP请求
+        
+        Args:
+            method: HTTP方法 (GET, POST, etc.)
+            url: 请求URL
+            **kwargs: httpx请求参数
+            
+        Returns:
+            响应的JSON数据
+            
+        Raises:
+            HTTPException: 重试耗尽后仍然失败
+        """
+        last_exception = None
+        
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                timeout = httpx.Timeout(self.TIMEOUT)
+                async with httpx.AsyncClient(proxy=None, timeout=timeout) as client:
+                    if method.upper() == "GET":
+                        response = await client.get(url, **kwargs)
+                    elif method.upper() == "POST":
+                        response = await client.post(url, **kwargs)
+                    else:
+                        raise ValueError(f"不支持的HTTP方法: {method}")
+                    
+                    # 检查HTTP状态码
+                    response.raise_for_status()
+                    return response.json()
+                    
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.NetworkError) as e:
+                last_exception = e
+                if attempt < self.MAX_RETRIES - 1:
+                    # 指数退避延迟
+                    delay = min(self.BASE_DELAY * (2 ** attempt), self.MAX_DELAY)
+                    print(f"⚠️ 网络请求失败 (尝试 {attempt + 1}/{self.MAX_RETRIES}): {str(e)}")
+                    print(f"   等待 {delay:.1f}秒 后重试...")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    print(f"❌ 网络请求重试耗尽，最终失败: {str(e)}")
+                    break
+                    
+            except httpx.HTTPStatusError as e:
+                # HTTP状态码错误不重试，直接返回
+                print(f"❌ HTTP状态错误: {e.response.status_code}")
+                return e.response.json()
+                
+            except Exception as e:
+                last_exception = e
+                print(f"❌ 未知错误: {str(e)}")
+                break
+        
+        # 重试耗尽，抛出异常
+        raise HTTPException(
+            status_code=500,
+            detail=f"网络请求失败，已重试{self.MAX_RETRIES}次: {str(last_exception)}"
+        )
     
     async def get_access_token(self) -> str:
         """获取企业微信access_token"""
@@ -36,9 +104,7 @@ class WeComCompensationService:
         url = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
         params = {"corpid": self.corp_id, "corpsecret": self.secret}
         
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params)
-            data = response.json()
+        data = await self._retry_request("GET", url, params=params)
             
         if data.get("errcode") != 0:
             raise Exception(f"获取access_token失败: {data.get('errmsg')}")
@@ -55,12 +121,11 @@ class WeComCompensationService:
             
             data = {"sp_no": sp_no}
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{url}?access_token={access_token}",
-                    json=data
-                )
-                result = response.json()
+            result = await self._retry_request(
+                "POST", 
+                f"{url}?access_token={access_token}",
+                json=data
+            )
             
             if result.get("errcode") != 0:
                 print(f"⚠️ 获取审批详情失败: {result.get('errmsg')}")

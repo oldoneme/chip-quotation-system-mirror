@@ -7,6 +7,8 @@ import json
 import time
 import hashlib
 import secrets
+import os
+import asyncio
 from typing import Dict, Optional, List, Any
 from datetime import datetime, timedelta
 import httpx
@@ -21,6 +23,12 @@ from ..config import settings
 class WeComApprovalIntegration:
     """企业微信审批集成服务"""
     
+    # 重试配置
+    MAX_RETRIES = 3
+    BASE_DELAY = 1.0  # 基础延迟时间(秒)
+    MAX_DELAY = 10.0  # 最大延迟时间(秒)
+    TIMEOUT = 30.0    # 请求超时时间(秒)
+    
     def __init__(self, db: Session):
         self.db = db
         self.corp_id = settings.WECOM_CORP_ID
@@ -33,6 +41,74 @@ class WeComApprovalIntegration:
         self.encoding_aes_key = settings.WECOM_ENCODING_AES_KEY
         self._access_token = None
         self._token_expires_at = None
+        
+        # 设置环境变量避免代理干扰企业微信API调用
+        os.environ['NO_PROXY'] = 'qyapi.weixin.qq.com,*.weixin.qq.com'
+        # 强制清空所有代理环境变量避免httpx检测到无效代理
+        for proxy_var in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY']:
+            if proxy_var in os.environ:
+                del os.environ[proxy_var]
+    
+    async def _retry_request(self, method: str, url: str, **kwargs) -> Dict:
+        """
+        带重试机制的HTTP请求
+        
+        Args:
+            method: HTTP方法 (GET, POST, etc.)
+            url: 请求URL
+            **kwargs: httpx请求参数
+            
+        Returns:
+            响应的JSON数据
+            
+        Raises:
+            HTTPException: 重试耗尽后仍然失败
+        """
+        last_exception = None
+        
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                timeout = httpx.Timeout(self.TIMEOUT)
+                async with httpx.AsyncClient(proxy=None, timeout=timeout) as client:
+                    if method.upper() == "GET":
+                        response = await client.get(url, **kwargs)
+                    elif method.upper() == "POST":
+                        response = await client.post(url, **kwargs)
+                    else:
+                        raise ValueError(f"不支持的HTTP方法: {method}")
+                    
+                    # 检查HTTP状态码
+                    response.raise_for_status()
+                    return response.json()
+                    
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.NetworkError) as e:
+                last_exception = e
+                if attempt < self.MAX_RETRIES - 1:
+                    # 指数退避延迟
+                    delay = min(self.BASE_DELAY * (2 ** attempt), self.MAX_DELAY)
+                    print(f"⚠️ 网络请求失败 (尝试 {attempt + 1}/{self.MAX_RETRIES}): {str(e)}")
+                    print(f"   等待 {delay:.1f}秒 后重试...")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    print(f"❌ 网络请求重试耗尽，最终失败: {str(e)}")
+                    break
+                    
+            except httpx.HTTPStatusError as e:
+                # HTTP状态码错误不重试，直接返回
+                print(f"❌ HTTP状态错误: {e.response.status_code}")
+                return e.response.json()
+                
+            except Exception as e:
+                last_exception = e
+                print(f"❌ 未知错误: {str(e)}")
+                break
+        
+        # 重试耗尽，抛出异常
+        raise HTTPException(
+            status_code=500,
+            detail=f"网络请求失败，已重试{self.MAX_RETRIES}次: {str(last_exception)}"
+        )
         
     async def get_access_token(self) -> str:
         """获取企业微信access_token"""
@@ -48,9 +124,7 @@ class WeComApprovalIntegration:
             "corpsecret": self.secret
         }
         
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params)
-            data = response.json()
+        data = await self._retry_request("GET", url, params=params)
             
         if data.get("errcode") != 0:
             raise HTTPException(
@@ -74,9 +148,7 @@ class WeComApprovalIntegration:
             'media': (filename, content.encode('utf-8'), 'text/plain')
         }
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, files=files)
-            result = response.json()
+        result = await self._retry_request("POST", url, files=files)
             
         if result.get("errcode") != 0:
             raise HTTPException(
@@ -86,7 +158,7 @@ class WeComApprovalIntegration:
             
         return result["media_id"]
     
-    async def submit_quote_approval(self, quote_id: int, approver_userid: str = None) -> Dict:
+    async def submit_quote_approval(self, quote_id, approver_userid: str = None) -> Dict:
         """
         提交报价单到企业微信审批
         使用模板定义的审批人，简化流程
@@ -98,7 +170,12 @@ class WeComApprovalIntegration:
         Returns:
             审批申请创建结果
         """
-        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        # 支持UUID和整数ID查询
+        if isinstance(quote_id, str) and len(quote_id) == 36:  # UUID字符串
+            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        else:  # 序列ID或其他格式
+            quote = self.db.query(Quote).filter(Quote.sequence_id == quote_id).first()
+            
         if not quote:
             raise HTTPException(status_code=404, detail="报价单不存在")
         
@@ -110,7 +187,8 @@ class WeComApprovalIntegration:
         detail_state = f"quote_detail_{quote.id}"
         
         # 构建企业微信OAuth链接，点击后直接在企业微信内打开应用
-        detail_link = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={oauth_redirect_url}&response_type=code&scope=snsapi_base&state={detail_state}#wechat_redirect"
+        from urllib.parse import quote as url_quote
+        detail_link = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={url_quote(oauth_redirect_url, safe='')}&response_type=code&scope=snsapi_base&state={detail_state}&agentid={self.agent_id}#wechat_redirect"
         
         # 构建简洁的描述信息（由于Text字段长度限制）
         total_amount = quote.total_amount or 0.0
@@ -150,9 +228,7 @@ class WeComApprovalIntegration:
         # 发送审批申请
         url = f"https://qyapi.weixin.qq.com/cgi-bin/oa/applyevent?access_token={access_token}"
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=approval_data)
-            result = response.json()
+        result = await self._retry_request("POST", url, json=approval_data)
             
         if result.get("errcode") != 0:
             raise HTTPException(
@@ -202,9 +278,7 @@ class WeComApprovalIntegration:
         
         data = {"sp_no": sp_no}
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=data)
-            result = response.json()
+        result = await self._retry_request("POST", url, json=data)
             
         if result.get("errcode") != 0:
             raise HTTPException(
@@ -216,7 +290,7 @@ class WeComApprovalIntegration:
     
     async def send_approval_notification(
         self, 
-        quote_id: int, 
+        quote_id, 
         approver_userid: str,
         message_type: str = "pending"
     ) -> bool:
@@ -231,7 +305,12 @@ class WeComApprovalIntegration:
         Returns:
             是否发送成功
         """
-        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        # 支持UUID和整数ID查询
+        if isinstance(quote_id, str) and len(quote_id) == 36:  # UUID字符串
+            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        else:  # 序列ID或其他格式
+            quote = self.db.query(Quote).filter(Quote.sequence_id == quote_id).first()
+            
         if not quote:
             return False
         
@@ -239,7 +318,7 @@ class WeComApprovalIntegration:
         
         # 生成企业微信应用内链接，直接跳转到报价单详情页面
         # 使用企业微信的应用跳转协议
-        app_url = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={settings.API_BASE_URL}/v1/auth/callback&response_type=code&scope=snsapi_base&state=quote_detail_{quote_id}"
+        app_url = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={url_quote(f'{settings.API_BASE_URL}/v1/auth/callback', safe='')}&response_type=code&scope=snsapi_base&state=quote_detail_{quote_id}&agentid={self.agent_id}#wechat_redirect"
         
         # 如果有审批链接token，也可以提供备用链接
         if hasattr(quote, 'approval_link_token') and quote.approval_link_token:
@@ -284,9 +363,7 @@ class WeComApprovalIntegration:
         # 发送消息
         url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}"
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=message_data)
-            result = response.json()
+        result = await self._retry_request("POST", url, json=message_data)
             
         return result.get("errcode") == 0
     
@@ -435,7 +512,7 @@ class WeComApprovalIntegration:
         # 严禁开发模式跳过验证
         return is_valid
     
-    async def sync_approval_status(self, quote_id: int) -> Dict:
+    async def sync_approval_status(self, quote_id) -> Dict:
         """
         同步报价单的企业微信审批状态
         
@@ -445,7 +522,12 @@ class WeComApprovalIntegration:
         Returns:
             同步后的状态信息
         """
-        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        # 支持UUID和整数ID查询
+        if isinstance(quote_id, str) and len(quote_id) == 36:  # UUID字符串
+            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        else:  # 序列ID或其他格式
+            quote = self.db.query(Quote).filter(Quote.sequence_id == quote_id).first()
+            
         if not quote or not quote.wecom_approval_id:
             return {"status": "no_approval", "message": "无企业微信审批记录"}
         
