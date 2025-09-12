@@ -32,9 +32,11 @@
   状态管理: React Hooks
 
 开发环境:
-  操作系统: Ubuntu
+  操作系统: WSL (Windows Subsystem for Linux)
+  Shell: Bash
   版本控制: Git (Gitee主仓库 + GitHub镜像)
   接口测试: FastAPI自带Swagger UI
+  包管理: pip (Python) + npm (Node.js)
 ```
 
 ### 项目结构
@@ -57,8 +59,10 @@ chip-quotation-system/
 │   └── commands/             # 自定义开发命令
 ├── .workflow/                # 开发工作流模板
 ├── docs/                     # 项目文档
-├── start_backend.ps1         # 后端启动脚本
-└── start_frontend.ps1        # 前端启动脚本
+├── start_backend.sh          # 后端启动脚本 (WSL)
+├── start_frontend.sh         # 前端启动脚本 (WSL)
+├── start_all.sh              # 全栈启动脚本 (WSL)
+└── README.md
 ```
 
 ---
@@ -91,7 +95,7 @@ chip-quotation-system/
 - **遵循 FastAPI 模式**：沿用你现有接口的成熟设计模式
 - **保持 Ant Design 一致性**：使用既定的组件设计风格
 - **复用 SQLAlchemy 模式**：继承现有数据模型的设计规范
-- **维护 PowerShell 脚本约定**：保持现有启动脚本的使用习惯
+- **维护启动脚本约定**：保持现有启动脚本的使用习惯
 
 ### 决策框架 (报价系统特化)
 ```
@@ -203,18 +207,19 @@ API集成问题:
 
 ## 🛠️ 项目专用命令配置
 
-### 核心开发命令
+### 核心开发命令 (WSL环境)
 ```bash
-# 后端开发环境
+# 后端开发环境 (WSL)
 cd backend
-python -m venv venv
-venv\Scripts\activate              # Windows 激活虚拟环境
+python3 -m venv venv
+source venv/bin/activate           # WSL/Linux 激活虚拟环境
 pip install -r requirements.txt
 
 # 启动后端开发服务器
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-# 或使用 PowerShell 脚本:
-.\start_backend.ps1
+
+# 使用WSL启动脚本:
+./start_backend.sh
 
 # 数据库操作
 alembic revision --autogenerate -m "添加设备定价规则"
@@ -231,16 +236,17 @@ flake8 app/
 mypy app/
 ```
 
-### 前端开发命令
+### 前端开发命令 (WSL环境)
 ```bash
-# 前端环境配置
+# 前端环境配置 (WSL中的Node.js)
 cd frontend/chip-quotation-frontend
 npm install
 
 # 启动开发服务器
 npm start
-# 或使用 PowerShell 脚本:
-.\start_frontend.ps1
+
+# 使用WSL启动脚本:
+./start_frontend.sh
 
 # 构建和测试
 npm run build
@@ -252,18 +258,48 @@ npm run type-check
 npm test -- --testNamePattern="EquipmentSelector"
 ```
 
-### 全栈集成命令
+### 全栈集成命令 (WSL环境)
 ```bash
-# 同时启动前后端服务 (需要安装 concurrently)
-concurrently "cd backend && uvicorn app.main:app --reload" "cd frontend/chip-quotation-frontend && npm start"
+# WSL环境下同时启动前后端服务
+# 安装 concurrently (如果还没有)
+npm install -g concurrently
 
-# API测试 (使用真实数据)
+# 使用全栈启动脚本:
+./start_all.sh
+
+# 或者手动同时启动:
+concurrently \
+  "cd backend && source venv/bin/activate && uvicorn app.main:app --reload" \
+  "cd frontend/chip-quotation-frontend && npm start"
+
+# API测试 (使用curl，WSL中默认可用)
 curl -X POST "http://localhost:8000/api/v1/quotations/calculate" \
   -H "Content-Type: application/json" \
   -d '{"equipment_id": 1, "configuration": {...}}'
 
-# 端到端测试
-playwright test tests/quotation-flow.spec.ts
+# 端到端测试 (如果使用Playwright)
+npx playwright test tests/quotation-flow.spec.ts
+```
+
+### WSL环境特定配置
+```bash
+# WSL环境下的常用开发命令
+# 查看端口占用
+netstat -tulpn | grep :8000
+
+# 进程管理
+ps aux | grep uvicorn
+ps aux | grep node
+
+# 文件权限处理 (WSL特有)
+chmod +x *.sh
+
+# Git配置 (WSL环境推荐)
+git config --global core.autocrlf input  # WSL推荐设置
+git config --global core.eol lf          # 统一行结尾符
+
+# 环境变量配置
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/backend"
 ```
 
 ---
@@ -430,4 +466,4 @@ playwright test tests/quotation-flow.spec.ts
 
 ---
 
-*此配置专门为芯片报价系统定制，结合了Chris Dzombak的编程哲学和财务系统的特殊要求，确保开发过程中始终保持计算准确性和业务逻辑完整性。*
+*此配置专门为芯片报价系统定制，基于WSL开发环境，结合了Chris Dzombak的编程哲学和财务系统的特殊要求，确保开发过程中始终保持计算准确性和业务逻辑完整性。*
