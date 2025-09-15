@@ -16,6 +16,7 @@ import ComprehensiveQuote from '../pages/ComprehensiveQuote';
 import QuoteResult from '../pages/QuoteResult';
 import DatabaseManagement from '../pages/DatabaseManagement';
 import HierarchicalDatabaseManagement from '../pages/HierarchicalDatabaseManagement';
+import DatabaseQuoteManagement from '../pages/DatabaseQuoteManagement';
 import ComingSoon from '../pages/ComingSoon';
 import QuoteTemplate from '../pages/QuoteTemplate';
 import AnalyticsDashboard from '../pages/AnalyticsDashboard';
@@ -78,6 +79,7 @@ const AppContent = () => {
                 <Route path="/version-control" element={<VersionControl />} />
                 <Route path="/database-management" element={<DatabaseManagement />} />
                 <Route path="/hierarchical-database-management" element={<HierarchicalDatabaseManagement />} />
+                <Route path="/admin/database-quote-management" element={<DatabaseQuoteManagement />} />
               </Routes>
             </ErrorBoundary>
           </div>

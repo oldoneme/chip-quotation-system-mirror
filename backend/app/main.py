@@ -105,6 +105,7 @@ from app.database import engine, Base
 from app.api.v1.api import api_router
 from app.auth_routes import router as auth_router
 from app.admin_routes import router as admin_router
+from app.api.v1.admin.quotes import router as admin_quotes_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.exceptions import (
@@ -148,6 +149,7 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(admin_quotes_router, prefix=settings.API_V1_STR + "/admin")
 
 # 企业微信强校验回调路由 - 唯一安全入口
 from fastapi import Query, Request, Depends

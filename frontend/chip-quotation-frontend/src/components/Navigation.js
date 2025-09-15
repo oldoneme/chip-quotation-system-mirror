@@ -107,7 +107,12 @@ const Navigation = () => {
           {
             key: '/hierarchical-database-management',
             icon: <DatabaseOutlined />,
-            label: '数据库管理',
+            label: '设备数据库管理',
+          },
+          {
+            key: '/admin/database-quote-management',
+            icon: <UnorderedListOutlined />,
+            label: '报价单数据库管理',
           },
         ],
       });

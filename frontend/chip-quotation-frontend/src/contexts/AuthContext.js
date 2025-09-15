@@ -21,8 +21,25 @@ export const AuthProvider = ({ children }) => {
   const checkAuth = async () => {
     try {
       setLoading(true);
-      
-      const response = await axios.get('/api/me', { 
+
+      // 首先检查是否有管理员token
+      try {
+        const adminResponse = await axios.get('/api/admin/me', {
+          withCredentials: true,
+          timeout: 5000
+        });
+
+        console.log('✅ 管理员认证成功:', adminResponse.data);
+        setUser(adminResponse.data);
+        setAuthenticated(true);
+        return;
+      } catch (adminError) {
+        console.log('❌ 管理员认证失败，尝试企业微信认证:', adminError.response?.status);
+        // 管理员认证失败，继续企业微信认证流程
+      }
+
+      // 企业微信认证流程（保持原有逻辑）
+      const response = await axios.get('/api/me', {
         withCredentials: true,
         timeout: 10000
       });
@@ -118,7 +135,8 @@ export const AuthProvider = ({ children }) => {
     authenticated,
     loading,
     checkAuth,
-    logout
+    logout,
+    refreshAuth: checkAuth  // 添加手动刷新认证的方法
   };
 
   return (

@@ -128,7 +128,12 @@ class Quote(Base):
     wecom_approval_id = Column(String, unique=True)  # 企业微信审批单ID
     wecom_approval_template_id = Column(String)  # 企业微信审批模板ID
     approval_link_token = Column(String, unique=True)  # 审批链接Token
-    
+
+    # 软删除字段
+    is_deleted = Column(Boolean, default=False, index=True)  # 是否已删除
+    deleted_at = Column(DateTime)  # 删除时间
+    deleted_by = Column(Integer, ForeignKey("users.id"))  # 删除人
+
     # 系统字段
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -138,6 +143,7 @@ class Quote(Base):
     creator = relationship("User", foreign_keys=[created_by])
     approver = relationship("User", foreign_keys=[approved_by])
     current_approver = relationship("User", foreign_keys=[current_approver_id])
+    deleter = relationship("User", foreign_keys=[deleted_by])
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
     approval_records = relationship("ApprovalRecord", back_populates="quote", cascade="all, delete-orphan")
 

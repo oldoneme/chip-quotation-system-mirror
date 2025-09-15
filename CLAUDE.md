@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+🔒 **MANDATORY WORKFLOW CHECK - 强制工作流检查** 🔒
+**在执行ANY任务前，我MUST先执行以下检查：**
+1. 📖 READ CLAUDE_WORKFLOW.md 完整检查清单
+2. 🔍 风险评估（认证/核心功能/文件数量/当前系统状态）
+3. 💾 备份检查（git status + stash if needed）
+4. ⚡ 最小变更原则确认（≤3文件，单一功能点）
+5. 🚨 高风险文件警报：AuthContext.js, login/auth/session, Navigation.js
+6. ⛔ 绝对禁止：修改认证、一次性改>3文件、不备份大修改
+
 ⚠️ **IMPORTANT**: Before making ANY changes, you MUST read and follow [CLAUDE_WORKFLOW.md](./CLAUDE_WORKFLOW.md) for mandatory workflow checks and safety rules.
 
 ## Project Overview

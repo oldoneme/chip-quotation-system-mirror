@@ -395,6 +395,12 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
     
     <div class="container">
         <div class="card">
+            <h2>系统管理功能</h2>
+            <button class="btn" onclick="window.open('/', '_blank')" style="background: #28a745;">🏠 前端主应用</button>
+            <button class="btn" onclick="window.open('/admin/database-quote-management', '_blank')" style="background: #17a2b8;">📊 报价单数据库管理</button>
+        </div>
+
+        <div class="card">
             <h2>企业微信用户管理</h2>
             <button class="btn" onclick="syncUsers()">同步企业微信用户</button>
             <button class="btn" onclick="refreshUsers()">刷新用户列表</button>
@@ -636,6 +642,16 @@ async def admin_management_page(admin_info: dict = Depends(require_admin_auth)):
 </html>
 """
 
+
+@router.get("/me")
+async def get_admin_info(admin_info: dict = Depends(require_admin_auth)):
+    """获取当前管理员信息"""
+    return {
+        "id": "admin_" + admin_info['username'],
+        "userid": admin_info['username'],
+        "name": f"管理员-{admin_info['username']}",
+        "role": "super_admin"
+    }
 
 @router.get("/users")
 async def get_users(admin_info: dict = Depends(require_admin_auth), db: Session = Depends(get_db)):

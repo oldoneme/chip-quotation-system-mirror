@@ -529,6 +529,36 @@ async def delete_quote(
         )
 
 
+@router.post("/{quote_id}/restore")
+async def restore_quote(
+    quote_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """恢复已删除的报价单"""
+    try:
+        service = QuoteService(db)
+        success = service.restore_quote(quote_id, current_user.id)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="报价单不存在或未被删除"
+            )
+
+        return {"message": "报价单恢复成功"}
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"恢复报价单失败: {str(e)}"
+        )
+
+
 @router.patch("/{quote_id}/status", response_model=Quote)
 async def update_quote_status(
     quote_id: str,

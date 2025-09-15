@@ -116,20 +116,20 @@ class QuoteService:
 
     def get_quote_by_id(self, quote_id: int) -> Optional[Quote]:
         """根据ID获取报价单"""
-        return self.db.query(Quote).filter(Quote.id == quote_id).first()
+        return self.db.query(Quote).filter(Quote.id == quote_id, Quote.is_deleted == False).first()
 
     def get_quote_by_number(self, quote_number: str) -> Optional[Quote]:
         """根据报价单号获取报价单"""
         from sqlalchemy.orm import selectinload
         return (self.db.query(Quote)
                 .options(selectinload(Quote.items), selectinload(Quote.creator))
-                .filter(Quote.quote_number == quote_number)
+                .filter(Quote.quote_number == quote_number, Quote.is_deleted == False)
                 .first())
 
     def get_quotes(self, filter_params: QuoteFilter, user_id: Optional[int] = None):
         """获取报价单列表"""
         # 构建基础查询
-        base_filters = []
+        base_filters = [Quote.is_deleted == False]  # 默认过滤软删除数据
         
         # 应用筛选条件
         if filter_params.status:
@@ -235,8 +235,31 @@ class QuoteService:
         if not is_admin and quote.status != 'draft':
             raise ValueError("普通用户只能删除草稿状态的报价单")
         
-        # 删除关联的明细项和审批记录会通过级联删除自动处理
-        self.db.delete(quote)
+        # 软删除：设置删除标记而不是实际删除
+        quote.is_deleted = True
+        quote.deleted_at = datetime.utcnow()
+        quote.deleted_by = user_id
+
+        self.db.commit()
+        return True
+
+    def restore_quote(self, quote_id: int, user_id: int) -> bool:
+        """恢复删除的报价单"""
+        # 查询包括软删除的报价单
+        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        if not quote or not quote.is_deleted:
+            return False
+
+        # 检查权限：只有管理员可以恢复
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user or user.role not in ['admin', 'super_admin']:
+            raise PermissionError("只有管理员可以恢复已删除的报价单")
+
+        # 恢复报价单
+        quote.is_deleted = False
+        quote.deleted_at = None
+        quote.deleted_by = None
+
         self.db.commit()
         return True
 
@@ -293,8 +316,8 @@ class QuoteService:
 
     def get_quote_statistics(self, user_id: Optional[int] = None) -> QuoteStatistics:
         """获取报价单统计信息"""
-        query = self.db.query(Quote)
-        
+        query = self.db.query(Quote).filter(Quote.is_deleted == False)
+
         # 非管理员只能看到自己创建的报价单统计
         if user_id:
             user = self.db.query(User).filter(User.id == user_id).first()
