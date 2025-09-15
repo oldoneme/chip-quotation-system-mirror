@@ -146,6 +146,65 @@ async def get_detailed_statistics(
         )
 
 
+@router.get("/export", response_model=dict)
+async def export_quotes(
+    include_deleted: bool = Query(False, description="是否包含软删除数据"),
+    format: str = Query("json", description="导出格式: json, csv"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_role)
+):
+    """导出报价单数据（管理员专用）"""
+    try:
+        # 构建查询
+        query = db.query(Quote)
+
+        # 软删除过滤
+        if not include_deleted:
+            query = query.filter(Quote.is_deleted == False)
+
+        # 获取所有数据
+        quotes = query.order_by(Quote.created_at.desc()).all()
+
+        # 格式化数据
+        export_data = []
+        for quote in quotes:
+            quote_data = {
+                "报价单号": quote.quote_number,
+                "标题": quote.title,
+                "报价类型": quote.quote_type,
+                "客户名称": quote.customer_name,
+                "币种": quote.currency,
+                "总金额": quote.total_amount,
+                "状态": quote.status,
+                "审批状态": quote.approval_status,
+                "创建人": quote.creator.name if quote.creator else "未知",
+                "创建时间": quote.created_at.isoformat() if quote.created_at else None,
+                "更新时间": quote.updated_at.isoformat() if quote.updated_at else None,
+                "是否删除": "是" if quote.is_deleted else "否",
+                "删除时间": quote.deleted_at.isoformat() if quote.deleted_at else None,
+                "删除人": quote.deleter.name if quote.deleter else None
+            }
+            export_data.append(quote_data)
+
+        # 记录导出操作
+        print(f"📊 导出报价单数据: {len(export_data)} 条记录 (包含删除: {include_deleted}) by {current_user.name}")
+
+        return {
+            "data": export_data,
+            "total": len(export_data),
+            "format": format,
+            "exported_at": datetime.utcnow().isoformat(),
+            "exported_by": current_user.name,
+            "include_deleted": include_deleted
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"导出数据失败: {str(e)}"
+        )
+
+
 def require_admin_or_super_admin_auth(request: Request):
     """检查管理员系统认证或企业微信超级管理员权限"""
     # 首先检查管理员token

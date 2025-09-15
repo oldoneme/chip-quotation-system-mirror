@@ -25,7 +25,8 @@ import {
   RollbackOutlined, // 使用RollbackOutlined代替RollbackOutlined
   ExclamationCircleOutlined,
   InfoCircleOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -33,7 +34,8 @@ import {
   getDetailedStatistics,
   hardDeleteQuote,
   batchRestoreQuotes,
-  batchSoftDeleteQuotes
+  batchSoftDeleteQuotes,
+  exportQuotes
 } from '../services/adminApi';
 
 const { Search } = Input;
@@ -118,6 +120,33 @@ const DatabaseQuoteManagement = () => {
         }
       },
     });
+  };
+
+  // 导出数据
+  const handleExport = async () => {
+    try {
+      const exportData = await exportQuotes({
+        include_deleted: filters.include_deleted,
+        format: 'json'
+      });
+
+      // 创建下载文件
+      const dataStr = JSON.stringify(exportData.data, null, 2);
+      const dataBlob = new Blob([dataStr], {type: 'application/json'});
+
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `quotes_export_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      message.success(`成功导出 ${exportData.total} 条报价单数据`);
+    } catch (error) {
+      message.error('导出失败，请稍后重试');
+    }
   };
 
   // 批量操作
@@ -453,6 +482,14 @@ const DatabaseQuoteManagement = () => {
                 loading={loading}
               >
                 刷新
+              </Button>
+
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={handleExport}
+                type="default"
+              >
+                导出数据
               </Button>
             </Space>
           </Col>

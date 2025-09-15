@@ -114,11 +114,36 @@ export const getQuoteStatistics = async () => {
   }
 };
 
-export default {
+/**
+ * 导出报价单数据
+ * @param {Object} params - 导出参数
+ * @param {boolean} params.include_deleted - 是否包含软删除数据
+ * @param {string} params.format - 导出格式
+ */
+export const exportQuotes = async (params = {}) => {
+  try {
+    const response = await api.get(`${ADMIN_API_BASE}/quotes/export`, {
+      params: {
+        include_deleted: false,
+        format: 'json',
+        ...params
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('导出报价单数据失败:', error);
+    throw error;
+  }
+};
+
+const adminApi = {
   getAllQuotes,
   getDetailedStatistics,
   hardDeleteQuote,
   batchRestoreQuotes,
   batchSoftDeleteQuotes,
-  getQuoteStatistics
+  getQuoteStatistics,
+  exportQuotes
 };
+
+export default adminApi;
