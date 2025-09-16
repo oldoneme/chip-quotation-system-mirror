@@ -36,20 +36,21 @@ class QuoteService:
         """生成报价单号: CIS-{单位缩写}{年月日}{顺序编号}"""
         # 获取单位缩写
         unit_abbr = self.get_quote_unit_abbreviation(quote_unit)
-        
+
         # 获取当前日期
         now = datetime.now()
         date_str = now.strftime("%Y%m%d")
-        
-        # 查找当日该单位的最大编号
+
+        # 查找当日该单位的最大编号（包括所有记录以避免编号冲突）
         prefix = f"CIS-{unit_abbr}{date_str}"
         latest_quote = (
             self.db.query(Quote)
             .filter(Quote.quote_number.like(f"{prefix}%"))
+            # 不过滤软删除记录，避免编号冲突
             .order_by(desc(Quote.quote_number))
             .first()
         )
-        
+
         if latest_quote:
             # 提取序号并加1
             try:
@@ -58,7 +59,7 @@ class QuoteService:
                 seq = 1
         else:
             seq = 1
-        
+
         return f"{prefix}{seq:03d}"
 
     def create_quote(self, quote_data: QuoteCreate, user_id: int) -> Quote:
@@ -109,10 +110,18 @@ class QuoteService:
                 processed_at=datetime.now()
             )
             self.db.add(approval_record)
-        
+
         self.db.commit()
-        self.db.refresh(quote)
-        return quote
+
+        # 使用flush后的ID直接查询（避免刷新问题）
+        from sqlalchemy.orm import selectinload
+        created_quote = (
+            self.db.query(Quote)
+            .options(selectinload(Quote.items))
+            .filter(Quote.id == quote.id)
+            .first()
+        )
+        return created_quote
 
     def get_quote_by_id(self, quote_id: int) -> Optional[Quote]:
         """根据ID获取报价单"""

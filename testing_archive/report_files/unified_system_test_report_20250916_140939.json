@@ -1,0 +1,185 @@
+{
+  "test_session_id": "20250916_140924",
+  "start_time": "2025-09-16T14:09:24.914292",
+  "end_time": "2025-09-16T14:09:39.710002",
+  "duration": "14.80s",
+  "total_tests": 12,
+  "passed_tests": 2,
+  "failed_tests": 10,
+  "warnings": 0,
+  "test_categories": {
+    "api_endpoints": {
+      "passed": 0,
+      "failed": 5,
+      "tests": [
+        {
+          "name": "API端点存在性: /api/v1/approval/status/{quote_id}",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:25.382922",
+          "duration": 0.46860551834106445,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        },
+        {
+          "name": "API端点存在性: /api/v1/approval/history/{quote_id}",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:25.871826",
+          "duration": 0.488861083984375,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        },
+        {
+          "name": "API端点存在性: /api/v1/approval/submit/{quote_id}",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:27.325596",
+          "duration": 1.4537179470062256,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        },
+        {
+          "name": "API端点存在性: /api/v1/approval/approve/{quote_id}",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:28.028171",
+          "duration": 0.7025399208068848,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        },
+        {
+          "name": "API端点存在性: /api/v1/approval/reject/{quote_id}",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:28.460851",
+          "duration": 0.43263840675354004,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        }
+      ]
+    },
+    "data_flow": {
+      "passed": 0,
+      "failed": 1,
+      "tests": [
+        {
+          "name": "状态查询数据完整性",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:28.895713",
+          "duration": 0.4348280429840088,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        }
+      ]
+    },
+    "integration": {
+      "passed": 2,
+      "failed": 1,
+      "tests": [
+        {
+          "name": "审批方式兼容性检查",
+          "status": "PASS",
+          "timestamp": "2025-09-16T14:09:28.899210",
+          "duration": 0.0034677982330322266,
+          "details": {
+            "total_quotes": 8,
+            "method_distribution": {
+              "wecom": {
+                "count": 8,
+                "with_wecom_id": 8
+              }
+            },
+            "consistency": "perfect"
+          }
+        },
+        {
+          "name": "前端应用可访问性",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:29.388668",
+          "duration": 0.4894237518310547,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        },
+        {
+          "name": "前端统一审批组件文件",
+          "status": "PASS",
+          "timestamp": "2025-09-16T14:09:29.388827",
+          "duration": 0.0001347064971923828,
+          "details": {
+            "total_files": 3,
+            "existing_files": [
+              {
+                "path": "frontend/chip-quotation-frontend/src/services/unifiedApprovalApi.js",
+                "size": 6315
+              },
+              {
+                "path": "frontend/chip-quotation-frontend/src/components/UnifiedApprovalPanel.js",
+                "size": 9908
+              },
+              {
+                "path": "frontend/chip-quotation-frontend/src/test_unified_approval_frontend.js",
+                "size": 5708
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "performance": {
+      "passed": 0,
+      "failed": 1,
+      "tests": [
+        {
+          "name": "API响应时间性能",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:38.032603",
+          "duration": 8.64376187324524,
+          "details": {
+            "error": "所有请求都失败"
+          }
+        }
+      ]
+    },
+    "error_handling": {
+      "passed": 0,
+      "failed": 1,
+      "tests": [
+        {
+          "name": "无效quote_id处理",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:39.303646",
+          "duration": 1.271010160446167,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        }
+      ]
+    },
+    "documentation": {
+      "passed": 0,
+      "failed": 1,
+      "tests": [
+        {
+          "name": "OpenAPI文档验证",
+          "status": "FAIL",
+          "timestamp": "2025-09-16T14:09:39.709964",
+          "duration": 0.40627408027648926,
+          "details": {
+            "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+          }
+        }
+      ]
+    }
+  },
+  "system_info": {
+    "test_quote_id": "2a72d639-1486-442d-bce3-02a20672de28",
+    "backend_url": "http://127.0.0.1:8000",
+    "frontend_url": "http://localhost:3000"
+  },
+  "recommendations": [
+    "存在测试失败，需要修复相关问题"
+  ]
+}

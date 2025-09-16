@@ -1,0 +1,28 @@
+{
+  "check_time": "2025-09-16T12:42:17.223904",
+  "summary": {
+    "total_quotes": 8,
+    "total_approval_records": 0,
+    "total_issues_found": 0,
+    "critical_issues": 0,
+    "data_quality_score": 100,
+    "recommended_actions": []
+  },
+  "issues": {
+    "status_inconsistencies": [],
+    "missing_approval_methods": [],
+    "invalid_approval_records": [],
+    "duplicate_records": [],
+    "data_integrity_issues": []
+  },
+  "statistics": {
+    "total_quotes": 8,
+    "inconsistent_quotes": 0,
+    "missing_approval_methods": 0,
+    "total_approval_records": 0,
+    "invalid_approval_records": 0,
+    "duplicate_groups": 0,
+    "total_duplicate_records": 0,
+    "integrity_issue_types": 0
+  }
+}

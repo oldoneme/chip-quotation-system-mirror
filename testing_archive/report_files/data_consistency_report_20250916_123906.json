@@ -1,0 +1,47 @@
+{
+  "check_time": "2025-09-16T12:39:06.449404",
+  "summary": {
+    "total_quotes": 8,
+    "total_approval_records": 0,
+    "total_issues_found": 4,
+    "critical_issues": 1,
+    "data_quality_score": 60,
+    "recommended_actions": [
+      "补充缺失的审批方式标识",
+      "标准化审批记录格式",
+      "清理重复的审批记录",
+      "修复数据完整性问题"
+    ]
+  },
+  "issues": {
+    "status_inconsistencies": [],
+    "missing_approval_methods": [
+      {
+        "error": "(sqlite3.OperationalError) no such column: approval_method\n[SQL: \n                SELECT\n                    id, quote_number, approval_status, wecom_approval_id,\n                    created_at, updated_at\n                FROM quotes\n                WHERE is_deleted = 0\n                  AND (approval_method IS NULL OR approval_method = '')\n                ORDER BY created_at DESC\n            ]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "check": "missing_approval_methods"
+      }
+    ],
+    "invalid_approval_records": [
+      {
+        "error": "(sqlite3.OperationalError) no such column: user_id\n[SQL: \n                SELECT\n                    id, quote_id, action, user_id, user_name,\n                    comments, metadata, created_at\n                FROM approval_records\n                ORDER BY created_at DESC\n            ]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "check": "approval_records_format"
+      }
+    ],
+    "duplicate_records": [
+      {
+        "error": "(sqlite3.OperationalError) no such column: user_id\n[SQL: \n                SELECT\n                    quote_id, action, user_id, COUNT(*) as count,\n                    MIN(id) as first_id, MAX(id) as last_id,\n                    MIN(created_at) as first_created, MAX(created_at) as last_created\n                FROM approval_records\n                GROUP BY quote_id, action, user_id\n                HAVING COUNT(*) > 1\n                ORDER BY count DESC, quote_id\n            ]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "check": "duplicate_approval_records"
+      }
+    ],
+    "data_integrity_issues": [
+      {
+        "error": "(sqlite3.OperationalError) no such column: approval_method\n[SQL: \n                SELECT id, quote_number, wecom_approval_id\n                FROM quotes\n                WHERE is_deleted = 0\n                  AND wecom_approval_id IS NOT NULL\n                  AND wecom_approval_id != ''\n                  AND approval_method != 'wecom'\n            ]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+        "check": "data_integrity"
+      }
+    ]
+  },
+  "statistics": {
+    "total_quotes": 8,
+    "inconsistent_quotes": 0
+  }
+}

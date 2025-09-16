@@ -1,0 +1,22 @@
+{
+  "test_time": "2025-09-16T14:14:39.717360",
+  "test_type": "unified_approval_system_test",
+  "results": {
+    "service_logic": true,
+    "api_endpoints": {
+      "/approval/status/da496add-fe64-4c34-a836-e2fffc8ea010": "connection_error",
+      "/approval/history/da496add-fe64-4c34-a836-e2fffc8ea010": "connection_error"
+    }
+  },
+  "summary": {
+    "total_tests": 3,
+    "passed_tests": 1,
+    "pass_rate": 33.33333333333333,
+    "system_status": "系统存在问题，需要修复"
+  },
+  "recommendations": [
+    "统一审批服务基础功能正常",
+    "API端点可能需要解决认证和连接问题",
+    "建议在实际环境中进行端到端测试"
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "migration_time": "2025-09-16T12:40:42.736685",
+  "operations": [
+    {
+      "operation": "add_approval_method_column",
+      "status": "completed",
+      "sql": "ALTER TABLE quotes ADD COLUMN approval_method VARCHAR(20) DEFAULT 'internal'"
+    },
+    {
+      "operation": "initialize_approval_method_values",
+      "status": "completed",
+      "wecom_count": 8,
+      "internal_count": 0
+    },
+    {
+      "operation": "verify_migration",
+      "status": "passed",
+      "verification_results": {
+        "wecom": {
+          "count": 8,
+          "has_wecom_id": 8
+        }
+      }
+    }
+  ],
+  "backup_data": {
+    "quotes": [
+      {
+        "id": "da496add-fe64-4c34-a836-e2fffc8ea010",
+        "quote_number": "CIS-KS20250906003",
+        "approval_status": "pending",
+        "wecom_approval_id": "202509060042",
+        "created_at": "2025-09-06 10:35:23.486291",
+        "updated_at": "2025-09-06 18:35:57.254018"
+      },
+      {
+        "id": "2535dada-bd64-44e0-b43e-49d9b76655ad",
+        "quote_number": "CIS-KS20250906004",
+        "approval_status": "pending",
+        "wecom_approval_id": "202509060043",
+        "created_at": "2025-09-06 10:42:58.259084",
+        "updated_at": "2025-09-06 18:43:36.072397"
+      },
+      {
+        "id": "fab8704e-0cfb-4802-a030-78e1eda34337",
+        "quote_number": "CIS-KS20250906005",
+        "approval_status": "pending",
+        "wecom_approval_id": "202509060044",
+        "created_at": "2025-09-06 11:13:40.813984",
+        "updated_at": "2025-09-06 19:14:06.620474"
+      },
+      {
+        "id": "100e7f2a-81fa-4290-928e-eb7de64da4cd",
+        "quote_number": "CIS-KS20250906006",
+        "approval_status": "pending",
+        "wecom_approval_id": "202509060049",
+        "created_at": "2025-09-06 11:39:17.473902",
+        "updated_at": "2025-09-06 11:39:54.755850"
+      },
+      {
+        "id": "29106512-988a-44f4-ad13-7f62b44976b4",
+        "quote_number": "CIS-KS20250906007",
+        "approval_status": "pending",
+        "wecom_approval_id": "202509060053",
+        "created_at": "2025-09-06 12:06:12.980146",
+        "updated_at": "2025-09-06 12:06:43.663029"
+      },
+      {
+        "id": "0555dee9-4a3e-485c-8632-bbfb82aaaebb",
+        "quote_number": "CIS-KS20250906008",
+        "approval_status": "pending",
+        "wecom_approval_id": "202509060055",
+        "created_at": "2025-09-06 12:21:46.371485",
+        "updated_at": "2025-09-06 12:22:25.712360"
+      },
+      {
+        "id": "b75a20ec-79c0-4c98-94de-55bdf4928a97",
+        "quote_number": "CIS-KS20250906009",
+        "approval_status": "pending",
+        "wecom_approval_id": "202509060056",
+        "created_at": "2025-09-06 14:56:49.242606",
+        "updated_at": "2025-09-06 14:57:23.446679"
+      },
+      {
+        "id": "2a72d639-1486-442d-bce3-02a20672de28",
+        "quote_number": "CIS-ZH20250907001",
+        "approval_status": "approved",
+        "wecom_approval_id": "202509070030",
+        "created_at": "2025-09-07 15:21:13.062878",
+        "updated_at": "2025-09-08 00:22:18.977920"
+      }
+    ]
+  },
+  "success": true,
+  "error": null
+}

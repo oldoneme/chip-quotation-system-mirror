@@ -399,6 +399,139 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/backend"
 
 ---
 
+## 🛡️ 严格防护流程 - 避免破坏工作系统
+
+### ❌ **绝对禁止的危险操作**
+- ❌ **禁止修改生产数据库结构** - 除非有完整备份和回滚计划
+- ❌ **禁止运行可能修改数据的脚本** - 未经验证不得执行任何ALTER/DROP/UPDATE操作
+- ❌ **禁止同时运行多个数据库修改进程** - 避免并发冲突和数据竞争
+- ❌ **禁止在没有备份的情况下修改关键文件** - 包括模型定义、服务逻辑、数据库文件
+- ❌ **禁止直接修改SQLAlchemy模型后立即执行** - 必须先分析影响范围
+- ❌ **禁止创建可能污染数据的测试脚本** - 测试必须使用隔离的测试数据库
+
+### ✅ **强制执行的保护原则**
+
+#### 阶段1: 问题分析 (只读模式)
+```bash
+# 只允许的安全操作
+sqlite3 app/test.db "SELECT COUNT(*) FROM quotes;"  # 只读统计
+python3 -c "import sqlite3; conn=sqlite3.connect('app/test.db'); print('只读检查')"
+git status  # 检查代码状态
+ps aux | grep python  # 检查运行进程
+```
+
+#### 阶段2: 风险评估和备份
+```bash
+# 强制备份流程
+cp app/test.db app/test.db.backup.$(date +%Y%m%d_%H%M%S)
+git add . && git commit -m "backup before database changes"
+git stash  # 保存未提交的更改
+
+# 风险评估检查清单
+- [ ] 是否会影响现有报价单？
+- [ ] 是否会破坏外键关系？
+- [ ] 是否有回滚计划？
+- [ ] 是否已停止所有后台进程？
+```
+
+#### 阶段3: 进程隔离检查
+```bash
+# 必须检查并停止冲突进程
+ps aux | grep -E "(test_|uvicorn|python3)" | grep -v grep
+# 如发现测试进程，必须全部停止后再继续
+```
+
+#### 阶段4: 最小谨慎修改
+```bash
+# 修改规则
+1. 一次只修改一个问题点
+2. 每次修改后立即测试
+3. 发现问题立即回滚
+4. 绝不连续修改多个组件
+```
+
+#### 阶段5: 验证和回滚准备
+```bash
+# 验证检查点
+python3 -c "
+import sqlite3
+conn = sqlite3.connect('app/test.db')
+cursor = conn.cursor()
+cursor.execute('SELECT COUNT(*) FROM quotes WHERE is_deleted = 0')
+count = cursor.fetchone()[0]
+print(f'有效报价单数: {count}')
+conn.close()
+"
+
+# 出现问题立即回滚
+cp app/test.db.backup.* app/test.db  # 恢复数据库
+git reset --hard HEAD  # 恢复代码
+```
+
+### 🚨 **紧急情况处理协议**
+
+#### 当系统被破坏时：
+1. **立即停止所有操作** - 不再执行任何修改命令
+2. **评估损失范围** - 检查数据库、代码、配置文件状态
+3. **执行回滚** - 使用最近的备份恢复
+4. **记录问题** - 详细记录什么操作导致了问题
+5. **重新评估方案** - 制定更安全的解决方案
+
+#### 数据库损坏恢复步骤：
+```bash
+# 紧急恢复流程
+# 1. 立即备份当前损坏状态（用于分析）
+cp app/test.db app/test.db.corrupted.$(date +%Y%m%d_%H%M%S)
+
+# 2. 恢复最近的良好备份
+ls -la app/test.db.backup.*  # 查看可用备份
+cp app/test.db.backup.[最新时间戳] app/test.db
+
+# 3. 验证恢复结果
+sqlite3 app/test.db "SELECT COUNT(*) FROM quotes;"
+
+# 4. 重启服务验证
+# 检查后端服务是否正常响应
+curl http://localhost:8000/api/v1/quotes/stats
+```
+
+### 📋 **每次操作前强制检查清单**
+
+#### 修改数据库前：
+- [ ] 已创建时间戳备份？
+- [ ] 已停止所有测试进程？
+- [ ] 已检查当前数据状态？
+- [ ] 有明确的回滚计划？
+- [ ] 修改范围是最小化的？
+
+#### 修改代码前：
+- [ ] 已提交或stash现有更改？
+- [ ] 明确知道修改的影响范围？
+- [ ] 有测试计划验证修改？
+- [ ] 准备好立即回滚？
+
+#### 运行测试脚本前：
+- [ ] 脚本只读取不修改数据？
+- [ ] 不会创建冲突的进程？
+- [ ] 不会影响正在运行的服务？
+- [ ] 有明确的退出条件？
+
+### 💡 **吸取的教训记录**
+
+#### 已知的危险操作：
+1. **修改表主键类型** - 导致SQLAlchemy与实际表结构不匹配
+2. **并发测试进程** - 造成数据竞争和NULL ID问题
+3. **不匹配的编号生成逻辑** - 导致UNIQUE约束冲突
+4. **SQLAlchemy对象刷新问题** - 在事务提交后查询失败
+
+#### 安全的替代方案：
+1. **使用只读查询了解现状** - 绝不盲目修改
+2. **单进程操作** - 确保数据一致性
+3. **备份优先** - 每次修改前都备份
+4. **最小修改原则** - 一次只解决一个问题
+
+---
+
 ## ✅ 报价功能完成定义
 
 ```yaml

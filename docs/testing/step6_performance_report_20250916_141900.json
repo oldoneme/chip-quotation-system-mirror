@@ -1,0 +1,132 @@
+{
+  "test_time": "2025-09-16T14:19:00.790956",
+  "test_type": "performance_stress_test",
+  "results": {
+    "database_performance": {
+      "connection_time": 0.026941299438476562,
+      "simple_count": {
+        "avg_time_ms": 10.684442520141602,
+        "min_time_ms": 0.6735324859619141,
+        "max_time_ms": 50.38952827453613,
+        "result_count": 9
+      },
+      "filtered_query": {
+        "avg_time_ms": 1.7246246337890625,
+        "min_time_ms": 0.7567405700683594,
+        "max_time_ms": 5.199432373046875,
+        "result_count": 8
+      },
+      "join_query": {
+        "avg_time_ms": 1.85394287109375,
+        "min_time_ms": 0.8463859558105469,
+        "max_time_ms": 5.0983428955078125,
+        "result_count": 7
+      },
+      "approval_records": {
+        "avg_time_ms": 1.3790130615234375,
+        "min_time_ms": 0.6396770477294922,
+        "max_time_ms": 4.089117050170898,
+        "result_count": 0
+      }
+    },
+    "service_performance": {
+      "service_init": {
+        "avg_time_ms": 0.0010967254638671875,
+        "min_time_ms": 0.000476837158203125,
+        "max_time_ms": 0.00476837158203125
+      },
+      "determine_approval_method": {
+        "avg_time_ms": 0.0010013580322265625,
+        "success_rate": 100.0
+      },
+      "validate_quote_for_approval": {
+        "avg_time_ms": 0.000667572021484375,
+        "success_rate": 100.0
+      }
+    },
+    "memory_usage": {
+      "error": "psutil not available"
+    },
+    "concurrent_operations": {
+      "concurrent_1": {
+        "total_time_ms": 0.5362033843994141,
+        "avg_task_time_ms": 0.02956390380859375,
+        "max_task_time_ms": 0.02956390380859375,
+        "min_task_time_ms": 0.02956390380859375,
+        "throughput_ops_per_sec": 1864.9639839928857
+      },
+      "concurrent_2": {
+        "total_time_ms": 0.3788471221923828,
+        "avg_task_time_ms": 0.014424324035644531,
+        "max_task_time_ms": 0.015020370483398438,
+        "min_task_time_ms": 0.013828277587890625,
+        "throughput_ops_per_sec": 5279.174323473883
+      },
+      "concurrent_5": {
+        "total_time_ms": 0.8401870727539062,
+        "avg_task_time_ms": 0.014448165893554688,
+        "max_task_time_ms": 0.029802322387695312,
+        "min_task_time_ms": 0.0069141387939453125,
+        "throughput_ops_per_sec": 5951.05561861521
+      },
+      "concurrent_10": {
+        "total_time_ms": 1.4777183532714844,
+        "avg_task_time_ms": 0.013566017150878906,
+        "max_task_time_ms": 0.033855438232421875,
+        "min_task_time_ms": 0.004291534423828125,
+        "throughput_ops_per_sec": 6767.189415940626
+      }
+    },
+    "scalability_analysis": {
+      "simple_count": {
+        "description": "简单计数查询",
+        "avg_time_ms": 0.9549379348754883,
+        "std_dev_ms": 0.3050093820117426,
+        "min_time_ms": 0.5984306335449219,
+        "max_time_ms": 1.5797615051269531,
+        "result_count": 9,
+        "stability_score": 68.05976903079969
+      },
+      "filtered_count": {
+        "description": "过滤计数查询",
+        "avg_time_ms": 0.7467746734619141,
+        "std_dev_ms": 0.08126035198833892,
+        "min_time_ms": 0.6489753723144531,
+        "max_time_ms": 0.8962154388427734,
+        "result_count": 8,
+        "stability_score": 89.11849117597542
+      },
+      "complex_filter": {
+        "description": "复杂过滤查询",
+        "avg_time_ms": 1.0665655136108398,
+        "std_dev_ms": 0.970537395379047,
+        "min_time_ms": 0.640869140625,
+        "max_time_ms": 3.7736892700195312,
+        "result_count": 7,
+        "stability_score": 9.003489894089228
+      },
+      "summary": {
+        "avg_query_time_ms": 0.9227593739827474,
+        "performance_level": "优秀",
+        "recommendations": [
+          "当前性能表现优秀",
+          "可支持高并发访问"
+        ]
+      }
+    }
+  },
+  "scores": {
+    "database": 100,
+    "service": 100,
+    "memory": 70,
+    "concurrency": 100,
+    "scalability": 55.39391670028811
+  },
+  "summary": {
+    "overall_score": 85.07878334005763,
+    "performance_level": "良好",
+    "recommendations": [
+      "改善系统稳定性，减少性能波动"
+    ]
+  }
+}

@@ -120,6 +120,7 @@ class Quote(Base):
     
     # 审批相关
     approval_status = Column(String, default="not_submitted", index=True)  # 审批状态: not_submitted, pending, approved, rejected, approved_with_changes, returned_for_revision, forwarded, input_requested
+    approval_method = Column(String, default="internal", index=True)  # 审批方式: internal, wecom
     current_approver_id = Column(Integer, ForeignKey("users.id"))  # 当前审批人
     submitted_at = Column(DateTime)  # 提交审批时间
     approved_at = Column(DateTime)  # 审批通过时间
