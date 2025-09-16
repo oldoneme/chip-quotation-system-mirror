@@ -170,11 +170,8 @@ class WeComApprovalIntegration:
         Returns:
             审批申请创建结果
         """
-        # 支持UUID和整数ID查询
-        if isinstance(quote_id, str) and len(quote_id) == 36:  # UUID字符串
-            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
-        else:  # 序列ID或其他格式
-            quote = self.db.query(Quote).filter(Quote.sequence_id == quote_id).first()
+        # 查询报价单（现在只支持整数ID）
+        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
             
         if not quote:
             raise HTTPException(status_code=404, detail="报价单不存在")
@@ -305,11 +302,8 @@ class WeComApprovalIntegration:
         Returns:
             是否发送成功
         """
-        # 支持UUID和整数ID查询
-        if isinstance(quote_id, str) and len(quote_id) == 36:  # UUID字符串
-            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
-        else:  # 序列ID或其他格式
-            quote = self.db.query(Quote).filter(Quote.sequence_id == quote_id).first()
+        # 查询报价单（现在只支持整数ID）
+        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
             
         if not quote:
             return False
@@ -522,11 +516,8 @@ class WeComApprovalIntegration:
         Returns:
             同步后的状态信息
         """
-        # 支持UUID和整数ID查询
-        if isinstance(quote_id, str) and len(quote_id) == 36:  # UUID字符串
-            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
-        else:  # 序列ID或其他格式
-            quote = self.db.query(Quote).filter(Quote.sequence_id == quote_id).first()
+        # 查询报价单（现在只支持整数ID）
+        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
             
         if not quote or not quote.wecom_approval_id:
             return {"status": "no_approval", "message": "无企业微信审批记录"}

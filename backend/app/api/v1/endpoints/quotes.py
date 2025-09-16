@@ -42,7 +42,7 @@ async def create_quote(
         quote = service.create_quote(quote_data, current_user.id)
         
         # 调试：打印返回的quote对象
-        print(f"✅ 报价单创建完成: ID={quote.id}, 序列ID={quote.sequence_id}")
+        print(f"✅ 报价单创建完成: ID={quote.id}, 报价单号={quote.quote_number}")
         
         return quote
     except Exception as e:
