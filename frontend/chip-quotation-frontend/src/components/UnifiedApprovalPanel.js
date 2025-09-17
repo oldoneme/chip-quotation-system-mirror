@@ -29,9 +29,10 @@ import {
   ClockCircleOutlined,
   SendOutlined,
   InfoCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  RollbackOutlined
 } from '@ant-design/icons';
-import UnifiedApprovalApiService from '../services/unifiedApprovalApi';
+import UnifiedApprovalApiV3 from '../services/unifiedApprovalApi_v3';
 import ApprovalHistory from './ApprovalHistory';
 
 const { TextArea } = Input;
@@ -43,17 +44,28 @@ const UnifiedApprovalPanel = ({
   currentUser,
   onApprovalStatusChange,
   showHistory = true,
-  layout = 'desktop' // 'desktop' | 'mobile'
+  layout = 'desktop', // 'desktop' | 'mobile'
+  enableRealTimeUpdate = true,
+  updateInterval = 30000 // 30秒刷新一次
 }) => {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [actionType, setActionType] = useState('');
   const [approvalStatus, setApprovalStatus] = useState(null);
   const [approvalHistory, setApprovalHistory] = useState([]);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [form] = Form.useForm();
 
-  // 获取权限检查结果
-  const permissions = UnifiedApprovalApiService.checkApprovalPermissions(quote, currentUser);
+  // 获取权限检查结果 - 将在状态加载后更新
+  const [permissions, setPermissions] = useState({
+    canSubmit: false,
+    canApprove: false,
+    canReject: false,
+    canWithdraw: false,
+    canDelegate: false,
+    canView: true,
+    reason: ''
+  });
 
   useEffect(() => {
     if (quote?.id) {
@@ -64,22 +76,54 @@ const UnifiedApprovalPanel = ({
     }
   }, [quote?.id, showHistory]);
 
+  // 实时更新 useEffect
+  useEffect(() => {
+    let intervalId;
+
+    if (enableRealTimeUpdate && quote?.id && !loading) {
+      intervalId = setInterval(() => {
+        fetchApprovalStatus(true); // 静默刷新
+      }, updateInterval);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [enableRealTimeUpdate, quote?.id, loading, updateInterval]);
+
   // 获取审批状态
-  const fetchApprovalStatus = async () => {
+  const fetchApprovalStatus = async (silent = false) => {
     try {
-      const status = await UnifiedApprovalApiService.getApprovalStatus(quote.quoteId || quote.id);
+      const status = await UnifiedApprovalApiV3.getApprovalStatus(quote.quoteId || quote.id);
       setApprovalStatus(status);
+      setLastUpdated(new Date());
+
+      // 更新权限状态
+      const newPermissions = UnifiedApprovalApiV3.checkApprovalPermissions(status, currentUser);
+      setPermissions(newPermissions);
+
+      // 如果不是静默刷新，更新历史记录
+      if (!silent && showHistory) {
+        fetchApprovalHistory();
+      }
     } catch (error) {
       console.error('获取审批状态失败:', error);
-      message.error(error.message || '获取审批状态失败');
+      if (!silent) {
+        message.error(error.message || '获取审批状态失败');
+      }
     }
   };
 
   // 获取审批历史
   const fetchApprovalHistory = async () => {
     try {
-      const history = await UnifiedApprovalApiService.getApprovalHistory(quote.quoteId || quote.id);
-      setApprovalHistory(history.history || []);
+      // V2 API已包含历史记录在状态响应中
+      if (approvalStatus?.approval_history) {
+        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(approvalStatus.approval_history);
+        setApprovalHistory(formattedHistory);
+      }
     } catch (error) {
       console.error('获取审批历史失败:', error);
     }
@@ -93,16 +137,20 @@ const UnifiedApprovalPanel = ({
 
       switch (action) {
         case 'submit':
-          result = await UnifiedApprovalApiService.submitApproval(quote.quoteId || quote.id, data);
+          result = await UnifiedApprovalApiV3.submitApproval(quote.quoteId || quote.id, data);
           message.success('审批申请已提交');
           break;
         case 'approve':
-          result = await UnifiedApprovalApiService.approveQuote(quote.quoteId || quote.id, data);
+          result = await UnifiedApprovalApiV3.approveQuote(quote.quoteId || quote.id, data);
           message.success('报价单已批准');
           break;
         case 'reject':
-          result = await UnifiedApprovalApiService.rejectQuote(quote.quoteId || quote.id, data);
+          result = await UnifiedApprovalApiV3.rejectQuote(quote.quoteId || quote.id, data);
           message.success('报价单已拒绝');
+          break;
+        case 'withdraw':
+          result = await UnifiedApprovalApiV3.withdrawApproval(quote.quoteId || quote.id, data);
+          message.success('审批已撤回');
           break;
         default:
           throw new Error('未知的审批操作');
@@ -134,7 +182,8 @@ const UnifiedApprovalPanel = ({
     const actionTexts = {
       submit: '提交审批',
       approve: '批准',
-      reject: '拒绝'
+      reject: '拒绝',
+      withdraw: '撤回'
     };
 
     if (action === 'reject') {
@@ -165,7 +214,7 @@ const UnifiedApprovalPanel = ({
 
   // 获取状态标签
   const getStatusTag = (status) => {
-    const config = UnifiedApprovalApiService.getApprovalStatusConfig(status);
+    const config = UnifiedApprovalApiV3.getApprovalStatusConfig(status);
     return (
       <Tag color={config.color} icon={<config.icon />}>
         {config.text}
@@ -173,32 +222,59 @@ const UnifiedApprovalPanel = ({
     );
   };
 
-  // 渲染审批方式信息
+  // 渲染审批方式信息和同步状态
   const renderApprovalMethodInfo = () => {
-    if (!approvalStatus?.has_wecom_approval && !approvalStatus?.approval_status) {
+    if (!approvalStatus) {
       return null;
     }
 
-    const hasWeComApproval = approvalStatus.has_wecom_approval;
+    const hasWeComApproval = approvalStatus.wecom_approval_id;
+    const syncRequired = approvalStatus.sync_required || false;
 
     return (
-      <Alert
-        type={hasWeComApproval ? 'info' : 'warning'}
-        showIcon
-        message={`当前审批方式: ${hasWeComApproval ? '企业微信审批' : '内部审批'}`}
-        description={
-          hasWeComApproval
-            ? '此报价单正在使用企业微信审批流程，支持移动端操作'
-            : '此报价单使用内部审批流程，请在系统内完成审批'
-        }
-        style={{ marginBottom: 16 }}
-      />
+      <div style={{ marginBottom: 16 }}>
+        {/* 审批方式信息 */}
+        <Alert
+          type={hasWeComApproval ? 'info' : 'warning'}
+          showIcon
+          message={`当前审批方式: ${hasWeComApproval ? '企业微信审批' : '内部审批'}`}
+          description={
+            hasWeComApproval
+              ? `企业微信审批ID: ${approvalStatus.wecom_approval_id}`
+              : '此报价单使用内部审批流程，请在系统内完成审批'
+          }
+          style={{ marginBottom: syncRequired ? 8 : 0 }}
+        />
+
+        {/* 同步状态信息 */}
+        {syncRequired && (
+          <Alert
+            type="warning"
+            showIcon
+            message="同步状态"
+            description="检测到状态变化，正在同步到企业微信审批系统..."
+            style={{ marginTop: 8 }}
+          />
+        )}
+
+        {/* 操作成功提示 */}
+        {approvalStatus.operation_id && (
+          <Alert
+            type="success"
+            showIcon
+            message="操作已完成"
+            description={`操作ID: ${approvalStatus.operation_id}`}
+            style={{ marginTop: 8 }}
+            closable
+          />
+        )}
+      </div>
     );
   };
 
   // 渲染操作按钮
   const renderActionButtons = () => {
-    if (!permissions.canSubmit && !permissions.canApprove && !permissions.canReject) {
+    if (!permissions.canSubmit && !permissions.canApprove && !permissions.canReject && !permissions.canWithdraw) {
       return null;
     }
 
@@ -242,6 +318,19 @@ const UnifiedApprovalPanel = ({
             拒绝
           </Button>
         )}
+
+        {permissions.canWithdraw && (
+          <Button
+            type="default"
+            icon={<RollbackOutlined />}
+            size={buttonSize}
+            onClick={() => showActionConfirm('withdraw')}
+            loading={loading}
+            style={{ color: '#faad14', borderColor: '#faad14' }}
+          >
+            撤回
+          </Button>
+        )}
       </Space>
     );
   };
@@ -280,6 +369,12 @@ const UnifiedApprovalPanel = ({
         {approvalStatus.rejection_reason && (
           <Descriptions.Item label="拒绝原因" span={2}>
             {approvalStatus.rejection_reason}
+          </Descriptions.Item>
+        )}
+        {lastUpdated && (
+          <Descriptions.Item label="最后更新时间" span={layout === 'mobile' ? 1 : 2}>
+            {lastUpdated.toLocaleString()}
+            {enableRealTimeUpdate && ' (自动刷新)'}
           </Descriptions.Item>
         )}
       </Descriptions>
