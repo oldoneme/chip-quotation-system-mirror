@@ -103,6 +103,7 @@ def is_html_navigation(req: StarletteRequest) -> bool:
     return False
 from app.database import engine, Base
 from app.api.v1.api import api_router
+from app.api.v2.api import api_router as api_v2_router
 from app.auth_routes import router as auth_router
 from app.admin_routes import router as admin_router
 from app.api.v1.admin.quotes import router as admin_quotes_router
@@ -147,6 +148,7 @@ app.add_middleware(
 
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_v2_router, prefix="/api")  # V2 API: /api/v2/
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(admin_quotes_router, prefix=settings.API_V1_STR + "/admin")
