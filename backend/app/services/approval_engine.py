@@ -73,6 +73,23 @@ class ApprovalResult:
     sync_required: bool = True
 
 
+@dataclass
+class ApprovalEvent:
+    """审批事件数据传输对象"""
+    quote_id: int
+    action: str
+    status: str
+    channel: OperationChannel
+    user_id: int
+    timestamp: datetime = None
+    comments: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = datetime.now()
+
+
 class ApprovalStateMachine:
     """
     审批状态机 - 定义所有合法的状态转换
@@ -89,16 +106,31 @@ class ApprovalStateMachine:
     }
 
     @classmethod
-    def validate_transition(cls, current_status: ApprovalStatus, action: ApprovalAction) -> bool:
+    def validate_transition(cls, from_status: ApprovalStatus, to_status: ApprovalStatus) -> bool:
         """验证状态转换是否合法"""
+        # 状态转换映射
+        allowed_transitions = {
+            ApprovalStatus.DRAFT: [ApprovalStatus.PENDING],
+            ApprovalStatus.PENDING: [ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.WITHDRAWN],
+            ApprovalStatus.REJECTED: [ApprovalStatus.PENDING],
+            ApprovalStatus.WITHDRAWN: [ApprovalStatus.PENDING],
+            ApprovalStatus.APPROVED: []  # 已批准状态不可变更
+        }
+
+        allowed = allowed_transitions.get(from_status, [])
+        return to_status in allowed
+
+    @classmethod
+    def validate_action(cls, current_status: ApprovalStatus, action: ApprovalAction) -> bool:
+        """验证在当前状态下动作是否合法"""
         allowed_actions = cls.ALLOWED_TRANSITIONS.get(current_status, [])
         return action in allowed_actions
 
     @classmethod
     def get_next_status(cls, current_status: ApprovalStatus, action: ApprovalAction) -> ApprovalStatus:
         """根据当前状态和动作计算下一个状态"""
-        if not cls.validate_transition(current_status, action):
-            raise ValueError(f"不允许的状态转换: {current_status} -> {action}")
+        if not cls.validate_action(current_status, action):
+            raise ValueError(f"不允许的动作: {current_status} -> {action}")
 
         # 状态转换映射
         transition_map = {
@@ -137,6 +169,26 @@ class ApprovalEventBus:
                 handler(event_data)
             except Exception as e:
                 self.logger.error(f"事件处理器执行失败: {e}")
+
+    def publish(self, event: ApprovalEvent) -> bool:
+        """发布审批事件"""
+        try:
+            event_data = {
+                'quote_id': event.quote_id,
+                'action': event.action,
+                'status': event.status,
+                'channel': event.channel.value,
+                'user_id': event.user_id,
+                'timestamp': event.timestamp,
+                'comments': event.comments,
+                'metadata': event.metadata
+            }
+
+            self.publish_event('approval_action', event_data)
+            return True
+        except Exception as e:
+            self.logger.error(f"发布事件失败: {e}")
+            return False
 
 
 class UnifiedApprovalEngine:
