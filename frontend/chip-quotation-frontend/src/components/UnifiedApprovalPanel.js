@@ -67,7 +67,7 @@ const UnifiedApprovalPanel = ({
   // 获取审批状态
   const fetchApprovalStatus = async () => {
     try {
-      const status = await UnifiedApprovalApiService.getApprovalStatus(quote.id);
+      const status = await UnifiedApprovalApiService.getApprovalStatus(quote.quoteId || quote.id);
       setApprovalStatus(status);
     } catch (error) {
       console.error('获取审批状态失败:', error);
@@ -78,7 +78,7 @@ const UnifiedApprovalPanel = ({
   // 获取审批历史
   const fetchApprovalHistory = async () => {
     try {
-      const history = await UnifiedApprovalApiService.getApprovalHistory(quote.id);
+      const history = await UnifiedApprovalApiService.getApprovalHistory(quote.quoteId || quote.id);
       setApprovalHistory(history.history || []);
     } catch (error) {
       console.error('获取审批历史失败:', error);
@@ -93,15 +93,15 @@ const UnifiedApprovalPanel = ({
 
       switch (action) {
         case 'submit':
-          result = await UnifiedApprovalApiService.submitApproval(quote.id, data);
+          result = await UnifiedApprovalApiService.submitApproval(quote.quoteId || quote.id, data);
           message.success('审批申请已提交');
           break;
         case 'approve':
-          result = await UnifiedApprovalApiService.approveQuote(quote.id, data);
+          result = await UnifiedApprovalApiService.approveQuote(quote.quoteId || quote.id, data);
           message.success('报价单已批准');
           break;
         case 'reject':
-          result = await UnifiedApprovalApiService.rejectQuote(quote.id, data);
+          result = await UnifiedApprovalApiService.rejectQuote(quote.quoteId || quote.id, data);
           message.success('报价单已拒绝');
           break;
         default:
@@ -317,7 +317,7 @@ const UnifiedApprovalPanel = ({
           size={layout === 'mobile' ? 'small' : 'default'}
         >
           <ApprovalHistory
-            quoteId={quote.id}
+            quoteId={quote.quoteId || quote.id}
             history={approvalHistory}
             layout={layout}
           />
