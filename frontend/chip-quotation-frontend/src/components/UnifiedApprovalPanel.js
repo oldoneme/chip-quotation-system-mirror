@@ -179,8 +179,9 @@ const UnifiedApprovalPanel = ({
 
   // 显示操作确认框
   const showActionConfirm = (action) => {
+    const isRejected = (approvalStatus?.current_status === 'rejected' || approvalStatus?.approval_status === 'rejected');
     const actionTexts = {
-      submit: '提交审批',
+      submit: isRejected ? '重新提交' : '提交审批',
       approve: '批准',
       reject: '拒绝',
       withdraw: '撤回'
@@ -235,13 +236,13 @@ const UnifiedApprovalPanel = ({
       <div style={{ marginBottom: 16 }}>
         {/* 审批方式信息 */}
         <Alert
-          type={hasWeComApproval ? 'info' : 'warning'}
+          type="info"
           showIcon
-          message={`当前审批方式: ${hasWeComApproval ? '企业微信审批' : '内部审批'}`}
+          message="当前审批方式: 统一审批"
           description={
             hasWeComApproval
-              ? `企业微信审批ID: ${approvalStatus.wecom_approval_id}`
-              : '此报价单使用内部审批流程，请在系统内完成审批'
+              ? `此报价单已创建企业微信审批 (ID: ${approvalStatus.wecom_approval_id})，支持内部和企业微信双渠道操作`
+              : '此报价单使用统一审批流程，支持内部和企业微信双渠道操作'
           }
           style={{ marginBottom: syncRequired ? 8 : 0 }}
         />
@@ -290,7 +291,7 @@ const UnifiedApprovalPanel = ({
             onClick={() => showActionConfirm('submit')}
             loading={loading}
           >
-            提交审批
+            {(approvalStatus?.current_status === 'rejected' || approvalStatus?.approval_status === 'rejected') ? '重新提交' : '提交审批'}
           </Button>
         )}
 

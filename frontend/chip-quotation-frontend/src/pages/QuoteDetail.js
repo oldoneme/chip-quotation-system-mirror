@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Card, Descriptions, Table, Button, Space, Tag,
   Divider, Row, Col, Modal, message, List,
-  Spin, Empty, Switch
+  Spin, Empty
 } from 'antd';
 import { 
   ArrowLeftOutlined, DownloadOutlined, 
@@ -13,7 +13,6 @@ import {
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
 import ApprovalApiService from '../services/approvalApi';
-import ApprovalPanel from '../components/ApprovalPanel';
 import UnifiedApprovalPanel from '../components/UnifiedApprovalPanel';
 import ApprovalHistory from '../components/ApprovalHistory';
 import SubmitApprovalModal from '../components/SubmitApprovalModal';
@@ -33,7 +32,6 @@ const QuoteDetail = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [approvers, setApprovers] = useState([]);
   const [submitApprovalModalVisible, setSubmitApprovalModalVisible] = useState(false);
-  const [useUnifiedApproval, setUseUnifiedApproval] = useState(true); // 默认使用统一审批面板
 
   // 解析URL上的JWT参数
   const urlJwt = useMemo(() => {
@@ -479,25 +477,17 @@ const QuoteDetail = () => {
               </Button>
               {(quote.status === 'draft' || quote.status === 'rejected') && (
                 <>
-                  <Button 
+                  <Button
                     size="small"
-                    icon={<EditOutlined />} 
+                    icon={<EditOutlined />}
                     onClick={handleEdit}
                   >
                     编辑
                   </Button>
-                  <Button 
-                    type="primary" 
+                  <Button
+                    danger
                     size="small"
-                    icon={<SendOutlined />} 
-                    onClick={handleSubmitApproval}
-                  >
-                    提交审批
-                  </Button>
-                  <Button 
-                    danger 
-                    size="small"
-                    icon={<DeleteOutlined />} 
+                    icon={<DeleteOutlined />}
                     onClick={handleDelete}
                   >
                     删除
@@ -525,13 +515,6 @@ const QuoteDetail = () => {
                 <>
                   <Button icon={<EditOutlined />} onClick={handleEdit}>
                     编辑
-                  </Button>
-                  <Button 
-                    type="primary" 
-                    icon={<SendOutlined />} 
-                    onClick={handleSubmitApproval}
-                  >
-                    提交审批
                   </Button>
                   <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
                     删除
@@ -1474,59 +1457,18 @@ const QuoteDetail = () => {
         )}
       </Card>
 
-      {/* 审批面板切换开关 */}
-      <Card size="small" style={{ marginBottom: 16 }}>
-        <Space>
-          <span>审批界面:</span>
-          <Switch
-            checked={useUnifiedApproval}
-            onChange={setUseUnifiedApproval}
-            checkedChildren="统一审批"
-            unCheckedChildren="原始界面"
-          />
-          <span style={{ color: '#999', fontSize: '12px' }}>
-            {useUnifiedApproval ? '使用新的统一审批界面' : '使用原始审批界面'}
-          </span>
-        </Space>
-      </Card>
-
-      {/* 条件渲染审批面板 */}
-      {useUnifiedApproval ? (
-        <UnifiedApprovalPanel
-          quote={quote}
-          currentUser={currentUser}
-          onApprovalStatusChange={(result) => {
-            console.log('审批状态变更:', result);
-            // 刷新报价详情
-            fetchQuoteDetail();
-          }}
-          layout={isMobile ? 'mobile' : 'desktop'}
-          showHistory={true}
-        />
-      ) : (
-        <>
-          {/* 原始审批操作面板 */}
-          <ApprovalPanel
-            quote={{
-              ...quote,
-              approval_status: quote?.approvalStatus,
-              current_approver_id: quote?.currentApproverId,
-              current_approver_name: quote?.currentApproverName
-            }}
-            currentUser={currentUser}
-            onApprovalAction={handleApprovalAction}
-            loading={approvalLoading}
-            approvers={approvers}
-          />
-
-          {/* 原始审批历史记录 */}
-          <ApprovalHistory
-            quoteId={quote?.quoteId}
-            onRefresh={fetchQuoteDetail}
-            approvalService={ApprovalApiService}
-          />
-        </>
-      )}
+      {/* 统一审批面板 */}
+      <UnifiedApprovalPanel
+        quote={quote}
+        currentUser={currentUser}
+        onApprovalStatusChange={(result) => {
+          console.log('审批状态变更:', result);
+          // 刷新报价详情
+          fetchQuoteDetail();
+        }}
+        layout={isMobile ? 'mobile' : 'desktop'}
+        showHistory={true}
+      />
 
       {/* 提交审批模态框 */}
       <SubmitApprovalModal

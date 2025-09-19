@@ -158,7 +158,7 @@ class WeComApprovalIntegration:
             
         return result["media_id"]
     
-    async def submit_quote_approval(self, quote_id, approver_userid: str = None) -> Dict:
+    async def submit_quote_approval(self, quote_id, approver_userid: str = None, creator_userid: str = None) -> Dict:
         """
         提交报价单到企业微信审批
         使用模板定义的审批人，简化流程
@@ -178,14 +178,17 @@ class WeComApprovalIntegration:
         
         access_token = await self.get_access_token()
         
-        # 生成报价单详情的企业微信应用内链接
-        # 使用企业微信OAuth认证自动跳转到报价单详情页
-        oauth_redirect_url = f"{settings.API_BASE_URL}/v1/auth/callback"
-        detail_state = f"quote_detail_{quote.id}"
-        
-        # 构建企业微信OAuth链接，点击后直接在企业微信内打开应用
-        from urllib.parse import quote as url_quote
-        detail_link = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={url_quote(oauth_redirect_url, safe='')}&response_type=code&scope=snsapi_base&state={detail_state}&agentid={self.agent_id}#wechat_redirect"
+        # 生成报价单详情的审批链接
+        # 优先使用UUID token，回退到数字ID
+        if hasattr(quote, 'approval_link_token') and quote.approval_link_token:
+            # 使用UUID token生成前端链接
+            detail_link = f"{settings.WECOM_BASE_URL}/quote-detail/{quote.approval_link_token}"
+        else:
+            # 回退到旧的OAuth认证方式
+            oauth_redirect_url = f"{settings.API_BASE_URL}/v1/auth/callback"
+            detail_state = f"quote_detail_{quote.id}"
+            from urllib.parse import quote as url_quote
+            detail_link = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={url_quote(oauth_redirect_url, safe='')}&response_type=code&scope=snsapi_base&state={detail_state}&agentid={self.agent_id}#wechat_redirect"
         
         # 构建简洁的描述信息（由于Text字段长度限制）
         total_amount = quote.total_amount or 0.0
@@ -196,7 +199,12 @@ class WeComApprovalIntegration:
         media_id = await self.upload_temp_file(link_file_content, f"{quote.quote_number}_链接.txt")
         
         # 构建审批申请数据 - 使用真实的模板字段ID
-        creator_userid = quote.creator.userid if quote.creator else ""
+        # 如果没有传入creator_userid，尝试从报价单获取，但避免使用lazy-loaded关系
+        if not creator_userid:
+            # 直接查询创建者，避免lazy-loaded关系
+            from ..models import User
+            creator = self.db.query(User).filter(User.id == quote.created_by).first()
+            creator_userid = creator.userid if creator and hasattr(creator, 'userid') else ""
         approval_data = {
             "creator_userid": creator_userid,
             "template_id": self.approval_template_id,
@@ -310,14 +318,14 @@ class WeComApprovalIntegration:
         
         access_token = await self.get_access_token()
         
-        # 生成企业微信应用内链接，直接跳转到报价单详情页面
-        # 使用企业微信的应用跳转协议
-        app_url = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={url_quote(f'{settings.API_BASE_URL}/v1/auth/callback', safe='')}&response_type=code&scope=snsapi_base&state=quote_detail_{quote_id}&agentid={self.agent_id}#wechat_redirect"
-        
-        # 如果有审批链接token，也可以提供备用链接
+        # 生成审批链接，优先使用UUID token
         if hasattr(quote, 'approval_link_token') and quote.approval_link_token:
-            approval_url = f"{self.callback_url}/approval/{quote.approval_link_token}"
+            # 使用UUID token生成前端链接
+            approval_url = f"{settings.WECOM_BASE_URL}/quote-detail/{quote.approval_link_token}"
         else:
+            # 回退到旧的OAuth认证方式
+            from urllib.parse import quote as url_quote
+            app_url = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={url_quote(f'{settings.API_BASE_URL}/v1/auth/callback', safe='')}&response_type=code&scope=snsapi_base&state=quote_detail_{quote_id}&agentid={self.agent_id}#wechat_redirect"
             approval_url = app_url
         
         # 根据消息类型构建不同的消息内容
@@ -364,10 +372,11 @@ class WeComApprovalIntegration:
     async def handle_approval_callback(self, callback_data: Dict) -> bool:
         """
         处理企业微信审批回调
-        
+        现在通过统一审批引擎处理，确保数据一致性
+
         Args:
             callback_data: 回调数据
-            
+
         Returns:
             处理是否成功
         """
@@ -375,82 +384,40 @@ class WeComApprovalIntegration:
             # 解析回调数据
             sp_status = callback_data.get("ApprovalInfo", {}).get("SpStatus")
             sp_no = callback_data.get("ApprovalInfo", {}).get("SpNo")
-            
+            approver_info = callback_data.get("ApprovalInfo", {}).get("Approver", {})
+
             if not sp_no:
                 return False
-            
-            # 查找对应的报价单
-            quote = self.db.query(Quote).filter(
-                Quote.wecom_approval_id == sp_no
-            ).first()
-            
-            if not quote:
-                return False
-            
-            # 更新审批状态
+
+            # 状态映射
             status_mapping = {
                 1: "pending",     # 审批中
                 2: "approved",    # 已通过
                 3: "rejected",    # 已拒绝
                 4: "cancelled"    # 已撤销
             }
-            
+
             new_status = status_mapping.get(sp_status)
-            if new_status:
-                quote.approval_status = new_status
-                
-                # 更新报价单状态和时间
-                if new_status == "approved":
-                    quote.status = "approved"  # 更新报价单状态为已批准
-                    quote.approved_at = datetime.now()
-                elif new_status == "rejected":
-                    quote.status = "rejected"  # 更新报价单状态为已拒绝
-                    quote.approved_at = datetime.now()
-                    
-                # 暂时绕过审批记录创建，直接使用SQL插入避免字段不匹配
-                try:
-                    # 使用原生SQL插入审批记录，只使用存在的字段
-                    from sqlalchemy import text
-                    self.db.execute(text("""
-                        INSERT INTO approval_records 
-                        (quote_id, action, status, approver_id, comments, wecom_approval_id, wecom_sp_no, 
-                         step_order, is_final_step, created_at) 
-                        VALUES 
-                        (:quote_id, :action, :status, :approver_id, :comments, :wecom_approval_id, :wecom_sp_no,
-                         :step_order, :is_final_step, :created_at)
-                    """), {
-                        'quote_id': quote.id,
-                        'action': new_status,
-                        'status': 'completed',
-                        'approver_id': None,
-                        'comments': '企业微信审批系统自动更新',
-                        'wecom_approval_id': sp_no,
-                        'wecom_sp_no': sp_no,
-                        'step_order': 1,
-                        'is_final_step': True,
-                        'created_at': datetime.now()
-                    })
-                except Exception as record_error:
-                    print(f"创建审批记录失败: {record_error}")
-                    # 审批记录创建失败不影响主要的状态更新
-                
-                self.db.commit()
-                
-                # 发送通知给申请人
-                if quote.creator and quote.creator.userid:
-                    await self.send_approval_notification(
-                        quote.id,
-                        quote.creator.userid,
-                        new_status
-                    )
-                
-                return True
-                
+            if not new_status:
+                return False
+
+            # 使用统一审批引擎处理状态同步
+            from .approval_engine import UnifiedApprovalEngine
+            approval_engine = UnifiedApprovalEngine(self.db)
+
+            success = await approval_engine.sync_from_wecom_status_change(
+                sp_no=sp_no,
+                new_status=new_status,
+                operator_info=approver_info
+            )
+
+            return success
+
         except Exception as e:
-            # 记录错误日志（生产环境应使用logging）
-            print(f"企业微信回调处理异常: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            # 使用统一的日志系统
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"企业微信回调处理异常: {str(e)}")
             return False
     
     def verify_callback_signature(
@@ -545,3 +512,123 @@ class WeComApprovalIntegration:
             "wecom_status": sp_status,
             "message": "状态同步成功"
         }
+
+    async def send_approval_status_update_notification(self, quote_id: int, action: str, operator_name: str = None, comments: str = None) -> Dict:
+        """
+        发送审批状态更新通知
+        当在内部应用中操作审批后，发送详细的状态更新通知
+
+        Args:
+            quote_id: 报价单ID
+            action: 操作类型 (approve, reject, withdraw等)
+            operator_name: 操作人姓名
+            comments: 操作备注
+
+        Returns:
+            通知发送结果
+        """
+        try:
+            # 查询报价单
+            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+            if not quote:
+                return {"success": False, "message": "报价单不存在"}
+
+            # 获取创建者信息
+            from ..models import User
+            creator = self.db.query(User).filter(User.id == quote.created_by).first()
+            creator_userid = creator.userid if creator and hasattr(creator, 'userid') else None
+
+            if not creator_userid:
+                return {"success": False, "message": "找不到创建者企业微信ID"}
+
+            # 构建状态更新通知消息
+            action_text = {
+                'approve': '✅ 已批准',
+                'reject': '❌ 已拒绝',
+                'withdraw': '🔄 已撤回',
+                'submit': '📋 已提交'
+            }.get(action, f'📝 {action}')
+
+            # 检查是否有企业微信审批ID
+            wecom_info = ""
+            if quote.wecom_approval_id:
+                wecom_info = f"\n📱 企业微信审批单: {quote.wecom_approval_id}"
+
+            # 构建详细的状态更新消息
+            detail_link = f"{self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}"
+
+            title = f"🔔 审批状态更新通知"
+            content = f"""
+报价单号: {quote.quote_number}
+项目名称: {quote.title or '无'}
+客户名称: {quote.customer_name or '无'}
+
+{action_text}
+操作人: {operator_name or '系统'}
+操作时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+
+            if comments:
+                content += f"\n备注: {comments}"
+
+            content += f"{wecom_info}"
+            content += f"\n\n💻 查看详情: {detail_link}"
+
+            # 如果有企业微信审批ID，提醒用户关于审批状态
+            if quote.wecom_approval_id:
+                content += f"\n\n⚠️ 注意: 此操作在内部应用完成，企业微信审批通知中的状态不会自动更新。如需在企业微信中记录，请手动处理相应的审批单。"
+
+            # 发送企业微信消息
+            message_data = {
+                "touser": creator_userid,
+                "msgtype": "textcard",
+                "agentid": self.agent_id,
+                "textcard": {
+                    "title": title,
+                    "description": content,
+                    "url": detail_link,
+                    "btntxt": "查看详情"
+                }
+            }
+
+            access_token = await self.get_access_token()
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}"
+
+            async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
+                response = await client.post(url, json=message_data)
+                result = response.json()
+
+                if result.get("errcode") == 0:
+                    return {"success": True, "message": "状态更新通知已发送"}
+                else:
+                    return {"success": False, "message": f"发送失败: {result.get('errmsg', '未知错误')}"}
+
+        except Exception as e:
+            return {"success": False, "message": f"发送通知失败: {str(e)}"}
+
+    async def investigate_approval_delegation_api(self, quote_id: int) -> Dict:
+        """
+        探索企业微信审批代理功能
+        查看是否可以通过设置代理人的方式实现状态同步
+        """
+        # 注意：这是一个实验性方法，用于探索可能的API
+        try:
+            # 1. 查看是否有设置审批代理的API
+            # 2. 或者是否可以以代理人身份操作审批
+
+            # 这需要进一步研究企业微信的代理审批API
+            # 可能的API端点：
+            # - /cgi-bin/oa/approval/delegate  (假设)
+            # - /cgi-bin/oa/approval/operate   (假设)
+
+            return {
+                "success": False,
+                "message": "代理审批功能需要进一步研究企业微信API文档",
+                "suggestions": [
+                    "联系企业微信技术支持了解代理审批API",
+                    "查看企业微信管理后台是否有代理设置功能",
+                    "考虑使用webhook方式实现状态同步"
+                ]
+            }
+
+        except Exception as e:
+            return {"success": False, "message": f"探索代理功能失败: {str(e)}"}

@@ -95,16 +95,92 @@ class UnifiedApprovalService:
             return self.internal_provider
 
     def submit_approval(self, quote_id: int, submitter_id: int) -> ApprovalResult:
-        """统一提交审批入口"""
-        provider = self.select_provider(quote_id)
-        return provider.submit_approval(quote_id, submitter_id)
+        """统一提交审批入口 - 使用新的统一审批引擎"""
+        try:
+            # 使用新的统一审批引擎
+            from .approval_engine import UnifiedApprovalEngine, ApprovalOperation, ApprovalAction, OperationChannel
+
+            engine = UnifiedApprovalEngine(self.db)
+            operation = ApprovalOperation(
+                action=ApprovalAction.SUBMIT,
+                quote_id=quote_id,
+                operator_id=submitter_id,
+                channel=OperationChannel.INTERNAL,  # V1 API调用视为内部操作
+                comments="通过V1 API提交"
+            )
+
+            result = engine.execute_operation(operation)
+
+            # 转换为旧的结果格式以保持向后兼容
+            return ApprovalResult(
+                success=result.success,
+                message=result.message,
+                approval_method=result.approval_method,
+                new_status=ApprovalStatus(result.new_status.value),
+                approval_id=getattr(result, 'operation_id', None)
+            )
+        except Exception as e:
+            # 回退到旧实现
+            provider = self.select_provider(quote_id)
+            return provider.submit_approval(quote_id, submitter_id)
 
     def approve(self, quote_id: int, approver_id: int, comments: str = "") -> ApprovalResult:
-        """统一批准入口"""
-        provider = self.select_provider(quote_id)
-        return provider.approve(quote_id, approver_id, comments)
+        """统一批准入口 - 使用新的统一审批引擎"""
+        try:
+            # 使用新的统一审批引擎
+            from .approval_engine import UnifiedApprovalEngine, ApprovalOperation, ApprovalAction, OperationChannel
+
+            engine = UnifiedApprovalEngine(self.db)
+            operation = ApprovalOperation(
+                action=ApprovalAction.APPROVE,
+                quote_id=quote_id,
+                operator_id=approver_id,
+                channel=OperationChannel.INTERNAL,
+                comments=comments or "通过V1 API批准"
+            )
+
+            result = engine.execute_operation(operation)
+
+            # 转换为旧的结果格式以保持向后兼容
+            return ApprovalResult(
+                success=result.success,
+                message=result.message,
+                approval_method=result.approval_method,
+                new_status=ApprovalStatus(result.new_status.value),
+                approval_id=getattr(result, 'operation_id', None)
+            )
+        except Exception as e:
+            # 回退到旧实现
+            provider = self.select_provider(quote_id)
+            return provider.approve(quote_id, approver_id, comments)
 
     def reject(self, quote_id: int, approver_id: int, reason: str = "") -> ApprovalResult:
-        """统一拒绝入口"""
-        provider = self.select_provider(quote_id)
-        return provider.reject(quote_id, approver_id, reason)
+        """统一拒绝入口 - 使用新的统一审批引擎"""
+        try:
+            # 使用新的统一审批引擎
+            from .approval_engine import UnifiedApprovalEngine, ApprovalOperation, ApprovalAction, OperationChannel
+
+            engine = UnifiedApprovalEngine(self.db)
+            operation = ApprovalOperation(
+                action=ApprovalAction.REJECT,
+                quote_id=quote_id,
+                operator_id=approver_id,
+                channel=OperationChannel.INTERNAL,
+                reason=reason or "通过V1 API拒绝",
+                comments=reason
+            )
+
+            result = engine.execute_operation(operation)
+
+            # 转换为旧的结果格式以保持向后兼容
+            return ApprovalResult(
+                success=result.success,
+                message=result.message,
+                approval_method=result.approval_method,
+                new_status=ApprovalStatus(result.new_status.value),
+                approval_id=getattr(result, 'operation_id', None)
+            )
+        except Exception as e:
+            # 回退到旧实现
+            provider = self.select_provider(quote_id)
+            return provider.reject(quote_id, approver_id, reason)

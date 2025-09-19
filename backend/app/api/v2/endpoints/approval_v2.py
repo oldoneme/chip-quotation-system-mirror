@@ -82,13 +82,13 @@ async def execute_approval_operation(
 
         # 映射操作渠道
         channel_mapping = {
-            "auto": OperationChannel.API,
+            "auto": OperationChannel.INTERNAL,  # 默认为内部操作，触发企业微信通知
             "internal": OperationChannel.INTERNAL,
             "wecom": OperationChannel.WECOM,
-            "api": OperationChannel.API
+            "api": OperationChannel.INTERNAL  # API调用也视为内部操作
         }
 
-        operation_channel = channel_mapping.get(request.channel, OperationChannel.API)
+        operation_channel = channel_mapping.get(request.channel, OperationChannel.INTERNAL)
 
         # 映射审批动作
         action_mapping = {

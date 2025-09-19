@@ -53,7 +53,7 @@ class ApprovalRecordManager:
 
             additional_data.update({
                 'approval_method': approval_result.approval_method.value,
-                'approval_id': approval_result.approval_id,
+                'approval_id': getattr(approval_result, 'operation_id', None),
                 'success': approval_result.success
             })
 

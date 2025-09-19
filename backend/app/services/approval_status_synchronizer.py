@@ -10,7 +10,17 @@ from sqlalchemy.orm import Session
 from enum import Enum
 
 from ..models import Quote
-from .unified_approval_service import ApprovalStatus, ApprovalMethod
+from .unified_approval_service import ApprovalMethod
+
+# 使用和 approval_engine 相同的 ApprovalStatus 定义以确保一致性
+class ApprovalStatus(Enum):
+    """审批状态枚举 - 与 approval_engine 保持一致"""
+    NOT_SUBMITTED = "not_submitted"    # 未提交
+    DRAFT = "draft"                    # 草稿
+    PENDING = "pending"                # 待审批
+    APPROVED = "approved"              # 已批准
+    REJECTED = "rejected"              # 已拒绝
+    WITHDRAWN = "withdrawn"            # 已撤回
 
 
 class QuoteStatus(Enum):
@@ -31,15 +41,18 @@ class ApprovalStatusSynchronizer:
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
-    def map_approval_to_quote_status(approval_status: ApprovalStatus) -> QuoteStatus:
-        """将统一审批状态映射到报价单状态"""
-        mapping = {
-            ApprovalStatus.NOT_SUBMITTED: QuoteStatus.DRAFT,
-            ApprovalStatus.PENDING: QuoteStatus.PENDING,
-            ApprovalStatus.APPROVED: QuoteStatus.APPROVED,
-            ApprovalStatus.REJECTED: QuoteStatus.REJECTED,
+    def map_approval_to_quote_status(approval_status) -> QuoteStatus:
+        """将统一审批状态映射到报价单状态 - 使用字符串值进行匹配以避免enum类型不匹配"""
+        # 使用字符串值进行映射，避免不同 ApprovalStatus 枚举类的比较问题
+        status_value = approval_status.value if hasattr(approval_status, 'value') else str(approval_status)
+
+        value_mapping = {
+            "not_submitted": QuoteStatus.DRAFT,
+            "pending": QuoteStatus.PENDING,
+            "approved": QuoteStatus.APPROVED,
+            "rejected": QuoteStatus.REJECTED,
         }
-        return mapping.get(approval_status, QuoteStatus.DRAFT)
+        return value_mapping.get(status_value, QuoteStatus.DRAFT)
 
     @staticmethod
     def map_quote_to_approval_status(quote_status: QuoteStatus) -> ApprovalStatus:
@@ -68,6 +81,7 @@ class ApprovalStatusSynchronizer:
 
             # 更新双状态字段
             new_quote_status = self.map_approval_to_quote_status(new_approval_status)
+
 
             quote.status = new_quote_status.value
             quote.approval_status = new_approval_status.value

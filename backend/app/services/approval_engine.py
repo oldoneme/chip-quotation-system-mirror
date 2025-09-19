@@ -11,6 +11,7 @@
 """
 
 import logging
+import asyncio
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
@@ -20,6 +21,8 @@ from sqlalchemy.orm import Session
 # 导入现有组件
 from .approval_status_synchronizer import ApprovalStatusSynchronizer
 from .approval_record_manager import ApprovalRecordManager
+from .unified_approval_service import ApprovalMethod
+from .wecom_integration import WeComApprovalIntegration
 from ..models import Quote, User
 
 
@@ -42,6 +45,7 @@ class ApprovalAction(Enum):
 
 class ApprovalStatus(Enum):
     """审批状态枚举"""
+    NOT_SUBMITTED = "not_submitted"    # 未提交
     DRAFT = "draft"                    # 草稿
     PENDING = "pending"                # 待审批
     APPROVED = "approved"              # 已批准
@@ -68,6 +72,7 @@ class ApprovalResult:
     success: bool
     message: str
     new_status: ApprovalStatus
+    approval_method: ApprovalMethod
     operation_id: Optional[str] = None
     need_notification: bool = True
     sync_required: bool = True
@@ -98,6 +103,7 @@ class ApprovalStateMachine:
 
     # 状态转换规则定义
     ALLOWED_TRANSITIONS = {
+        ApprovalStatus.NOT_SUBMITTED: [ApprovalAction.SUBMIT],
         ApprovalStatus.DRAFT: [ApprovalAction.SUBMIT],
         ApprovalStatus.PENDING: [ApprovalAction.APPROVE, ApprovalAction.REJECT, ApprovalAction.WITHDRAW],
         ApprovalStatus.REJECTED: [ApprovalAction.SUBMIT],
@@ -110,6 +116,7 @@ class ApprovalStateMachine:
         """验证状态转换是否合法"""
         # 状态转换映射
         allowed_transitions = {
+            ApprovalStatus.NOT_SUBMITTED: [ApprovalStatus.PENDING],
             ApprovalStatus.DRAFT: [ApprovalStatus.PENDING],
             ApprovalStatus.PENDING: [ApprovalStatus.APPROVED, ApprovalStatus.REJECTED, ApprovalStatus.WITHDRAWN],
             ApprovalStatus.REJECTED: [ApprovalStatus.PENDING],
@@ -211,6 +218,7 @@ class UnifiedApprovalEngine:
         self.event_bus = ApprovalEventBus()
         self.status_synchronizer = ApprovalStatusSynchronizer(db)
         self.record_manager = ApprovalRecordManager(db)
+        self.wecom_integration = WeComApprovalIntegration(db)
 
         # 注册事件处理器
         self._register_event_handlers()
@@ -241,7 +249,7 @@ class UnifiedApprovalEngine:
 
             # 3. 状态转换验证
             current_status = self._get_current_approval_status(operation.quote_id)
-            if not self.state_machine.validate_transition(current_status, operation.action):
+            if not self.state_machine.validate_action(current_status, operation.action):
                 raise ValueError(f"不允许的状态转换: {current_status.value} -> {operation.action.value}")
 
             # 4. 执行业务逻辑
@@ -276,6 +284,7 @@ class UnifiedApprovalEngine:
                 success=False,
                 message=f"操作失败: {str(e)}",
                 new_status=self._get_current_approval_status(operation.quote_id),
+                approval_method=ApprovalMethod.INTERNAL,
                 sync_required=False,
                 need_notification=False
             )
@@ -332,11 +341,40 @@ class UnifiedApprovalEngine:
         quote.submitted_at = datetime.utcnow()
         quote.submitted_by = operation.operator_id
 
+        # 如果是内部操作，需要同时触发企业微信审批
+        approval_method = ApprovalMethod.INTERNAL
+        sync_required = False
+
+        if operation.channel == OperationChannel.INTERNAL:
+            # 内部提交时，自动创建企业微信审批
+            try:
+                # 获取创建者信息，避免在异步任务中访问lazy-loaded关系
+                creator = self.db.query(User).filter(User.id == quote.created_by).first()
+                creator_userid = creator.userid if creator and hasattr(creator, 'userid') else None
+
+                # 异步触发企业微信审批提交（后台任务，不阻塞）
+                loop = asyncio.get_event_loop()
+                task = loop.create_task(self._trigger_wecom_approval_async(quote.id, creator_userid))
+                # 不等待任务完成，让它在后台运行
+                # 但我们需要标记为企业微信审批
+                approval_method = ApprovalMethod.WECOM  # 标记为企业微信审批
+                # 立即更新quote的approval_method（异步任务会更新wecom_approval_id）
+                quote.approval_method = 'wecom'
+                sync_required = True
+                self.logger.info(f"企业微信审批任务已启动: 报价单 {quote.id}, 创建者: {creator_userid}")
+            except Exception as e:
+                self.logger.error(f"启动企业微信审批任务失败: {e}")
+                # 失败时仍然允许内部审批继续
+                approval_method = ApprovalMethod.INTERNAL
+        elif operation.channel == OperationChannel.WECOM:
+            approval_method = ApprovalMethod.WECOM
+
         return ApprovalResult(
             success=True,
             message="审批已提交",
             new_status=ApprovalStatus.PENDING,
-            sync_required=(operation.channel != OperationChannel.WECOM),
+            approval_method=approval_method,
+            sync_required=sync_required,
             need_notification=True
         )
 
@@ -345,10 +383,36 @@ class UnifiedApprovalEngine:
         quote.approved_at = datetime.utcnow()
         quote.approved_by = operation.operator_id
 
+        # 如果是内部操作，需要通知企业微信
+        if operation.channel == OperationChannel.INTERNAL:
+            try:
+                # 获取创建者企业微信ID
+                creator = self.db.query(User).filter(User.id == quote.created_by).first()
+                creator_userid = creator.userid if creator and hasattr(creator, 'userid') else None
+
+                # 发送常规通知
+                self._trigger_wecom_notification_async(quote.id, "approved", creator_userid)
+
+                # 发送详细的状态更新通知
+                operator = self.db.query(User).filter(User.id == operation.operator_id).first()
+                operator_name = operator.name if operator else "管理员"
+
+                loop = asyncio.get_event_loop()
+                task = loop.create_task(
+                    self.wecom_integration.send_approval_status_update_notification(
+                        quote.id, "approve", operator_name, operation.comments
+                    )
+                )
+                self.logger.info(f"审批状态更新通知任务已启动: 报价单{quote.id}, 操作人{operator_name}")
+
+            except Exception as e:
+                self.logger.error(f"发送企业微信通知失败: {e}")
+
         return ApprovalResult(
             success=True,
             message="审批已批准",
             new_status=ApprovalStatus.APPROVED,
+            approval_method=ApprovalMethod.WECOM if operation.channel == OperationChannel.WECOM else ApprovalMethod.INTERNAL,
             sync_required=(operation.channel != OperationChannel.WECOM),
             need_notification=True
         )
@@ -359,10 +423,41 @@ class UnifiedApprovalEngine:
         quote.approved_at = datetime.utcnow()  # 拒绝也算是审批完成
         quote.approved_by = operation.operator_id
 
+        # 如果是内部操作，需要通知企业微信
+        if operation.channel == OperationChannel.INTERNAL:
+            try:
+                # 获取创建者企业微信ID
+                creator = self.db.query(User).filter(User.id == quote.created_by).first()
+                creator_userid = creator.userid if creator and hasattr(creator, 'userid') else None
+
+                # 发送常规通知
+                self._trigger_wecom_notification_async(quote.id, "rejected", creator_userid)
+
+                # 发送详细的状态更新通知
+                operator = self.db.query(User).filter(User.id == operation.operator_id).first()
+                operator_name = operator.name if operator else "管理员"
+
+                # 构建拒绝原因的详细信息
+                reject_details = operation.reason
+                if operation.comments and operation.comments != operation.reason:
+                    reject_details += f" | {operation.comments}"
+
+                loop = asyncio.get_event_loop()
+                task = loop.create_task(
+                    self.wecom_integration.send_approval_status_update_notification(
+                        quote.id, "reject", operator_name, reject_details
+                    )
+                )
+                self.logger.info(f"审批状态更新通知任务已启动: 报价单{quote.id}, 操作人{operator_name}")
+
+            except Exception as e:
+                self.logger.error(f"发送企业微信通知失败: {e}")
+
         return ApprovalResult(
             success=True,
             message="审批已拒绝",
             new_status=ApprovalStatus.REJECTED,
+            approval_method=ApprovalMethod.WECOM if operation.channel == OperationChannel.WECOM else ApprovalMethod.INTERNAL,
             sync_required=(operation.channel != OperationChannel.WECOM),
             need_notification=True
         )
@@ -482,6 +577,74 @@ class UnifiedApprovalEngine:
             self.logger.error(f"处理企业微信回调失败: {e}")
             raise
 
+    async def sync_from_wecom_status_change(self, sp_no: str, new_status: str, operator_info: Dict = None) -> bool:
+        """
+        处理企业微信审批状态变化，同步到内部系统
+
+        Args:
+            sp_no: 企业微信审批单号
+            new_status: 新状态 (approved, rejected, cancelled)
+            operator_info: 操作人信息
+
+        Returns:
+            同步是否成功
+        """
+        try:
+            self.logger.info(f"开始同步企业微信状态变化: sp_no={sp_no}, new_status={new_status}")
+
+            # 查找对应的报价单
+            quote = self.db.query(Quote).filter(
+                Quote.wecom_approval_id == sp_no,
+                Quote.is_deleted == False
+            ).first()
+
+            if not quote:
+                self.logger.error(f"未找到对应的报价单: wecom_approval_id={sp_no}")
+                return False
+
+            # 检查状态是否需要更新
+            if quote.approval_status == new_status:
+                self.logger.info(f"报价单 {quote.id} 状态已是 {new_status}，无需更新")
+                return True
+
+            # 获取操作人ID（企业微信操作人映射到内部用户）
+            operator_id = self._get_or_create_wecom_user(operator_info or {})
+
+            # 构建统一审批操作
+            action_mapping = {
+                'approved': ApprovalAction.APPROVE,
+                'rejected': ApprovalAction.REJECT,
+                'cancelled': ApprovalAction.WITHDRAW
+            }
+
+            action = action_mapping.get(new_status)
+            if not action:
+                self.logger.error(f"不支持的状态: {new_status}")
+                return False
+
+            operation = ApprovalOperation(
+                action=action,
+                quote_id=quote.id,
+                operator_id=operator_id,
+                channel=OperationChannel.WECOM,  # 标记为企业微信渠道
+                comments=f"企业微信审批同步: {new_status}",
+                metadata={'wecom_sync': True, 'sp_no': sp_no}
+            )
+
+            # 执行统一审批操作（这会触发所有必要的状态更新和通知）
+            result = self.execute_operation(operation)
+
+            if result.success:
+                self.logger.info(f"企业微信状态同步成功: 报价单 {quote.id} -> {new_status}")
+                return True
+            else:
+                self.logger.error(f"企业微信状态同步失败: {result.message}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"企业微信状态同步异常: {e}")
+            return False
+
     def _get_or_create_wecom_user(self, operator_info: Dict[str, Any]) -> int:
         """获取或创建企业微信用户对应的内部用户"""
         # 这里应该实现用户映射逻辑
@@ -512,3 +675,92 @@ class UnifiedApprovalEngine:
         current_status = self._get_current_approval_status(quote_id)
         allowed_actions = self.state_machine.ALLOWED_TRANSITIONS.get(current_status, [])
         return [action.value for action in allowed_actions]
+
+    # === 企业微信集成辅助方法 ===
+
+    async def _trigger_wecom_approval_async(self, quote_id: int, creator_userid: str = None):
+        """
+        异步触发企业微信审批提交
+        在内部提交审批时自动创建企业微信审批
+        """
+        try:
+            self.logger.info(f"开始触发企业微信审批: 报价单 {quote_id}, 创建者userid: {creator_userid}")
+
+            # 获取报价单信息（不需要访问lazy-loaded关系）
+            quote = self._get_quote(quote_id)
+            self.logger.info(f"报价单 {quote_id} 信息: quote_number={quote.quote_number}")
+
+            # 检查企业微信用户ID
+            if creator_userid:
+                self.logger.info(f"找到创建者企业微信ID: {creator_userid}，开始提交企业微信审批")
+
+                # 直接调用企业微信集成服务的异步方法
+                try:
+                    self.logger.info("调用企业微信集成服务...")
+                    result = await self.wecom_integration.submit_quote_approval(quote_id, creator_userid=creator_userid)
+                    self.logger.info(f"企业微信审批提交成功: {result}")
+
+                    # 保存企业微信审批ID到数据库
+                    if result.get('success') and result.get('sp_no'):
+                        # 重新获取quote以确保session正确
+                        fresh_quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+                        if fresh_quote:
+                            fresh_quote.wecom_approval_id = result['sp_no']
+                            fresh_quote.approval_method = 'wecom'  # 标记为企业微信审批
+                            self.db.commit()
+                            self.logger.info(f"已保存企业微信审批ID: {result['sp_no']} 到报价单 {quote_id}")
+                        else:
+                            self.logger.error(f"无法找到报价单 {quote_id} 来保存企业微信审批ID")
+                    else:
+                        self.logger.warning(f"企业微信审批提交成功但未返回sp_no: {result}")
+
+                    return True
+                except Exception as wecom_error:
+                    self.logger.error(f"企业微信集成服务调用失败: {wecom_error}")
+                    raise wecom_error
+            else:
+                error_msg = f"报价单 {quote_id} 的创建者缺少企业微信用户ID"
+                self.logger.warning(error_msg)
+                raise ValueError(error_msg)
+
+        except Exception as e:
+            self.logger.error(f"触发企业微信审批失败: {e}")
+            raise
+
+    def _trigger_wecom_notification_async(self, quote_id: int, notification_type: str, recipient_userid: str = None):
+        """
+        异步触发企业微信通知
+        在内部审批操作时发送企业微信通知
+        """
+        try:
+            self.logger.info(f"触发企业微信通知: 报价单{quote_id}, 类型{notification_type}, 接收人{recipient_userid}")
+
+            if recipient_userid:
+                # 使用后台任务发送企业微信通知
+                try:
+                    loop = asyncio.get_event_loop()
+                    task = loop.create_task(
+                        self._send_wecom_notification_task(quote_id, recipient_userid, notification_type)
+                    )
+                    self.logger.info(f"企业微信通知任务已启动: 报价单{quote_id}, 类型{notification_type}")
+                except Exception as e:
+                    self.logger.error(f"启动企业微信通知任务失败: {e}")
+            else:
+                self.logger.warning(f"无法发送企业微信通知: 找不到接收人用户ID, 报价单{quote_id}")
+
+        except Exception as e:
+            self.logger.error(f"发送企业微信通知失败: {e}")
+            # 通知失败不应该影响主要的审批流程
+
+    async def _send_wecom_notification_task(self, quote_id: int, recipient_userid: str, notification_type: str):
+        """异步发送企业微信通知任务"""
+        try:
+            success = await self.wecom_integration.send_approval_notification(
+                quote_id, recipient_userid, notification_type
+            )
+            if success:
+                self.logger.info(f"企业微信通知发送成功: 报价单{quote_id}, 类型{notification_type}")
+            else:
+                self.logger.warning(f"企业微信通知发送失败: 报价单{quote_id}, 类型{notification_type}")
+        except Exception as e:
+            self.logger.error(f"企业微信通知发送异常: {e}")

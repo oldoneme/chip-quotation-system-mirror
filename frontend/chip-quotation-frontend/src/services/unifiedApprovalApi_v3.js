@@ -303,9 +303,11 @@ class UnifiedApprovalApiV3 {
       result.canWithdraw = approvalData.can_withdraw;
     }
 
-    // 提交权限：草稿状态且是创建者
+    // 提交权限：草稿状态或被拒绝状态的创建者可以提交/重新提交
     if (approvalData.current_status === 'draft' ||
-        approvalData.approval_status === 'draft') {
+        approvalData.approval_status === 'draft' ||
+        approvalData.current_status === 'rejected' ||
+        approvalData.approval_status === 'rejected') {
       result.canSubmit = true;
     }
 
