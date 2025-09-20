@@ -605,6 +605,95 @@ class WeComApprovalIntegration:
         except Exception as e:
             return {"success": False, "message": f"发送通知失败: {str(e)}"}
 
+    async def send_status_clarification_message(self, quote_id: int, internal_action: str, recipient_userid: str = None) -> Dict:
+        """
+        发送状态澄清消息，解决企业微信状态与内部系统不一致的困惑
+
+        当内部系统已经批准/拒绝报价单，但企业微信回调试图修改状态时，
+        发送澄清消息告知用户以内部系统状态为准
+
+        Args:
+            quote_id: 报价单ID
+            internal_action: 内部系统的操作 ("approve" 或 "reject")
+            recipient_userid: 接收者企业微信ID，None时发送给创建者
+
+        Returns:
+            发送结果
+        """
+        try:
+            # 查询报价单
+            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+            if not quote:
+                return {"success": False, "message": "报价单不存在"}
+
+            # 获取接收者信息
+            if not recipient_userid:
+                # 默认发送给创建者
+                from ..models import User
+                creator = self.db.query(User).filter(User.id == quote.created_by).first()
+                recipient_userid = creator.userid if creator and hasattr(creator, 'userid') else None
+
+            if not recipient_userid:
+                return {"success": False, "message": "找不到接收者企业微信ID"}
+
+            # 构建澄清消息
+            action_text = {
+                'approve': '✅ 已批准',
+                'reject': '❌ 已拒绝'
+            }.get(internal_action, internal_action)
+
+            title = "🔧 审批状态澄清通知"
+
+            # 检查是否存在企业微信审批ID
+            wecom_info = ""
+            if quote.wecom_approval_id:
+                wecom_info = f"企业微信审批单: {quote.wecom_approval_id}\n"
+
+            content = f"""
+{wecom_info}报价单号: {quote.quote_number}
+项目名称: {quote.title or '无'}
+
+🎯 重要提醒:
+此报价单在内部系统中的状态为: {action_text}
+
+⚠️ 状态说明:
+如果您在企业微信审批通知中看到不同的状态显示，请以此内部系统状态为准。企业微信中的状态显示可能存在延迟或不同步的情况。
+
+📋 审批流程说明:
+• 内部系统状态是最终有效状态
+• 企业微信通知仅作为流程辅助工具
+• 如有疑问，请咨询管理员
+
+💻 查看准确状态: {self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}"""
+
+            # 发送企业微信消息
+            message_data = {
+                "touser": recipient_userid,
+                "msgtype": "textcard",
+                "agentid": self.agent_id,
+                "textcard": {
+                    "title": title,
+                    "description": content,
+                    "url": f"{self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}",
+                    "btntxt": "查看详情"
+                }
+            }
+
+            access_token = await self.get_access_token()
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}"
+
+            async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
+                response = await client.post(url, json=message_data)
+                result = response.json()
+
+                if result.get("errcode") == 0:
+                    return {"success": True, "message": "状态澄清消息已发送"}
+                else:
+                    return {"success": False, "message": f"发送失败: {result.get('errmsg', '未知错误')}"}
+
+        except Exception as e:
+            return {"success": False, "message": f"发送澄清消息失败: {str(e)}"}
+
     async def investigate_approval_delegation_api(self, quote_id: int) -> Dict:
         """
         探索企业微信审批代理功能

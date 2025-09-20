@@ -517,45 +517,32 @@ async def handle_approval_callback(
             print(f"🔄 准备更新报价单状态: {old_status} -> {new_status}")
             
             try:
-                # 使用原生SQL来获取受影响行数 - 同时更新两个状态字段
-                from sqlalchemy import text
-                update_sql = """
-                    UPDATE quotes 
-                    SET approval_status = :new_status, 
-                        status = :main_status,
-                        updated_at = :updated_at 
-                    WHERE id = :quote_id
-                """
-                
-                # 确定主状态值
-                main_status = new_status if new_status in ['approved', 'rejected', 'cancelled'] else old_main_status
-                
-                result = db.execute(text(update_sql), {
-                    'new_status': new_status,
-                    'main_status': main_status,
-                    'updated_at': datetime.now(),
-                    'quote_id': quote.id
-                })
-                
-                affected_rows = result.rowcount
-                print(f"📊 update_quotation_rowcount: {affected_rows}")
-                
-                db.commit()
-                print(f"✅ 数据库提交成功")
-                print(f"✅ 更新报价单状态成功:")
-                print(f"   报价单: {quote.quote_number}")
-                print(f"   approval_status: {old_status} → {new_status}")
-                print(f"   status: {old_main_status} → {main_status}")
-                print(f"   📊 update_quotation_rowcount: {affected_rows}")
-                
-                if affected_rows > 0:
-                    print(f"   ✅ 状态同步成功：{sp_no} -> {new_status}")
+                # 🔧 关键修复：使用统一审批引擎进行状态更新，确保最终状态保护
+                print(f"🔧 使用统一审批引擎处理企业微信回调...")
+
+                # 导入统一审批引擎
+                from ....services.approval_engine import UnifiedApprovalEngine
+                approval_engine = UnifiedApprovalEngine(db)
+
+                # 通过统一审批引擎同步状态，这会触发最终状态保护
+                sync_success = await approval_engine.sync_from_wecom_status_change(
+                    sp_no=sp_no,
+                    new_status=new_status,
+                    operator_info={
+                        "userid": "wecom_callback",
+                        "name": "企业微信回调"
+                    }
+                )
+
+                if sync_success:
+                    print(f"   ✅ 统一审批引擎状态同步成功：{sp_no} -> {new_status}")
                 else:
-                    print(f"   ⚠️ 无行受影响，可能更新失败")
-                
+                    print(f"   ⚠️ 统一审批引擎拒绝状态更新 (最终状态保护)")
+                    print(f"   📋 这表明报价单已处于最终状态，企业微信操作被正确拒绝")
+
             except Exception as update_e:
-                print(f"❌ 更新报价单状态失败: {str(update_e)}")
-                db.rollback()
+                print(f"❌ 统一审批引擎状态同步失败: {str(update_e)}")
+                # 不执行回滚，因为统一审批引擎内部会处理事务
                 return PlainTextResponse(content="failed")
             
             # 永远返回纯文本success，添加实例标识

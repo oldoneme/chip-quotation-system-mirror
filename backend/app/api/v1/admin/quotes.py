@@ -3,8 +3,9 @@
 提供完整的数据库管理功能，包括软删除数据的操作
 """
 
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
+from typing import List, Optional, Union
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request, Body
+from pydantic import BaseModel, validator
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 from datetime import datetime
@@ -13,6 +14,18 @@ from ....database import get_db
 from ....models import Quote, QuoteItem, User
 from ....schemas import QuoteStatistics
 from .permissions import require_admin_role, require_super_admin_role
+
+# 数据模型
+class BatchDeleteRequest(BaseModel):
+    """批量删除请求模型 - 兼容两种格式"""
+    quote_ids: Optional[List[Union[str, int]]] = None
+
+    @validator('quote_ids', pre=True)
+    def convert_ids_to_strings(cls, v):
+        """将所有ID转换为字符串"""
+        if v is None:
+            return v
+        return [str(item) for item in v]
 
 router = APIRouter(prefix="/quotes", tags=["管理员-报价单管理"])
 
@@ -337,12 +350,20 @@ async def batch_restore_quotes(
 
 @router.delete("/batch-soft-delete")
 async def batch_soft_delete_quotes(
-    quote_ids: List[str],
+    request_data: Union[List[Union[str, int]], BatchDeleteRequest] = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_role)
 ):
-    """批量软删除报价单"""
+    """批量软删除报价单 - 兼容两种数据格式"""
     try:
+        # 处理两种不同的输入格式
+        if isinstance(request_data, list):
+            # 直接数组格式: ["1", "2", "3"] 或 [1, 2, 3]
+            quote_ids = [str(item) for item in request_data]
+        else:
+            # 对象格式: {"quote_ids": ["1", "2", "3"]} 或 {"quote_ids": [1, 2, 3]}
+            quote_ids = request_data.quote_ids  # Pydantic validator已经转换为字符串
+
         if not quote_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

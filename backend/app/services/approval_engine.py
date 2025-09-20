@@ -298,6 +298,23 @@ class UnifiedApprovalEngine:
         if operation.action == ApprovalAction.REJECT and not (operation.reason or operation.comments):
             raise ValueError("拒绝操作必须提供原因")
 
+        # 关键修复：检查报价单当前状态是否允许操作
+        quote = self._get_quote(operation.quote_id)
+        current_status = ApprovalStatus(quote.approval_status)
+
+        # 检查是否为最终状态
+        final_statuses = {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED}
+        if current_status in final_statuses:
+            # 对于已经是最终状态的报价单，不允许任何进一步操作
+            if operation.action in [ApprovalAction.APPROVE, ApprovalAction.REJECT]:
+                raise ValueError(f"报价单已处于最终状态 '{current_status.value}'，无法再次执行 '{operation.action.value}' 操作")
+            elif operation.action == ApprovalAction.SUBMIT and current_status == ApprovalStatus.APPROVED:
+                raise ValueError("报价单已批准，无法重新提交")
+
+        # 检查状态转换是否合法
+        if not self.state_machine.validate_action(current_status, operation.action):
+            raise ValueError(f"在当前状态 '{current_status.value}' 下无法执行操作 '{operation.action.value}'")
+
     def _check_permissions(self, operation: ApprovalOperation):
         """检查操作权限"""
         quote = self._get_quote(operation.quote_id)
@@ -405,6 +422,9 @@ class UnifiedApprovalEngine:
                 )
                 self.logger.info(f"审批状态更新通知任务已启动: 报价单{quote.id}, 操作人{operator_name}")
 
+                # 🔧 关键功能：发送状态澄清消息，解决企业微信状态困惑
+                self._send_wecom_status_clarification(quote.id, "approve", creator_userid)
+
             except Exception as e:
                 self.logger.error(f"发送企业微信通知失败: {e}")
 
@@ -449,6 +469,9 @@ class UnifiedApprovalEngine:
                     )
                 )
                 self.logger.info(f"审批状态更新通知任务已启动: 报价单{quote.id}, 操作人{operator_name}")
+
+                # 🔧 关键功能：发送状态澄清消息，解决企业微信状态困惑
+                self._send_wecom_status_clarification(quote.id, "reject", creator_userid)
 
             except Exception as e:
                 self.logger.error(f"发送企业微信通知失败: {e}")
@@ -602,7 +625,35 @@ class UnifiedApprovalEngine:
                 self.logger.error(f"未找到对应的报价单: wecom_approval_id={sp_no}")
                 return False
 
-            # 检查状态是否需要更新
+            # 检查当前状态
+            current_status = ApprovalStatus(quote.approval_status)
+
+            # 🎯 关键修复：无论状态是否相同，都要检查是否为最终状态
+            # 如果是最终状态，需要告知用户"审批已完成，操作无效"
+            final_statuses = {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED}
+            if current_status in final_statuses:
+                self.logger.warning(
+                    f"报价单 {quote.id} 已处于最终状态 '{current_status.value}'，"
+                    f"拒绝企业微信的 '{new_status}' 操作。"
+                    f"这表明企业微信通知状态未及时更新。"
+                )
+
+                # 🎯 关键改进：主动告诉用户审批已完成，操作不会生效
+                try:
+                    asyncio.create_task(
+                        self._send_approval_completed_notification(
+                            quote_id=quote.id,
+                            current_status=current_status.value,
+                            attempted_action=new_status,
+                            operator_info=operator_info
+                        )
+                    )
+                except Exception as e:
+                    self.logger.error(f"发送审批完成通知失败: {e}")
+
+                return False
+
+            # 检查状态是否需要更新（仅针对非最终状态）
             if quote.approval_status == new_status:
                 self.logger.info(f"报价单 {quote.id} 状态已是 {new_status}，无需更新")
                 return True
@@ -751,6 +802,205 @@ class UnifiedApprovalEngine:
         except Exception as e:
             self.logger.error(f"发送企业微信通知失败: {e}")
             # 通知失败不应该影响主要的审批流程
+
+    def _send_wecom_status_clarification(self, quote_id: int, internal_action: str, recipient_userid: str = None):
+        """
+        发送企业微信状态澄清消息
+        解决企业微信审批状态与内部系统状态不一致的困惑
+        """
+        try:
+            quote = self._get_quote(quote_id)
+
+            # 如果报价单有企业微信审批ID，发送澄清消息
+            if quote.wecom_approval_id:
+                action_text = {
+                    'approve': '已批准',
+                    'reject': '已拒绝'
+                }.get(internal_action, internal_action)
+
+                clarification_message = f"""
+📋 报价单状态更新提醒
+
+报价单编号：{quote.quote_number}
+内部系统状态：{action_text}
+企业微信审批ID：{quote.wecom_approval_id}
+
+⚠️ 重要提醒：
+• 此报价单已通过内部系统{action_text}
+• 企业微信中的审批状态可能显示不同
+• 请以内部系统状态为准
+• 如有疑问请联系管理员
+
+🔒 为保护数据一致性，已对此报价单启用最终状态保护
+"""
+
+                # 异步发送澄清消息
+                loop = asyncio.get_event_loop()
+                task = loop.create_task(self._send_clarification_message_task(
+                    quote_id, recipient_userid, clarification_message, internal_action
+                ))
+
+                self.logger.info(f"企业微信状态澄清消息已启动: 报价单{quote_id}, 动作{internal_action}")
+
+        except Exception as e:
+            self.logger.error(f"发送企业微信状态澄清失败: {e}")
+
+    async def _send_clarification_message_task(self, quote_id: int, recipient_userid: str, message: str, action: str):
+        """异步发送澄清消息任务"""
+        try:
+            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+            if not quote:
+                self.logger.error(f"报价单 {quote_id} 不存在")
+                return
+
+            # 使用企业微信应用消息API发送澄清通知
+            success = await self.wecom_integration.send_status_clarification_message(
+                quote_id=quote_id,
+                internal_action=action,
+                recipient_userid=recipient_userid
+            )
+
+            if success:
+                self.logger.info(f"企业微信状态澄清消息发送成功: 报价单{quote_id}")
+            else:
+                self.logger.warning(f"企业微信状态澄清消息发送失败: 报价单{quote_id}")
+
+        except Exception as e:
+            self.logger.error(f"发送企业微信澄清消息异常: {e}")
+
+    async def _send_approval_completed_notification(self, quote_id: int, current_status: str, attempted_action: str, operator_info: dict):
+        """
+        发送审批已完成通知，告诉用户操作不会生效
+
+        当企业微信审批动作晚于内部审批动作时，主动告知用户：
+        1. 这个报价单已经被审批过了
+        2. 当前点击同意或拒绝都不会起作用
+        3. 告知具体的状态情况（一致或冲突）
+        """
+        try:
+            # 获取报价单信息
+            quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+            if not quote:
+                self.logger.error(f"报价单 {quote_id} 不存在")
+                return
+
+            # 获取操作人信息
+            operator_userid = operator_info.get('userid') if operator_info else None
+            operator_name = operator_info.get('name', '用户') if operator_info else '用户'
+
+            # 判断操作是一致还是冲突
+            is_conflict = (
+                (current_status == "approved" and attempted_action == "rejected") or
+                (current_status == "rejected" and attempted_action == "approved")
+            )
+
+            # 构建状态描述
+            status_text = {
+                "approved": "✅ 已批准",
+                "rejected": "❌ 已拒绝"
+            }.get(current_status, current_status)
+
+            action_text = {
+                "approved": "同意",
+                "rejected": "拒绝"
+            }.get(attempted_action, attempted_action)
+
+            # 构建通知消息
+            if is_conflict:
+                title = "⚠️ 审批状态冲突提醒"
+                situation = "冲突"
+                notice = f"您尝试{action_text}此报价单，但系统中该报价单已经是{status_text}状态。"
+            else:
+                title = "ℹ️ 审批已完成提醒"
+                situation = "一致"
+                notice = f"您尝试{action_text}此报价单，该操作与系统中的{status_text}状态一致。"
+
+            content = f"""
+报价单号: {quote.quote_number}
+项目名称: {quote.title or '无'}
+
+📋 审批状态说明:
+• 系统中当前状态: {status_text}
+• 您的操作: {action_text}
+• 结果: {situation}
+
+🔔 重要提醒:
+{notice}
+
+您在企业微信中的点击操作不会改变系统状态，因为该报价单的审批流程已经在内部系统中完成。
+
+💻 查看详情: {self._get_quote_detail_url(quote.quote_number)}"""
+
+            # 发送企业微信消息
+            if operator_userid:
+                notification_result = await self.wecom_integration.send_status_clarification_message(
+                    quote_id=quote_id,
+                    internal_action=current_status,
+                    recipient_userid=operator_userid
+                )
+
+                # 如果用默认的澄清消息格式不够明确，发送自定义消息
+                custom_result = await self._send_custom_completion_message(
+                    recipient_userid=operator_userid,
+                    title=title,
+                    content=content,
+                    quote=quote
+                )
+
+                self.logger.info(
+                    f"审批完成通知已发送: 报价单{quote_id}, 操作人{operator_name}, "
+                    f"状态{current_status}, 尝试{attempted_action}, 结果{situation}"
+                )
+            else:
+                # 发送给创建者
+                creator = self.db.query(User).filter(User.id == quote.created_by).first()
+                if creator and hasattr(creator, 'userid'):
+                    await self._send_custom_completion_message(
+                        recipient_userid=creator.userid,
+                        title=title,
+                        content=content,
+                        quote=quote
+                    )
+
+        except Exception as e:
+            self.logger.error(f"发送审批完成通知异常: {e}")
+
+    async def _send_custom_completion_message(self, recipient_userid: str, title: str, content: str, quote):
+        """发送自定义的审批完成消息"""
+        try:
+            message_data = {
+                "touser": recipient_userid,
+                "msgtype": "textcard",
+                "agentid": self.wecom_integration.agent_id,
+                "textcard": {
+                    "title": title,
+                    "description": content,
+                    "url": self._get_quote_detail_url(quote.quote_number),
+                    "btntxt": "查看详情"
+                }
+            }
+
+            access_token = await self.wecom_integration.get_access_token()
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}"
+
+            import httpx
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(url, json=message_data)
+                result = response.json()
+
+                if result.get("errcode") == 0:
+                    return {"success": True, "message": "审批完成通知已发送"}
+                else:
+                    return {"success": False, "message": f"发送失败: {result.get('errmsg', '未知错误')}"}
+
+        except Exception as e:
+            self.logger.error(f"发送自定义完成消息失败: {e}")
+            return {"success": False, "message": str(e)}
+
+    def _get_quote_detail_url(self, quote_number: str) -> str:
+        """获取报价单详情URL"""
+        base_url = getattr(self.wecom_integration, 'callback_url', 'http://localhost:3000')
+        return f"{base_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote_number}"
 
     async def _send_wecom_notification_task(self, quote_id: int, recipient_userid: str, notification_type: str):
         """异步发送企业微信通知任务"""
