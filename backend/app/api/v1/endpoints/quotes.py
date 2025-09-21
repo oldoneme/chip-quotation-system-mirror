@@ -812,3 +812,140 @@ async def export_quote_excel(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Excel导出失败: {str(e)}"
         )
+
+
+@router.get("/{quote_id}/pdf")
+async def get_quote_pdf(
+    quote_id: str,
+    download: bool = Query(False, description="是否下载文件"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取报价单PDF - 支持预览和下载
+
+    Args:
+        quote_id: 报价单ID
+        download: 是否作为下载文件返回
+        db: 数据库会话
+        current_user: 当前用户
+
+    Returns:
+        PDF文件流
+    """
+    try:
+        from ....models import Quote, User, QuoteItem
+        from sqlalchemy.orm import selectinload
+        import uuid
+
+        # 检测quote_id类型并选择合适的查询方式
+        quote = None
+
+        # 检查是否为UUID格式
+        try:
+            uuid.UUID(quote_id)
+            # UUID格式，使用uuid字段查询
+            quote = (db.query(Quote)
+                    .options(selectinload(Quote.items), selectinload(Quote.creator))
+                    .filter(Quote.uuid == quote_id, Quote.is_deleted == False)
+                    .first())
+        except ValueError:
+            # 检查是否为纯数字（ID）
+            if quote_id.isdigit():
+                # 数字ID
+                quote = (db.query(Quote)
+                        .options(selectinload(Quote.items), selectinload(Quote.creator))
+                        .filter(Quote.id == int(quote_id), Quote.is_deleted == False)
+                        .first())
+            else:
+                # 报价单号
+                quote = (db.query(Quote)
+                        .options(selectinload(Quote.items), selectinload(Quote.creator))
+                        .filter(Quote.quote_number == quote_id, Quote.is_deleted == False)
+                        .first())
+
+        if not quote:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="报价单不存在"
+            )
+
+        # 检查访问权限
+        if (quote.created_by != current_user.id and
+            current_user.role not in ['admin', 'super_admin']):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权限访问此报价单"
+            )
+
+        # 导入PDF生成服务
+        from ....services.weasyprint_pdf_service import weasyprint_pdf_service
+
+        # 类型映射：英文 -> 中文
+        type_mapping = {
+            'inquiry': '询价报价',
+            'tooling': '工装夹具报价',
+            'engineering': '工程机时报价',
+            'mass_production': '量产机时报价',
+            'process': '量产工序报价',
+            'comprehensive': '综合报价'
+        }
+
+        # 准备报价单数据
+        quote_dict = {
+            'quote_number': quote.quote_number,
+            'customer': quote.customer_name,
+            'type': type_mapping.get(quote.quote_type, quote.quote_type),  # 转换为中文类型
+            'currency': quote.currency or 'RMB',
+            'createdBy': current_user.name,
+            'createdAt': quote.created_at.strftime('%Y-%m-%d %H:%M:%S') if quote.created_at else '',
+            'updatedAt': quote.updated_at.strftime('%Y-%m-%d %H:%M:%S') if quote.updated_at else '',
+            'validUntil': quote.valid_until.strftime('%Y-%m-%d') if quote.valid_until else '',
+            'items': [
+                {
+                    'machineType': item.machine_type,
+                    'machineModel': item.machine_model,
+                    'itemName': getattr(item, 'item_name', ''),
+                    'itemDescription': item.item_description,
+                    'quantity': float(item.quantity),
+                    'unit': getattr(item, 'unit', ''),
+                    'unitPrice': float(item.unit_price),
+                    'totalPrice': float(item.total_price)
+                }
+                for item in quote.items
+            ]
+        }
+
+        # 生成PDF
+        pdf_data = weasyprint_pdf_service.generate_quote_pdf(quote_dict)
+
+        # 生成文件名 - 避免中文编码问题
+        from urllib.parse import quote as url_quote
+        filename = f"{quote.quote_number}_quote.pdf"
+        filename_encoded = url_quote(f"{quote.quote_number}_报价单.pdf")
+
+        # 设置响应头
+        headers = {
+            "Content-Type": "application/pdf",
+            "Content-Length": str(len(pdf_data))
+        }
+
+        if download:
+            headers["Content-Disposition"] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename_encoded}'
+        else:
+            headers["Content-Disposition"] = f'inline; filename="{filename}"; filename*=UTF-8\'\'{filename_encoded}'
+
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_data,
+            media_type="application/pdf",
+            headers=headers
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF生成失败: {str(e)}"
+        )
