@@ -271,10 +271,34 @@ class WeasyPrintPDFService:
         """
 
     def _generate_detail_html(self, quote_data: Dict) -> str:
-        """根据报价类型生成明细HTML - 使用Ant Design卡片风格"""
+        """根据报价类型生成明细HTML - 优先使用前端列配置"""
 
         quote_type = quote_data.get('type', '')
         items = quote_data.get('items', [])
+        column_configs = quote_data.get('columnConfigs')  # 前端传递的列配置
+
+
+        # 如果有前端列配置，优先使用前端配置
+        if column_configs:
+            print(f"🎯 使用前端列配置生成PDF: {list(column_configs.keys())}")
+            detail_html = f"""
+            <div class="ant-card info-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">报价明细</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+            """
+            detail_html += self._generate_frontend_config_html(items, quote_type, column_configs)
+            detail_html += """
+                </div>
+            </div>
+            """
+            return detail_html
+
+        # 否则使用原有逻辑
+        print(f"📋 使用默认配置生成PDF")
 
         # 开始报价明细卡片
         detail_html = f"""
@@ -931,6 +955,18 @@ class WeasyPrintPDFService:
             gap: 8px;
         }
 
+        .engineering-list {
+            margin: 16px 0;
+        }
+
+        .engineering-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+
         .item-card {
             border: 1px solid #d9d9d9;
             border-radius: 6px;
@@ -1331,6 +1367,115 @@ class WeasyPrintPDFService:
         }
 
         return column_mapping.get(column, '')
+
+    def _generate_frontend_config_html(self, items: List[Dict], quote_type: str, column_configs: Dict) -> str:
+        """根据前端传递的列配置生成HTML"""
+        html = f'<div class="detail-section">'
+        html += f'<div class="section-title">📋 {quote_type}明细</div>'
+
+        # 遍历每个分类
+        for category_key, category_data in column_configs.items():
+            if not category_data.get('items') or not category_data.get('columns'):
+                continue
+
+            category_items = category_data['items']
+            columns = category_data['columns']
+
+            # 添加分类标题
+            category_title = self._get_category_title(category_key, quote_type)
+            if category_title:
+                html += f'<h4>{category_title}</h4>'
+
+            # 特殊处理工装夹具报价的工程费用 - 简单列表格式，不分列
+            if quote_type == '工装夹具报价' and category_key == 'engineering':
+                html += '<div class="engineering-list">'
+                for item in category_items:
+                    item_name = item.get('itemName', '')
+                    total_price = item.get('totalPrice', 0)
+                    html += f'<div class="engineering-item"><span>{item_name}</span><span>¥{total_price:.2f}</span></div>'
+                html += '</div>'
+                continue
+
+            # 其他情况：生成标准表格
+            html += '<table class="detail-table">'
+            html += '<thead><tr>'
+
+            # 生成表头
+            for column in columns:
+                html += f'<th>{column}</th>'
+            html += '</tr></thead>'
+
+            html += '<tbody>'
+
+            # 生成数据行
+            for item in category_items:
+                html += '<tr>'
+                for column in columns:
+                    value = self._get_frontend_column_value(item, column)
+                    html += f'<td>{value}</td>'
+                html += '</tr>'
+
+            html += '</tbody></table>'
+
+        html += '</div>'
+        return html
+
+    def _get_category_title(self, category_key: str, quote_type: str) -> str:
+        """获取分类标题"""
+        title_mapping = {
+            'tooling': '🔧 工装夹具清单',
+            'engineering': '⚙️ 工程费用',
+            'production': '🏭 量产准备费用',
+            'machine': '🔧 机器设备',
+            'personnel': '👨‍💼 人员费用',
+            'ft': '📱 FT测试设备',
+            'auxiliary': '🔧 辅助设备',
+            'cp': '🔬 CP工序',
+            'default': ''
+        }
+        return title_mapping.get(category_key, '')
+
+    def _get_frontend_column_value(self, item: Dict, column: str) -> str:
+        """根据前端列配置获取数据值"""
+        # 扩展的列名映射，涵盖所有前端可能的列名
+        column_mapping = {
+            # 基础信息
+            '测试类型': item.get('itemName', '-'),
+            '项目名称': item.get('itemName', '-'),
+            '工序名称': item.get('itemName', '-'),
+            '类别': item.get('category', '其他'),
+            '类型': item.get('itemName', '-'),
+
+            # 设备信息
+            '设备类型': item.get('machineType', '-'),
+            '设备型号': item.get('machine', item.get('machineModel', '-')),
+            '设备名称': item.get('machine', item.get('machineModel', '-')),
+            '型号': item.get('machine', item.get('machineModel', '-')),
+
+            # 描述信息
+            '描述': item.get('itemDescription', '-'),
+
+            # 数量和单位
+            '数量': str(item.get('quantity', 0)),
+            '单位': item.get('unit', '-'),
+
+            # 价格信息
+            '单价': f"¥{float(item.get('unitPrice', 0)):.2f}",
+            '小时费率': f"¥{float(item.get('unitPrice', 0)):,.0f}/小时" if item.get('unitPrice') else '-',
+            '机时费率': item.get('hourlyRate', '¥0.00/小时'),
+            '费用': f"¥{float(item.get('totalPrice', 0)):.2f}",
+            '小计': f"¥{float(item.get('totalPrice', 0)):.2f}",
+
+            # 工序专用
+            'UPH': str(item.get('uph', '-')),
+            '单颗报价': f"¥{float(item.get('unitPrice', 0)):.4f}" if item.get('unitPrice') else '¥0.0000',
+
+            # 人员信息
+            '人员类别': item.get('itemName', '-'),
+            '岗位/技能': item.get('itemName', '-'),
+        }
+
+        return column_mapping.get(column, str(item.get(column, '-')))
 
 
 # 创建服务实例

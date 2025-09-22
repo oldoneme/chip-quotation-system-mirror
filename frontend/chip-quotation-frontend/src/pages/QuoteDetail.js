@@ -4,8 +4,8 @@ import {
   Divider, Row, Col, Modal, message, List,
   Spin, Empty
 } from 'antd';
-import { 
-  ArrowLeftOutlined, DownloadOutlined, 
+import {
+  ArrowLeftOutlined, DownloadOutlined, EyeOutlined,
   EditOutlined, DeleteOutlined, SendOutlined,
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
   FileTextOutlined
@@ -17,6 +17,7 @@ import UnifiedApprovalPanel from '../components/UnifiedApprovalPanel';
 import ApprovalHistory from '../components/ApprovalHistory';
 import SubmitApprovalModal from '../components/SubmitApprovalModal';
 import { useAuth } from '../contexts/AuthContext';
+import { getColumnsForPDF } from '../utils/columnConfigurations';
 import '../styles/QuoteDetail.css';
 
 const { confirm } = Modal;
@@ -272,7 +273,27 @@ const QuoteDetail = () => {
   };
 
   const handleDownload = () => {
-    message.info(`下载报价单 ${quote.id}`);
+    // 获取列配置并传递给PDF生成
+    const columnConfig = getColumnsForPDF(quote.type, quote.items);
+    const configParam = encodeURIComponent(JSON.stringify(columnConfig));
+
+    const pdfUrl = `/api/v1/quotes/${quote.id}/pdf?download=true&columns=${configParam}`;
+    const link = document.createElement('a');
+    link.href = pdfUrl;
+    link.download = `${quote.id}_报价单.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    message.success('PDF下载已开始');
+  };
+
+  const handlePreview = () => {
+    // 获取列配置并传递给PDF生成
+    const columnConfig = getColumnsForPDF(quote.type, quote.items);
+    const configParam = encodeURIComponent(JSON.stringify(columnConfig));
+
+    // 直接在新标签页打开PDF文件
+    window.open(`/api/v1/quotes/${quote.id}/pdf?download=false&columns=${configParam}`, '_blank');
   };
 
   const handleSubmitApproval = () => {
@@ -468,12 +489,19 @@ const QuoteDetail = () => {
             
             {/* 移动端操作按钮 */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <Button 
+              <Button
                 size="small"
-                icon={<DownloadOutlined />} 
+                icon={<EyeOutlined />}
+                onClick={handlePreview}
+              >
+                预览PDF
+              </Button>
+              <Button
+                size="small"
+                icon={<DownloadOutlined />}
                 onClick={handleDownload}
               >
-                下载
+                下载PDF
               </Button>
               {(quote.status === 'draft' || quote.status === 'rejected') && (
                 <>
@@ -508,8 +536,11 @@ const QuoteDetail = () => {
             </div>
             
             <Space>
+              <Button icon={<EyeOutlined />} onClick={handlePreview}>
+                预览PDF
+              </Button>
               <Button icon={<DownloadOutlined />} onClick={handleDownload}>
-                下载
+                下载PDF
               </Button>
               {(quote.status === 'draft' || quote.status === 'rejected') && (
                 <>
@@ -1483,6 +1514,7 @@ const QuoteDetail = () => {
           quote_type: quote?.type
         }}
       />
+
     </div>
   );
 };

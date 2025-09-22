@@ -5,9 +5,11 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+import json
 
 from ....database import get_db
 from ....services.quote_service import QuoteService
+from ....services.weasyprint_pdf_service import WeasyPrintPDFService
 from ....schemas import (
     Quote, QuoteCreate, QuoteUpdate, QuoteList, 
     QuoteFilter, QuoteStatusUpdate, QuoteStatistics,
@@ -43,7 +45,88 @@ async def create_quote(
         
         # 调试：打印返回的quote对象
         print(f"✅ 报价单创建完成: ID={quote.id}, 报价单号={quote.quote_number}")
-        
+
+        # 异步生成PDF - 在后台开始生成，不阻塞响应
+        import threading
+
+        def generate_pdf_background():
+            try:
+                print(f"📝 开始后台生成PDF for 报价单 {quote.id}")
+                from ....services.weasyprint_pdf_service import weasyprint_pdf_service
+                from ....models import Quote
+                import os
+                import hashlib
+
+                # 重新获取完整报价数据
+                bg_db = next(get_db())
+                try:
+                    from sqlalchemy.orm import selectinload
+                    bg_quote = (bg_db.query(Quote)
+                              .options(selectinload(Quote.items), selectinload(Quote.creator))
+                              .filter(Quote.id == quote.id)
+                              .first())
+
+                    if bg_quote:
+                        # 准备PDF数据
+                        type_mapping = {
+                            'inquiry': '询价报价',
+                            'tooling': '工装夹具报价',
+                            'engineering': '工程机时报价',
+                            'mass_production': '量产机时报价',
+                            'process': '量产工序报价',
+                            'comprehensive': '综合报价'
+                        }
+
+                        quote_dict = {
+                            'quote_number': bg_quote.quote_number,
+                            'customer': bg_quote.customer_name,
+                            'type': type_mapping.get(bg_quote.quote_type, bg_quote.quote_type),
+                            'currency': bg_quote.currency or 'RMB',
+                            'createdBy': bg_quote.creator.name if bg_quote.creator else '未知',
+                            'createdAt': bg_quote.created_at.strftime('%Y-%m-%d %H:%M:%S') if bg_quote.created_at else '',
+                            'updatedAt': bg_quote.updated_at.strftime('%Y-%m-%d %H:%M:%S') if bg_quote.updated_at else '',
+                            'validUntil': bg_quote.valid_until.strftime('%Y-%m-%d') if bg_quote.valid_until else '',
+                            'items': [
+                                {
+                                    'machineType': item.machine_type,
+                                    'machineModel': item.machine_model,
+                                    'itemName': getattr(item, 'item_name', ''),
+                                    'itemDescription': item.item_description,
+                                    'quantity': float(item.quantity),
+                                    'unit': getattr(item, 'unit', ''),
+                                    'unitPrice': float(item.unit_price),
+                                    'totalPrice': float(item.total_price)
+                                }
+                                for item in bg_quote.items
+                            ]
+                        }
+
+                        # 生成PDF并缓存
+                        cache_dir = "pdf_cache"
+                        os.makedirs(cache_dir, exist_ok=True)
+                        cache_key = hashlib.md5(f"{bg_quote.id}_{bg_quote.updated_at}".encode()).hexdigest()
+                        cache_file = os.path.join(cache_dir, f"{cache_key}.pdf")
+
+                        pdf_data = weasyprint_pdf_service.generate_quote_pdf(quote_dict)
+                        with open(cache_file, 'wb') as f:
+                            f.write(pdf_data)
+
+                        print(f"✅ 报价单 {quote.id} PDF后台生成完成，缓存到: {cache_file}")
+                    else:
+                        print(f"⚠️ 无法获取报价单 {quote.id} 数据，跳过PDF生成")
+                finally:
+                    bg_db.close()
+
+            except Exception as e:
+                print(f"⚠️ 报价单 {quote.id} PDF后台生成失败: {str(e)}")
+
+        # 启动后台线程生成PDF
+        pdf_thread = threading.Thread(target=generate_pdf_background)
+        pdf_thread.daemon = True  # 设为守护线程，主程序退出时自动结束
+        pdf_thread.start()
+
+        print(f"📝 报价单 {quote.id} 创建成功，PDF正在后台生成")
+
         return quote
     except Exception as e:
         print(f"🚨 创建报价单异常: {str(e)}")
@@ -503,14 +586,49 @@ async def delete_quote(
     """删除报价单"""
     try:
         service = QuoteService(db)
+
+        # 删除前先获取报价单信息（用于清理PDF缓存）
+        quote = service.get_quote_by_id(quote_id)
+
         success = service.delete_quote(quote_id, current_user.id)
-        
+
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="报价单不存在"
             )
-        
+
+        # 清理对应的PDF缓存文件
+        if quote:
+            try:
+                import os
+                import hashlib
+                import glob
+
+                cache_dir = "pdf_cache"
+                # 删除所有与此报价单ID相关的缓存文件（因为可能有多个版本）
+                pattern = f"{cache_dir}/*{quote.id}*"
+                cache_files = glob.glob(pattern)
+
+                # 也按哈希查找
+                cache_key = hashlib.md5(f"{quote.id}_{quote.updated_at}".encode()).hexdigest()
+                cache_file = os.path.join(cache_dir, f"{cache_key}.pdf")
+                if os.path.exists(cache_file):
+                    cache_files.append(cache_file)
+
+                for cache_file in cache_files:
+                    if os.path.exists(cache_file):
+                        os.remove(cache_file)
+                        print(f"🗑️ 已删除PDF缓存文件: {cache_file}")
+
+                if cache_files:
+                    print(f"✅ 报价单 {quote_id} 删除完成，已清理 {len(cache_files)} 个PDF缓存文件")
+                else:
+                    print(f"📝 报价单 {quote_id} 删除完成，未找到PDF缓存文件")
+
+            except Exception as cache_error:
+                print(f"⚠️ 清理PDF缓存时出错（不影响删除操作）: {str(cache_error)}")
+
         return {"message": "报价单删除成功"}
     except PermissionError as e:
         raise HTTPException(
@@ -818,6 +936,7 @@ async def export_quote_excel(
 async def get_quote_pdf(
     quote_id: str,
     download: bool = Query(False, description="是否下载文件"),
+    columns: Optional[str] = Query(None, description="前端列配置JSON"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -891,6 +1010,15 @@ async def get_quote_pdf(
             'comprehensive': '综合报价'
         }
 
+        # 解析前端传递的列配置
+        column_configs = None
+        if columns:
+            try:
+                column_configs = json.loads(columns)
+                print(f"📊 收到前端列配置: {column_configs}")
+            except json.JSONDecodeError:
+                print(f"⚠️ 列配置JSON解析失败，使用默认配置")
+
         # 准备报价单数据
         quote_dict = {
             'quote_number': quote.quote_number,
@@ -913,11 +1041,32 @@ async def get_quote_pdf(
                     'totalPrice': float(item.total_price)
                 }
                 for item in quote.items
-            ]
+            ],
+            'columnConfigs': column_configs  # 传递列配置给PDF服务
         }
 
-        # 生成PDF
-        pdf_data = weasyprint_pdf_service.generate_quote_pdf(quote_dict)
+        # PDF缓存机制
+        import os
+        import hashlib
+        cache_dir = "pdf_cache"
+        os.makedirs(cache_dir, exist_ok=True)
+
+        # 基于报价单数据生成缓存key
+        cache_key = hashlib.md5(f"{quote.id}_{quote.updated_at}".encode()).hexdigest()
+        cache_file = os.path.join(cache_dir, f"{cache_key}.pdf")
+
+        # 检查缓存文件是否存在
+        if os.path.exists(cache_file):
+            print(f"📄 使用缓存PDF: {cache_file}")
+            with open(cache_file, 'rb') as f:
+                pdf_data = f.read()
+        else:
+            print(f"📝 生成新PDF并缓存: {cache_file}")
+            # 生成PDF
+            pdf_data = weasyprint_pdf_service.generate_quote_pdf(quote_dict)
+            # 保存到缓存
+            with open(cache_file, 'wb') as f:
+                f.write(pdf_data)
 
         # 生成文件名 - 避免中文编码问题
         from urllib.parse import quote as url_quote
