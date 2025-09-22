@@ -5,12 +5,14 @@
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, asc, func
+from sqlalchemy.exc import IntegrityError
 
 from ..models import Quote, QuoteItem, ApprovalRecord, User
 from ..schemas import (
-    QuoteCreate, QuoteUpdate, QuoteFilter, 
+    QuoteCreate, QuoteUpdate, QuoteFilter,
     QuoteStatusUpdate, ApprovalRecordCreate,
     QuoteStatistics
 )
@@ -19,8 +21,132 @@ from ..schemas import (
 class QuoteService:
     """报价单服务类"""
 
+    MONEY_QUANTIZE = Decimal("0.01")
+    RATE_QUANTIZE = Decimal("0.0001")
+    STATUS_TO_APPROVAL = {
+        "draft": "not_submitted",
+        "pending": "pending",
+        "approved": "approved",
+        "rejected": "rejected",
+        "returned": "returned_for_revision",
+        "forwarded": "forwarded",
+    }
+    APPROVAL_TO_STATUS = {
+        "not_submitted": "draft",
+        "pending": "pending",
+        "approved": "approved",
+        "rejected": "rejected",
+        "returned_for_revision": "returned",
+        "forwarded": "forwarded",
+    }
+
     def __init__(self, db: Session):
         self.db = db
+
+    # --------- 工具方法 ---------
+
+    def _to_decimal(self, value, field_name: str) -> Decimal:
+        """将输入转换为Decimal，非法值抛出友好错误"""
+        if value is None:
+            return Decimal("0")
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError):
+            raise ValueError(f"字段 {field_name} 的值无效: {value}")
+
+    def _quantize_money(self, value: Decimal) -> Decimal:
+        return value.quantize(self.MONEY_QUANTIZE, rounding=ROUND_HALF_UP)
+
+    def _normalize_discount(self, subtotal: Decimal, discount_value, field_name: str = "discount") -> Decimal:
+        discount = self._to_decimal(discount_value, field_name)
+        if discount < 0:
+            raise ValueError("折扣金额不能为负数")
+        if discount > subtotal:
+            discount = subtotal
+        return self._quantize_money(discount)
+
+    def _normalize_tax_rate(self, tax_rate_value, field_name: str = "tax_rate") -> Decimal:
+        tax_rate = self._to_decimal(tax_rate_value if tax_rate_value is not None else 0, field_name)
+        if tax_rate < 0 or tax_rate > 1:
+            raise ValueError("税率必须在0到1之间")
+        return tax_rate.quantize(self.RATE_QUANTIZE, rounding=ROUND_HALF_UP)
+
+    def _prepare_items(self, quote: Quote, discount=None, tax_rate=None):
+        """根据现有 QuoteItem 重新计算金额字段"""
+        items = quote.items
+        subtotal = Decimal("0")
+        for index, item in enumerate(items, start=1):
+            quantity = self._to_decimal(item.quantity, f"items[{index}].quantity")
+            if quantity < 0:
+                raise ValueError("数量不能为负数")
+            unit_price = self._to_decimal(item.unit_price, f"items[{index}].unit_price")
+            if unit_price < 0:
+                raise ValueError("单价不能为负数")
+            total_price = self._quantize_money(quantity * unit_price)
+            item.total_price = float(total_price)
+            subtotal += total_price
+
+        discount_source = discount if discount is not None else quote.discount
+        tax_rate_source = tax_rate if tax_rate is not None else quote.tax_rate
+        discount_decimal = self._normalize_discount(subtotal, discount_source)
+        tax_rate_decimal = self._normalize_tax_rate(tax_rate_source)
+        taxable_base = self._quantize_money(subtotal - discount_decimal)
+        tax_amount = self._quantize_money(taxable_base * tax_rate_decimal)
+        total_amount = taxable_base + tax_amount
+
+        return {
+            "subtotal": float(self._quantize_money(subtotal)),
+            "discount": float(discount_decimal),
+            "tax_rate": float(tax_rate_decimal),
+            "tax_amount": float(tax_amount),
+            "total_amount": float(self._quantize_money(total_amount)),
+        }
+
+    def _prepare_items_payload(self, item_models: List[Any]) -> Dict[str, Any]:
+        prepared_items = []
+        subtotal = Decimal("0")
+        for index, item_data in enumerate(item_models, start=1):
+            if hasattr(item_data, "model_dump"):
+                item_dict = item_data.model_dump(exclude_unset=True)
+            else:
+                item_dict = dict(item_data)
+            quantity = self._to_decimal(item_dict.get("quantity", 0), f"items[{index}].quantity")
+            if quantity < 0:
+                raise ValueError("数量不能为负数")
+            unit_price = self._to_decimal(item_dict.get("unit_price", 0), f"items[{index}].unit_price")
+            if unit_price < 0:
+                raise ValueError("单价不能为负数")
+
+            total_price = self._quantize_money(quantity * unit_price)
+
+            item_dict["quantity"] = float(quantity)
+            item_dict["unit_price"] = float(unit_price)
+            item_dict["total_price"] = float(total_price)
+
+            prepared_items.append(item_dict)
+            subtotal += total_price
+
+        return {"items": prepared_items, "subtotal": subtotal}
+
+    def _apply_financials_to_quote(self, quote: Quote, discount_override=None, tax_rate_override=None):
+        """重新计算并回写报价单金额字段"""
+        totals = self._prepare_items(quote, discount_override, tax_rate_override)
+        quote.subtotal = totals["subtotal"]
+        quote.discount = totals["discount"]
+        quote.tax_rate = totals["tax_rate"]
+        quote.tax_amount = totals["tax_amount"]
+        quote.total_amount = totals["total_amount"]
+
+    def _status_payload(self, status: str = None, approval_status: Optional[str] = None) -> Dict[str, str]:
+        status = status or "draft"
+        derived_approval = approval_status or self.STATUS_TO_APPROVAL.get(status, "not_submitted")
+        derived_status = self.APPROVAL_TO_STATUS.get(derived_approval, status)
+        return {"status": derived_status, "approval_status": derived_approval}
+
+    def _sync_status_fields(self, quote: Quote, status: Optional[str] = None, approval_status: Optional[str] = None):
+        payload = self._status_payload(status, approval_status)
+        quote.status = payload["status"]
+        quote.approval_status = payload["approval_status"]
 
     def get_quote_unit_abbreviation(self, quote_unit: str) -> str:
         """获取报价单位缩写"""
@@ -64,9 +190,6 @@ class QuoteService:
 
     def create_quote(self, quote_data: QuoteCreate, user_id: int) -> Quote:
         """创建报价单"""
-        # 生成报价单号，使用报价单位
-        quote_number = self.generate_quote_number(quote_data.quote_unit)
-        
         # 根据报价类型决定初始状态
         # 询价报价直接设为已批准状态，其他类型设为草稿需要审批
         if quote_data.quote_type == 'inquiry':
@@ -79,49 +202,79 @@ class QuoteService:
             approved_at = None
         
         # 创建报价单主记录
-        quote_dict = quote_data.model_dump(exclude={'items'})
-        quote_dict.update({
-            'quote_number': quote_number,
-            'status': initial_status,
+        base_data = quote_data.model_dump(exclude={'items'})
+
+        prepared = self._prepare_items_payload(quote_data.items)
+        discount_decimal = self._normalize_discount(prepared["subtotal"], base_data.get('discount'))
+        tax_rate_decimal = self._normalize_tax_rate(base_data.get('tax_rate'))
+        taxable_base = self._quantize_money(prepared["subtotal"] - discount_decimal)
+        tax_amount = self._quantize_money(taxable_base * tax_rate_decimal)
+        total_amount = self._quantize_money(taxable_base + tax_amount)
+
+        financial_payload = {
             'created_by': user_id,
             'approved_by': approved_by,
-            'approved_at': approved_at
-        })
-        
-        quote = Quote(**quote_dict)
-        self.db.add(quote)
-        self.db.flush()  # 获取ID但不提交
-        
-        # 创建报价明细
-        for item_data in quote_data.items:
-            item_dict = item_data.model_dump()
-            item_dict['quote_id'] = quote.id
-            item = QuoteItem(**item_dict)
-            self.db.add(item)
-        
-        # 如果是询价报价，创建审批记录表示自动批准
-        if quote_data.quote_type == 'inquiry':
-            approval_record = ApprovalRecord(
-                quote_id=quote.id,
-                action='auto_approve_inquiry',
-                status='approved',
-                approver_id=user_id,
-                comments='询价报价自动批准，无需审批流程',
-                processed_at=datetime.now()
-            )
-            self.db.add(approval_record)
+            'approved_at': approved_at,
+            'subtotal': float(self._quantize_money(prepared["subtotal"])),
+            'discount': float(discount_decimal),
+            'tax_rate': float(tax_rate_decimal),
+            'tax_amount': float(tax_amount),
+            'total_amount': float(total_amount),
+            'approval_method': 'internal',
+        }
+        financial_payload.update(self._status_payload(initial_status))
 
-        self.db.commit()
+        max_attempts = 5
+        last_exception = None
 
-        # 使用flush后的ID直接查询（避免刷新问题）
-        from sqlalchemy.orm import selectinload
-        created_quote = (
-            self.db.query(Quote)
-            .options(selectinload(Quote.items))
-            .filter(Quote.id == quote.id)
-            .first()
-        )
-        return created_quote
+        for attempt in range(max_attempts):
+            current_quote_number = self.generate_quote_number(quote_data.quote_unit)
+            quote_payload = {
+                **base_data,
+                **financial_payload,
+                'quote_number': current_quote_number,
+            }
+
+            quote = Quote(**quote_payload)
+            self.db.add(quote)
+            self.db.flush()
+
+            # 创建报价明细
+            for item_template in prepared["items"]:
+                item_dict = {**item_template, 'quote_id': quote.id}
+                self.db.add(QuoteItem(**item_dict))
+
+            # 如果是询价报价，创建审批记录表示自动批准
+            if quote_data.quote_type == 'inquiry':
+                approval_record = ApprovalRecord(
+                    quote_id=quote.id,
+                    action='auto_approve_inquiry',
+                    status='approved',
+                    approver_id=user_id,
+                    comments='询价报价自动批准，无需审批流程',
+                    processed_at=datetime.now()
+                )
+                self.db.add(approval_record)
+
+            try:
+                self.db.commit()
+                self.db.refresh(quote)
+                from sqlalchemy.orm import selectinload
+                created_quote = (
+                    self.db.query(Quote)
+                    .options(selectinload(Quote.items))
+                    .filter(Quote.id == quote.id)
+                    .first()
+                )
+                return created_quote
+            except IntegrityError as exc:
+                self.db.rollback()
+                last_exception = exc
+                if 'quote_number' in str(exc).lower() and attempt < max_attempts - 1:
+                    continue
+                raise
+
+        raise last_exception or ValueError("生成报价单号失败")
 
     def get_quote_by_id(self, quote_id: int) -> Optional[Quote]:
         """根据ID获取报价单"""
@@ -201,22 +354,37 @@ class QuoteService:
             raise ValueError("只有草稿状态的报价单可以编辑")
         
         # 更新报价单字段
-        update_data = quote_data.model_dump(exclude_unset=True, exclude={'items'})
-        for field, value in update_data.items():
+        payload = quote_data.model_dump(exclude_unset=True)
+        items_payload = payload.pop('items', None)
+
+        discount_override = payload.pop('discount', None) if 'discount' in payload else None
+        tax_rate_override = payload.pop('tax_rate', None) if 'tax_rate' in payload else None
+
+        # 忽略客户端传来的金额字段，统一由后台计算
+        payload.pop('subtotal', None)
+        payload.pop('tax_amount', None)
+        payload.pop('total_amount', None)
+
+        for field, value in payload.items():
             setattr(quote, field, value)
-        
+
         # 更新报价明细
-        if quote_data.items is not None:
+        if items_payload is not None:
             # 删除旧的明细项
             self.db.query(QuoteItem).filter(QuoteItem.quote_id == quote_id).delete()
-            
+
             # 添加新的明细项
-            for item_data in quote_data.items:
-                item_dict = item_data.model_dump(exclude_unset=True)
+            prepared = self._prepare_items_payload(items_payload)
+            for item_dict in prepared["items"]:
                 item_dict['quote_id'] = quote_id
                 item = QuoteItem(**item_dict)
                 self.db.add(item)
+            self.db.flush()
         
+        # 重新加载明细（确保关系可用）
+        self.db.refresh(quote)
+        self._apply_financials_to_quote(quote, discount_override, tax_rate_override)
+
         quote.updated_at = datetime.now()
         self.db.commit()
         self.db.refresh(quote)
@@ -296,11 +464,12 @@ class QuoteService:
         
         # 更新状态
         old_status = quote.status
-        quote.status = status_update.status
-        
+        self._sync_status_fields(quote, status=status_update.status)
+
         # 根据状态更新相应字段
         if status_update.status == 'pending':
             quote.submitted_at = datetime.now()
+            quote.approval_method = quote.approval_method or 'internal'
         elif status_update.status == 'approved':
             quote.approved_at = datetime.now()
             quote.approved_by = user_id
@@ -400,10 +569,10 @@ class QuoteService:
             raise ValueError("只有审批中的报价单可以批准")
         
         # 更新报价单状态
-        quote.status = 'approved'
+        self._sync_status_fields(quote, status='approved')
         quote.approved_by = approver_id
         quote.approved_at = datetime.utcnow()
-        
+
         # 记录审批操作
         approval_record = ApprovalRecord(
             quote_id=quote_id,
@@ -429,9 +598,9 @@ class QuoteService:
             raise ValueError("只有审批中的报价单可以拒绝")
         
         # 更新报价单状态
-        quote.status = 'rejected'
+        self._sync_status_fields(quote, status='rejected')
         quote.rejection_reason = comments
-        
+
         # 记录审批操作
         approval_record = ApprovalRecord(
             quote_id=quote_id,

@@ -79,6 +79,8 @@ class WeComApprovalService:
             
             # 更新报价单状态和审批单号
             quote.status = 'pending'
+            quote.approval_status = 'pending'
+            quote.approval_method = 'wecom'
             quote.submitted_at = datetime.now()
             quote.wecom_approval_id = sp_no
             
@@ -287,13 +289,23 @@ class WeComApprovalService:
         """
         old_status = quote.status
         quote.status = status
-        
+        status_to_approval = {
+            'draft': 'not_submitted',
+            'pending': 'pending',
+            'approved': 'approved',
+            'rejected': 'rejected',
+            'cancelled': 'cancelled',
+        }
+        quote.approval_status = status_to_approval.get(status, quote.approval_status)
+
         if status == 'approved':
             quote.approved_at = datetime.now()
             # 这里可以设置审批人，暂时留空
         elif status == 'rejected':
             quote.rejection_reason = comments
-        
+        elif status == 'pending':
+            quote.submitted_at = quote.submitted_at or datetime.now()
+
         # 创建审批记录
         approval_record = ApprovalRecord(
             quote_id=quote.id,

@@ -243,7 +243,10 @@ class WeComApprovalIntegration:
         
         # 保存审批ID到报价单
         quote.wecom_approval_id = result["sp_no"]
+        quote.status = "pending"
         quote.approval_status = "pending"
+        quote.approval_method = "wecom"
+        quote.submitted_at = datetime.utcnow()
         
         # 先提交SQLAlchemy的更改
         self.db.commit()
@@ -503,8 +506,15 @@ class WeComApprovalIntegration:
         
         new_status = status_mapping.get(sp_status, "unknown")
         
-        if quote.approval_status != new_status:
+        if quote.approval_status != new_status or quote.status != new_status:
             quote.approval_status = new_status
+            status_mapping_back = {
+                "pending": "pending",
+                "approved": "approved",
+                "rejected": "rejected",
+                "cancelled": "cancelled",
+            }
+            quote.status = status_mapping_back.get(new_status, quote.status)
             self.db.commit()
             
         return {
