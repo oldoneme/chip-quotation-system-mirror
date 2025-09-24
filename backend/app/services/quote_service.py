@@ -6,7 +6,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_, or_, desc, asc, func
 from sqlalchemy.exc import IntegrityError
 
@@ -15,6 +15,10 @@ from ..schemas import (
     QuoteCreate, QuoteUpdate, QuoteFilter,
     QuoteStatusUpdate, ApprovalRecordCreate,
     QuoteStatistics
+)
+from .frontend_snapshot_pdf_service import (
+    get_frontend_snapshot_pdf_service,
+    upsert_pdf_cache,
 )
 
 
@@ -148,6 +152,42 @@ class QuoteService:
         quote.status = payload["status"]
         quote.approval_status = payload["approval_status"]
 
+    def load_quote_with_details(self, quote_id: int) -> Optional[Quote]:
+        return (
+            self.db.query(Quote)
+            .options(
+                selectinload(Quote.items),
+                selectinload(Quote.creator),
+                selectinload(Quote.pdf_cache),
+            )
+            .filter(Quote.id == quote_id, Quote.is_deleted == False)
+            .first()
+        )
+
+    def ensure_pdf_cache(self, quote: Quote, user, force: bool = False, column_configs: Optional[Dict] = None):
+        service = get_frontend_snapshot_pdf_service()
+        cache = quote.pdf_cache
+        needs_regen = force or cache is None
+        if not needs_regen and cache is not None:
+            cached_path = service.get_cached_pdf_path(quote)
+            if not cached_path:
+                needs_regen = True
+            elif quote.updated_at and cache.updated_at and quote.updated_at > cache.updated_at:
+                needs_regen = True
+            elif cache.source != 'playwright':
+                needs_regen = True
+
+        if needs_regen:
+            result = service.generate_with_fallback(quote, user, self.db, column_configs=column_configs)
+            cache = upsert_pdf_cache(self.db, quote, result)
+        return cache
+
+    def get_pdf_url(self, quote: Quote) -> Optional[str]:
+        if getattr(quote, 'pdf_cache', None):
+            service = get_frontend_snapshot_pdf_service()
+            return service.build_public_url_from_cache(quote.pdf_cache)
+        return getattr(quote, "pdf_url", None)
+
     def get_quote_unit_abbreviation(self, quote_unit: str) -> str:
         """获取报价单位缩写"""
         unit_mapping = {
@@ -278,15 +318,25 @@ class QuoteService:
 
     def get_quote_by_id(self, quote_id: int) -> Optional[Quote]:
         """根据ID获取报价单"""
-        return self.db.query(Quote).filter(Quote.id == quote_id, Quote.is_deleted == False).first()
+        return (
+            self.db.query(Quote)
+            .options(selectinload(Quote.pdf_cache))
+            .filter(Quote.id == quote_id, Quote.is_deleted == False)
+            .first()
+        )
 
     def get_quote_by_number(self, quote_number: str) -> Optional[Quote]:
         """根据报价单号获取报价单"""
-        from sqlalchemy.orm import selectinload
-        return (self.db.query(Quote)
-                .options(selectinload(Quote.items), selectinload(Quote.creator))
-                .filter(Quote.quote_number == quote_number, Quote.is_deleted == False)
-                .first())
+        return (
+            self.db.query(Quote)
+            .options(
+                selectinload(Quote.items),
+                selectinload(Quote.creator),
+                selectinload(Quote.pdf_cache),
+            )
+            .filter(Quote.quote_number == quote_number, Quote.is_deleted == False)
+            .first()
+        )
 
     def get_quotes(self, filter_params: QuoteFilter, user_id: Optional[int] = None):
         """获取报价单列表"""
@@ -323,9 +373,11 @@ class QuoteService:
         if base_filters:
             count_query = count_query.filter(and_(*base_filters))
         total = count_query.count()
-        
+
         # 获取分页数据
-        data_query = self.db.query(Quote)
+        data_query = self.db.query(Quote).options(
+            selectinload(Quote.pdf_cache)
+        )
         if base_filters:
             data_query = data_query.filter(and_(*base_filters))
             

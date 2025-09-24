@@ -3,139 +3,135 @@
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+import asyncio
 import json
+import logging
+from pathlib import Path
 
-from ....database import get_db
-from ....services.quote_service import QuoteService
-from ....services.weasyprint_pdf_service import WeasyPrintPDFService
-from ....schemas import (
-    Quote, QuoteCreate, QuoteUpdate, QuoteList, 
-    QuoteFilter, QuoteStatusUpdate, QuoteStatistics,
-    ApprovalRecord
-)
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session, selectinload
+
 from ....auth import get_current_user
-from ....models import User
+from ....database import get_db, SessionLocal
+from ....models import User, Quote as QuoteModel
+from ....schemas import (
+    Quote as QuoteSchema,
+    QuoteCreate,
+    QuoteUpdate,
+    QuoteList,
+    QuoteFilter,
+    QuoteStatusUpdate,
+    QuoteStatistics,
+    ApprovalRecord,
+)
+from ....services.quote_service import QuoteService
 
 router = APIRouter(prefix="/quotes", tags=["报价单管理"])
 
 
-@router.post("/", response_model=Quote, status_code=status.HTTP_201_CREATED)
+def _quote_to_schema(service: QuoteService, quote: QuoteModel) -> QuoteSchema:
+    """将 SQLAlchemy Quote 实例转换为带 pdf_url 的响应模型"""
+    pdf_url = service.get_pdf_url(quote)
+    model = QuoteSchema.model_validate(quote, from_attributes=True)
+    if pdf_url:
+        model = model.model_copy(update={"pdf_url": pdf_url})
+    return model
+
+
+
+def _generate_pdf_cache_background(
+    quote_id: int,
+    user_id: int,
+    force: bool,
+    event: str,
+    column_configs: Optional[dict] = None,
+) -> None:
+    session = SessionLocal()
+    try:
+        service = QuoteService(session)
+        quote = service.load_quote_with_details(quote_id)
+        user = session.query(User).filter(User.id == user_id).first()
+        if not quote or not user:
+            return
+        try:
+            service.ensure_pdf_cache(
+                quote, user, force=force, column_configs=column_configs
+            )
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger("app.snapshot").error(
+                json.dumps(
+                    {
+                        "event": event,
+                        "quote_id": quote.id,
+                        "quote_number": quote.quote_number,
+                        "error": str(exc),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+    finally:
+        session.close()
+
+
+def _schedule_pdf_refresh(
+    background_tasks: BackgroundTasks,
+    quote_id: int,
+    user_id: int,
+    force: bool,
+    event: str,
+    column_configs: Optional[dict] = None,
+) -> None:
+    if background_tasks is None:
+        return
+    background_tasks.add_task(
+        _generate_pdf_cache_background,
+        quote_id,
+        user_id,
+        force,
+        event,
+        column_configs,
+    )
+
+
+def _list_item_to_dict(service: QuoteService, quote: QuoteModel) -> dict:
+    model = QuoteList.model_validate(quote, from_attributes=True)
+    pdf_url = service.get_pdf_url(quote)
+    if pdf_url:
+        model = model.model_copy(update={"pdf_url": pdf_url})
+    return model.model_dump(mode="json")
+
+
+
+
+@router.post("/", response_model=QuoteSchema, status_code=status.HTTP_201_CREATED)
 async def create_quote(
     quote_data: QuoteCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """创建新报价单"""
+    """创建新报价单并生成快照PDF缓存"""
+    logger = logging.getLogger("app.api.quotes")
     try:
-        # 🚨 紧急调试：记录完整的创建请求数据
-        print(f"🚨 CREATE_QUOTE_DEBUG:")
-        print(f"   用户ID: {current_user.id}")
-        print(f"   报价类型: {quote_data.quote_type}")
-        print(f"   项目数量: {len(quote_data.items) if quote_data.items else 0}")
-        
-        if quote_data.items:
-            print(f"   项目明细:")
-            for i, item in enumerate(quote_data.items, 1):
-                print(f"     {i}. {item.item_name} | 描述:{getattr(item, 'item_description', 'N/A')} | 数量:{item.quantity}")
-        
         service = QuoteService(db)
         quote = service.create_quote(quote_data, current_user.id)
-        
-        # 调试：打印返回的quote对象
-        print(f"✅ 报价单创建完成: ID={quote.id}, 报价单号={quote.quote_number}")
-
-        # 异步生成PDF - 在后台开始生成，不阻塞响应
-        import threading
-
-        def generate_pdf_background():
-            try:
-                print(f"📝 开始后台生成PDF for 报价单 {quote.id}")
-                from ....services.weasyprint_pdf_service import weasyprint_pdf_service
-                from ....models import Quote
-                import os
-                import hashlib
-
-                # 重新获取完整报价数据
-                bg_db = next(get_db())
-                try:
-                    from sqlalchemy.orm import selectinload
-                    bg_quote = (bg_db.query(Quote)
-                              .options(selectinload(Quote.items), selectinload(Quote.creator))
-                              .filter(Quote.id == quote.id)
-                              .first())
-
-                    if bg_quote:
-                        # 准备PDF数据
-                        type_mapping = {
-                            'inquiry': '询价报价',
-                            'tooling': '工装夹具报价',
-                            'engineering': '工程机时报价',
-                            'mass_production': '量产机时报价',
-                            'process': '量产工序报价',
-                            'comprehensive': '综合报价'
-                        }
-
-                        quote_dict = {
-                            'quote_number': bg_quote.quote_number,
-                            'customer': bg_quote.customer_name,
-                            'type': type_mapping.get(bg_quote.quote_type, bg_quote.quote_type),
-                            'currency': bg_quote.currency or 'RMB',
-                            'createdBy': bg_quote.creator.name if bg_quote.creator else '未知',
-                            'createdAt': bg_quote.created_at.strftime('%Y-%m-%d %H:%M:%S') if bg_quote.created_at else '',
-                            'updatedAt': bg_quote.updated_at.strftime('%Y-%m-%d %H:%M:%S') if bg_quote.updated_at else '',
-                            'validUntil': bg_quote.valid_until.strftime('%Y-%m-%d') if bg_quote.valid_until else '',
-                            'items': [
-                                {
-                                    'machineType': item.machine_type,
-                                    'machineModel': item.machine_model,
-                                    'itemName': getattr(item, 'item_name', ''),
-                                    'itemDescription': item.item_description,
-                                    'quantity': float(item.quantity),
-                                    'unit': getattr(item, 'unit', ''),
-                                    'unitPrice': float(item.unit_price),
-                                    'totalPrice': float(item.total_price)
-                                }
-                                for item in bg_quote.items
-                            ]
-                        }
-
-                        # 生成PDF并缓存
-                        cache_dir = "pdf_cache"
-                        os.makedirs(cache_dir, exist_ok=True)
-                        cache_key = hashlib.md5(f"{bg_quote.id}_{bg_quote.updated_at}".encode()).hexdigest()
-                        cache_file = os.path.join(cache_dir, f"{cache_key}.pdf")
-
-                        pdf_data = weasyprint_pdf_service.generate_quote_pdf(quote_dict)
-                        with open(cache_file, 'wb') as f:
-                            f.write(pdf_data)
-
-                        print(f"✅ 报价单 {quote.id} PDF后台生成完成，缓存到: {cache_file}")
-                    else:
-                        print(f"⚠️ 无法获取报价单 {quote.id} 数据，跳过PDF生成")
-                finally:
-                    bg_db.close()
-
-            except Exception as e:
-                print(f"⚠️ 报价单 {quote.id} PDF后台生成失败: {str(e)}")
-
-        # 启动后台线程生成PDF
-        pdf_thread = threading.Thread(target=generate_pdf_background)
-        pdf_thread.daemon = True  # 设为守护线程，主程序退出时自动结束
-        pdf_thread.start()
-
-        print(f"📝 报价单 {quote.id} 创建成功，PDF正在后台生成")
-
-        return quote
-    except Exception as e:
-        print(f"🚨 创建报价单异常: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        quote_detail = service.load_quote_with_details(quote.id) or quote
+        _schedule_pdf_refresh(
+            background_tasks,
+            quote_detail.id,
+            current_user.id,
+            True,
+            "snapshot_generation_failed_on_create",
+        )
+        return _quote_to_schema(service, quote_detail)
+    except Exception as exc:  # pragma: no cover - 捕获意外错误并转译
+        logger.exception("create_quote_failed", extra={"error": str(exc)})
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"创建报价单失败: {str(e)}"
+            detail=f"创建报价单失败: {str(exc)}"
         )
+
 
 
 @router.get("/", response_model=dict)
@@ -148,7 +144,8 @@ async def get_quotes(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """获取报价单列表"""
+    """获取报价单列表并附带PDF缓存链接"""
+    logger = logging.getLogger("app.api.quotes")
     try:
         service = QuoteService(db)
         filter_params = QuoteFilter(
@@ -158,24 +155,24 @@ async def get_quotes(
             page=page,
             size=size
         )
-        
+
         quotes, total = service.get_quotes(filter_params, current_user.id if current_user else None)
-        
+        items = [_list_item_to_dict(service, q) for q in quotes]
+
         return {
-            "items": quotes,
+            "items": items,
             "total": total,
             "page": page,
             "size": size,
-            "pages": (total + size - 1) // size
+            "pages": (total + size - 1) // size,
         }
-    except Exception as e:
-        print(f"API错误详情: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception as exc:  # pragma: no cover - 捕获意外错误
+        logger.exception("get_quotes_failed", extra={"error": str(exc)})
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取报价单列表失败: {str(e)}"
+            detail=f"获取报价单列表失败: {str(exc)}"
         )
+
 
 
 @router.get("/test", response_model=dict)
@@ -471,7 +468,7 @@ async def get_quote_statistics(
         )
 
 
-@router.get("/{quote_id}", response_model=Quote)
+@router.get("/{quote_id}", response_model=QuoteSchema)
 async def get_quote(
     quote_id: str,
     db: Session = Depends(get_db),
@@ -481,32 +478,32 @@ async def get_quote(
     try:
         service = QuoteService(db)
         quote = service.get_quote_by_id(quote_id)
-        
+
         if not quote:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="报价单不存在"
             )
-        
-        # 检查访问权限
-        if (quote.created_by != current_user.id and 
+
+        if (quote.created_by != current_user.id and
             current_user.role not in ['admin', 'super_admin']):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="无权限访问此报价单"
             )
-        
-        return quote
+
+        return _quote_to_schema(service, quote)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"获取报价单失败: {str(e)}"
+            detail=f"获取报价单失败: {str(exc)}"
         )
 
 
-@router.get("/number/{quote_number}", response_model=Quote)
+
+@router.get("/number/{quote_number}", response_model=QuoteSchema)
 async def get_quote_by_number(
     quote_number: str,
     db: Session = Depends(get_db),
@@ -516,65 +513,77 @@ async def get_quote_by_number(
     try:
         service = QuoteService(db)
         quote = service.get_quote_by_number(quote_number)
-        
+
         if not quote:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="报价单不存在"
             )
-        
-        # 检查访问权限
-        if (quote.created_by != current_user.id and 
+
+        if (quote.created_by != current_user.id and
             current_user.role not in ['admin', 'super_admin']):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="无权限访问此报价单"
             )
-        
-        return quote
+
+        return _quote_to_schema(service, quote)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"获取报价单失败: {str(e)}"
+            detail=f"获取报价单失败: {str(exc)}"
         )
 
 
-@router.put("/{quote_id}", response_model=Quote)
+
+@router.put("/{quote_id}", response_model=QuoteSchema)
 async def update_quote(
     quote_id: str,
     quote_data: QuoteUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """更新报价单"""
+    logger = logging.getLogger("app.api.quotes")
     try:
         service = QuoteService(db)
         quote = service.update_quote(quote_id, quote_data, current_user.id)
-        
+
         if not quote:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="报价单不存在"
             )
-        
-        return quote
-    except PermissionError as e:
+
+        quote_detail = service.load_quote_with_details(quote.id) or quote
+        _schedule_pdf_refresh(
+            background_tasks,
+            quote_detail.id,
+            current_user.id,
+            True,
+            "snapshot_generation_failed_on_update",
+        )
+        return _quote_to_schema(service, quote_detail)
+    except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e)
+            detail=str(exc)
         )
-    except ValueError as e:
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=str(exc)
         )
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("update_quote_failed", extra={"error": str(exc)})
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"更新报价单失败: {str(e)}"
+            detail=f"更新报价单失败: {str(exc)}"
         )
+
 
 
 @router.delete("/{quote_id}")
@@ -598,36 +607,37 @@ async def delete_quote(
                 detail="报价单不存在"
             )
 
-        # 清理对应的PDF缓存文件
-        if quote:
+        if quote and quote.pdf_cache:
             try:
-                import os
-                import hashlib
-                import glob
-
-                cache_dir = "pdf_cache"
-                # 删除所有与此报价单ID相关的缓存文件（因为可能有多个版本）
-                pattern = f"{cache_dir}/*{quote.id}*"
-                cache_files = glob.glob(pattern)
-
-                # 也按哈希查找
-                cache_key = hashlib.md5(f"{quote.id}_{quote.updated_at}".encode()).hexdigest()
-                cache_file = os.path.join(cache_dir, f"{cache_key}.pdf")
-                if os.path.exists(cache_file):
-                    cache_files.append(cache_file)
-
-                for cache_file in cache_files:
-                    if os.path.exists(cache_file):
-                        os.remove(cache_file)
-                        print(f"🗑️ 已删除PDF缓存文件: {cache_file}")
-
-                if cache_files:
-                    print(f"✅ 报价单 {quote_id} 删除完成，已清理 {len(cache_files)} 个PDF缓存文件")
-                else:
-                    print(f"📝 报价单 {quote_id} 删除完成，未找到PDF缓存文件")
-
-            except Exception as cache_error:
-                print(f"⚠️ 清理PDF缓存时出错（不影响删除操作）: {str(cache_error)}")
+                pdf_path = Path(quote.pdf_cache.pdf_path)
+                if not pdf_path.is_absolute():
+                    pdf_path = Path(pdf_path)
+                if pdf_path.exists():
+                    pdf_path.unlink()
+                parent_dir = pdf_path.parent
+                if parent_dir.exists() and not any(parent_dir.iterdir()):
+                    parent_dir.rmdir()
+                logging.getLogger("app.snapshot").info(
+                    json.dumps(
+                        {
+                            "event": "snapshot_cache_removed_on_delete",
+                            "quote_id": quote.id,
+                            "quote_number": quote.quote_number,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            except Exception as cache_error:  # pragma: no cover - 删除缓存失败不阻断删除
+                logging.getLogger("app.snapshot").warning(
+                    json.dumps(
+                        {
+                            "event": "snapshot_cache_cleanup_failed",
+                            "quote_id": quote.id if quote else quote_id,
+                            "error": str(cache_error),
+                        },
+                        ensure_ascii=False,
+                    )
+                )
 
         return {"message": "报价单删除成功"}
     except PermissionError as e:
@@ -677,7 +687,7 @@ async def restore_quote(
         )
 
 
-@router.patch("/{quote_id}/status", response_model=Quote)
+@router.patch("/{quote_id}/status", response_model=QuoteSchema)
 async def update_quote_status(
     quote_id: str,
     status_update: QuoteStatusUpdate,
@@ -688,59 +698,67 @@ async def update_quote_status(
     try:
         service = QuoteService(db)
         quote = service.update_quote_status(quote_id, status_update, current_user.id)
-        
+
         if not quote:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="报价单不存在"
             )
-        
-        return quote
-    except ValueError as e:
+
+        return _quote_to_schema(service, quote)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=str(exc)
         )
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"更新报价单状态失败: {str(e)}"
+            detail=f"更新报价单状态失败: {str(exc)}"
         )
 
 
-@router.post("/{quote_id}/submit", response_model=Quote)
+
+@router.post("/{quote_id}/submit", response_model=QuoteSchema)
 async def submit_quote_for_approval(
     quote_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """提交报价单审批"""
+    """提交报价单审批并确保PDF缓存可用"""
+    logger = logging.getLogger("app.api.quotes")
     try:
         service = QuoteService(db)
         quote = service.submit_for_approval(quote_id, current_user.id)
-        
+
         if not quote:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="报价单不存在"
             )
-        
-        # TODO: 这里将来集成企业微信审批API
-        # wecom_service = WeComApprovalService()
-        # approval_id = wecom_service.submit_approval(quote)
-        # quote.wecom_approval_id = approval_id
-        
-        return quote
-    except ValueError as e:
+
+        quote_detail = service.load_quote_with_details(quote.id) or quote
+        _schedule_pdf_refresh(
+            background_tasks,
+            quote_detail.id,
+            current_user.id,
+            False,
+            "snapshot_generation_failed_on_submit",
+        )
+        return _quote_to_schema(service, quote_detail)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=str(exc)
         )
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("submit_quote_failed", extra={"error": str(exc)})
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"提交审批失败: {str(e)}"
+            detail=f"提交审批失败: {str(exc)}"
         )
+
 
 
 @router.get("/{quote_id}/approval-records", response_model=List[ApprovalRecord])
@@ -783,65 +801,83 @@ async def get_quote_approval_records(
 async def approve_quote(
     quote_id: str,
     approval_data: dict,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """批准报价单"""
     try:
         service = QuoteService(db)
-        
-        # 检查权限 - 只有管理员可以审批
+
         if current_user.role not in ['admin', 'super_admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="无权限执行审批操作"
             )
-        
+
         quote = service.approve_quote(quote_id, current_user.id, approval_data.get('comments', '审批通过'))
-        return {"message": "报价单已批准", "quote": quote}
+        quote_detail = service.load_quote_with_details(quote.id) or quote
+        _schedule_pdf_refresh(
+            background_tasks,
+            quote_detail.id,
+            current_user.id,
+            False,
+            "snapshot_generation_failed_on_approve",
+        )
+        return {"message": "报价单已批准", "quote": _quote_to_schema(service, quote_detail)}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"批准操作失败: {str(e)}"
+            detail=f"批准操作失败: {str(exc)}"
         )
+
 
 
 @router.post("/{quote_id}/reject")
 async def reject_quote(
     quote_id: str,
     rejection_data: dict,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """拒绝报价单"""
     try:
         service = QuoteService(db)
-        
-        # 检查权限 - 只有管理员可以审批
+
         if current_user.role not in ['admin', 'super_admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="无权限执行审批操作"
             )
-        
+
         comments = rejection_data.get('comments', '')
         if not comments:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="拒绝时必须提供拒绝原因"
             )
-        
+
         quote = service.reject_quote(quote_id, current_user.id, comments)
-        return {"message": "报价单已拒绝", "quote": quote}
+        quote_detail = service.load_quote_with_details(quote.id) or quote
+        _schedule_pdf_refresh(
+            background_tasks,
+            quote_detail.id,
+            current_user.id,
+            False,
+            "snapshot_generation_failed_on_reject",
+        )
+        return {"message": "报价单已拒绝", "quote": _quote_to_schema(service, quote_detail)}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"拒绝操作失败: {str(e)}"
+            detail=f"拒绝操作失败: {str(exc)}"
         )
+
 
 
 @router.get("/{quote_id}/export/pdf")
@@ -940,161 +976,75 @@ async def get_quote_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    获取报价单PDF - 支持预览和下载
-
-    Args:
-        quote_id: 报价单ID
-        download: 是否作为下载文件返回
-        db: 数据库会话
-        current_user: 当前用户
-
-    Returns:
-        PDF文件流
-    """
+    """获取报价单PDF，优先使用前端快照缓存，必要时兜底WeasyPrint"""
+    logger = logging.getLogger("app.api.quotes")
     try:
-        from ....models import Quote, User, QuoteItem
-        from sqlalchemy.orm import selectinload
-        import uuid
-
-        # 检测quote_id类型并选择合适的查询方式
-        quote = None
-
-        # 检查是否为UUID格式
-        try:
-            uuid.UUID(quote_id)
-            # UUID格式，使用uuid字段查询
-            quote = (db.query(Quote)
-                    .options(selectinload(Quote.items), selectinload(Quote.creator))
-                    .filter(Quote.uuid == quote_id, Quote.is_deleted == False)
-                    .first())
-        except ValueError:
-            # 检查是否为纯数字（ID）
-            if quote_id.isdigit():
-                # 数字ID
-                quote = (db.query(Quote)
-                        .options(selectinload(Quote.items), selectinload(Quote.creator))
-                        .filter(Quote.id == int(quote_id), Quote.is_deleted == False)
-                        .first())
-            else:
-                # 报价单号
-                quote = (db.query(Quote)
-                        .options(selectinload(Quote.items), selectinload(Quote.creator))
-                        .filter(Quote.quote_number == quote_id, Quote.is_deleted == False)
-                        .first())
-
-        if not quote:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="报价单不存在"
-            )
-
-        # 检查访问权限
-        if (quote.created_by != current_user.id and
-            current_user.role not in ['admin', 'super_admin']):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="无权限访问此报价单"
-            )
-
-        # 导入PDF生成服务
-        from ....services.weasyprint_pdf_service import weasyprint_pdf_service
-
-        # 类型映射：英文 -> 中文
-        type_mapping = {
-            'inquiry': '询价报价',
-            'tooling': '工装夹具报价',
-            'engineering': '工程机时报价',
-            'mass_production': '量产机时报价',
-            'process': '量产工序报价',
-            'comprehensive': '综合报价'
-        }
-
-        # 解析前端传递的列配置
         column_configs = None
         if columns:
             try:
                 column_configs = json.loads(columns)
-                print(f"📊 收到前端列配置: {column_configs}")
             except json.JSONDecodeError:
-                print(f"⚠️ 列配置JSON解析失败，使用默认配置")
+                logger.warning("invalid_column_config", extra={"quote_identifier": quote_id})
 
-        # 准备报价单数据
-        quote_dict = {
-            'quote_number': quote.quote_number,
-            'customer': quote.customer_name,
-            'type': type_mapping.get(quote.quote_type, quote.quote_type),  # 转换为中文类型
-            'currency': quote.currency or 'RMB',
-            'createdBy': current_user.name,
-            'createdAt': quote.created_at.strftime('%Y-%m-%d %H:%M:%S') if quote.created_at else '',
-            'updatedAt': quote.updated_at.strftime('%Y-%m-%d %H:%M:%S') if quote.updated_at else '',
-            'validUntil': quote.valid_until.strftime('%Y-%m-%d') if quote.valid_until else '',
-            'items': [
-                {
-                    'machineType': item.machine_type,
-                    'machineModel': item.machine_model,
-                    'itemName': getattr(item, 'item_name', ''),
-                    'itemDescription': item.item_description,
-                    'quantity': float(item.quantity),
-                    'unit': getattr(item, 'unit', ''),
-                    'unitPrice': float(item.unit_price),
-                    'totalPrice': float(item.total_price)
-                }
-                for item in quote.items
-            ],
-            'columnConfigs': column_configs  # 传递列配置给PDF服务
-        }
-
-        # PDF缓存机制
-        import os
-        import hashlib
-        cache_dir = "pdf_cache"
-        os.makedirs(cache_dir, exist_ok=True)
-
-        # 基于报价单数据生成缓存key
-        cache_key = hashlib.md5(f"{quote.id}_{quote.updated_at}".encode()).hexdigest()
-        cache_file = os.path.join(cache_dir, f"{cache_key}.pdf")
-
-        # 检查缓存文件是否存在
-        if os.path.exists(cache_file):
-            print(f"📄 使用缓存PDF: {cache_file}")
-            with open(cache_file, 'rb') as f:
-                pdf_data = f.read()
-        else:
-            print(f"📝 生成新PDF并缓存: {cache_file}")
-            # 生成PDF
-            pdf_data = weasyprint_pdf_service.generate_quote_pdf(quote_dict)
-            # 保存到缓存
-            with open(cache_file, 'wb') as f:
-                f.write(pdf_data)
-
-        # 生成文件名 - 避免中文编码问题
-        from urllib.parse import quote as url_quote
-        filename = f"{quote.quote_number}_quote.pdf"
-        filename_encoded = url_quote(f"{quote.quote_number}_报价单.pdf")
-
-        # 设置响应头
-        headers = {
-            "Content-Type": "application/pdf",
-            "Content-Length": str(len(pdf_data))
-        }
-
-        if download:
-            headers["Content-Disposition"] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename_encoded}'
-        else:
-            headers["Content-Disposition"] = f'inline; filename="{filename}"; filename*=UTF-8\'\'{filename_encoded}'
-
-        from fastapi.responses import Response
-        return Response(
-            content=pdf_data,
-            media_type="application/pdf",
-            headers=headers
+        base_query = db.query(QuoteModel).options(
+            selectinload(QuoteModel.items),
+            selectinload(QuoteModel.creator),
+            selectinload(QuoteModel.pdf_cache),
         )
 
+        quote = None
+        # 简单判断是否为数字ID或UUID
+        if quote_id.isdigit():
+            quote = base_query.filter(QuoteModel.id == int(quote_id), QuoteModel.is_deleted == False).first()
+        else:
+            from uuid import UUID
+            try:
+                UUID(quote_id)
+                quote = base_query.filter(QuoteModel.uuid == quote_id, QuoteModel.is_deleted == False).first()
+            except (ValueError, AttributeError):
+                quote = base_query.filter(QuoteModel.quote_number == quote_id, QuoteModel.is_deleted == False).first()
+
+        if not quote:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报价单不存在")
+
+        if (quote.created_by != current_user.id and current_user.role not in ['admin', 'super_admin']):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限访问此报价单")
+
+        service = QuoteService(db)
+        cache = await asyncio.to_thread(
+            service.ensure_pdf_cache, quote, current_user, False, column_configs
+        )
+        pdf_path = Path(cache.pdf_path)
+        if not pdf_path.is_absolute():
+            pdf_path = Path(pdf_path)
+        if not pdf_path.exists():
+            cache = await asyncio.to_thread(
+                service.ensure_pdf_cache, quote, current_user, True, column_configs
+            )
+            pdf_path = Path(cache.pdf_path)
+
+        if not pdf_path.exists():
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="PDF文件生成失败")
+
+        filename = f"{quote.quote_number}_quote.pdf"
+        disposition = "attachment" if download else "inline"
+        from urllib.parse import quote as url_quote
+        encoded = url_quote(f"{quote.quote_number}_报价单.pdf")
+        headers = {
+            "Content-Disposition": f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
+        }
+
+        return FileResponse(
+            path=str(pdf_path),
+            media_type="application/pdf",
+            filename=filename,
+            headers=headers,
+        )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:  # pragma: no cover
+        logger.exception("get_quote_pdf_failed", extra={"error": str(exc), "quote_id": quote_id})
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"PDF生成失败: {str(e)}"
+            detail=f"PDF生成失败: {str(exc)}"
         )

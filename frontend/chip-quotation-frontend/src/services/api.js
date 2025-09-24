@@ -3,7 +3,7 @@ import axios from 'axios';
 // 创建axios实例
 const api = axios.create({
   baseURL: '/api/v1',
-  timeout: 10000,
+  timeout: 60000,
   withCredentials: true,
 });
 
@@ -15,15 +15,22 @@ api.interceptors.request.use(
     
     // 从URL参数或localStorage获取JWT token
     const urlParams = new URLSearchParams(window.location.search);
+    const snapshotTokenFromUrl = urlParams.get('__snapshot_token');
+    const snapshotTokenStored = sessionStorage.getItem('__snapshot_token');
     const jwtFromUrl = urlParams.get('jwt');
-    
-    if (jwtFromUrl) {
-      // 如果URL中有JWT，保存到localStorage并使用
+
+    if (snapshotTokenFromUrl) {
+      sessionStorage.setItem('__snapshot_token', snapshotTokenFromUrl);
+      config.headers.Authorization = `Bearer ${snapshotTokenFromUrl}`;
+      console.log('Using snapshot token from URL');
+    } else if (snapshotTokenStored) {
+      config.headers.Authorization = `Bearer ${snapshotTokenStored}`;
+      console.log('Using snapshot token from sessionStorage');
+    } else if (jwtFromUrl) {
       localStorage.setItem('jwt_token', jwtFromUrl);
       config.headers.Authorization = `Bearer ${jwtFromUrl}`;
       console.log('Using JWT from URL');
     } else {
-      // 否则从localStorage获取
       const storedJwt = localStorage.getItem('jwt_token');
       if (storedJwt) {
         config.headers.Authorization = `Bearer ${storedJwt}`;
@@ -79,6 +86,9 @@ api.interceptors.response.use(
         default:
           errorMessage = `请求失败 (${error.response.status})`;
       }
+    } else if (error.code === 'ECONNABORTED') {
+      console.error('API Timeout:', error.message);
+      errorMessage = '请求超时，请稍后重试';
     } else if (error.request) {
       // 请求已发出但没有收到响应
       console.error('Network Error (No Response):', error.request);
