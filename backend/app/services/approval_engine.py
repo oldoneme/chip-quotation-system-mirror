@@ -999,8 +999,8 @@ class UnifiedApprovalEngine:
 
     def _get_quote_detail_url(self, quote_number: str) -> str:
         """获取报价单详情URL"""
-        base_url = getattr(self.wecom_integration, 'callback_url', 'http://localhost:3000')
-        return f"{base_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote_number}"
+        base_url = getattr(self.wecom_integration, 'base_url', 'http://localhost:3000').rstrip('/')
+        return f"{base_url}/quote-detail/{quote_number}"
 
     async def _send_wecom_notification_task(self, quote_id: int, recipient_userid: str, notification_type: str):
         """异步发送企业微信通知任务"""

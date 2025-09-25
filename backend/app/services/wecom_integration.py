@@ -35,8 +35,8 @@ class WeComApprovalIntegration:
         self.agent_id = settings.WECOM_AGENT_ID
         self.secret = settings.WECOM_SECRET
         self.approval_template_id = settings.WECOM_APPROVAL_TEMPLATE_ID
-        self.callback_url = settings.WECOM_CALLBACK_URL
-        self.base_url = settings.WECOM_BASE_URL
+        self.callback_url = settings.WECOM_CALLBACK_URL.rstrip('/')
+        self.base_url = settings.WECOM_BASE_URL.rstrip('/')
         self.callback_token = settings.WECOM_CALLBACK_TOKEN
         self.encoding_aes_key = settings.WECOM_ENCODING_AES_KEY
         self._access_token = None
@@ -253,7 +253,17 @@ class WeComApprovalIntegration:
         
         # 保存审批实例映射（用于回调时查找）- 在SQLAlchemy提交后进行
         import sqlite3
-        conn = sqlite3.connect('app/test.db')
+        from sqlalchemy.engine.url import make_url
+
+        db_url = make_url(settings.DATABASE_URL)
+        db_path = db_url.database if db_url.drivername.startswith('sqlite') else None
+        if db_path and not os.path.isabs(db_path):
+            db_path = os.path.join(os.getcwd(), db_path)
+
+        if not db_path:
+            raise HTTPException(status_code=500, detail="仅支持SQLite数据库的审批实例映射存储")
+
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         try:
             cursor.execute("""
@@ -565,7 +575,7 @@ class WeComApprovalIntegration:
                 wecom_info = f"\n📱 企业微信审批单: {quote.wecom_approval_id}"
 
             # 构建详细的状态更新消息
-            detail_link = f"{self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}"
+            detail_link = f"{self.base_url}/quote-detail/{quote.quote_number}"
 
             title = f"🔔 审批状态更新通知"
             content = f"""
@@ -674,7 +684,7 @@ class WeComApprovalIntegration:
 • 企业微信通知仅作为流程辅助工具
 • 如有疑问，请咨询管理员
 
-💻 查看准确状态: {self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}"""
+💻 查看准确状态: {self.base_url}/quote-detail/{quote.quote_number}"""
 
             # 发送企业微信消息
             message_data = {
@@ -684,7 +694,7 @@ class WeComApprovalIntegration:
                 "textcard": {
                     "title": title,
                     "description": content,
-                    "url": f"{self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}",
+                    "url": f"{self.base_url}/quote-detail/{quote.quote_number}",
                     "btntxt": "查看详情"
                 }
             }

@@ -24,7 +24,8 @@ class WeComOAuth:
         self.corp_id = settings.WECOM_CORP_ID
         self.agent_id = str(settings.WECOM_AGENT_ID) if settings.WECOM_AGENT_ID is not None else ""
         self.corp_secret = settings.WECOM_CORP_SECRET or settings.WECOM_SECRET
-        self.redirect_uri = settings.WECOM_CALLBACK_URL.rstrip("/") + "/auth/callback"
+        self.redirect_base = settings.WECOM_BASE_URL.rstrip("/")
+        self.redirect_uri = f"{self.redirect_base}/auth/callback"
         
         # API端点
         self.token_url = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
