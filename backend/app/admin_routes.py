@@ -702,21 +702,14 @@ async def sync_wecom_users(admin_info: dict = Depends(require_admin_auth), db: S
         # 获取企业微信所有用户
         wecom_users = wecom.get_all_users()
         
-        # 如果无法从企业微信获取，使用已登录用户的信息
+        # 如果无法从企业微信获取，记录错误并提示用户
         if not wecom_users:
-            # 获取所有已登录过的用户（有last_login记录的）
-            existing_users = db.query(User).filter(User.last_login != None).all()
-            if existing_users:
-                message = f"企业微信通讯录权限未开启，当前显示{len(existing_users)}个已登录用户"
-                return {
-                    "success": True,
-                    "message": message,
-                    "total": len(existing_users),
-                    "new": 0,
-                    "updated": 0
-                }
-            else:
-                return {"success": False, "message": "企业微信通讯录权限未开启，请在管理后台配置", "synced": 0}
+            logger.error("企业微信通讯录权限未开启或corp_secret错误，无法获取用户列表")
+            return {
+                "success": False,
+                "message": "企业微信通讯录权限未开启或凭证配置错误，请在管理后台检查权限/密钥",
+                "synced": 0
+            }
         
         synced_count = 0
         updated_count = 0
