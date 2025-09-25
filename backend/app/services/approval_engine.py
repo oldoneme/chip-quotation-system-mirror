@@ -625,14 +625,14 @@ class UnifiedApprovalEngine:
                 self.logger.error(f"未找到对应的报价单: wecom_approval_id={sp_no}")
                 return False
 
-            # 检查当前状态
-            current_status = ApprovalStatus(quote.approval_status)
-
             # 刷新状态避免使用脏数据
             try:
                 self.db.refresh(quote)
             except Exception:
                 pass
+
+            # 检查当前状态
+            current_status = ApprovalStatus(quote.approval_status)
 
             # 如果状态已是目标状态，直接认定成功
             if quote.approval_status == new_status:

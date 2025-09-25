@@ -409,6 +409,7 @@ class WeComApprovalIntegration:
         # 如果存在PDF缓存，追加发送文件消息
         pdf_media_id = None
         try:
+            self.db.refresh(quote)
             pdf_path = None
             cache = getattr(quote, 'pdf_cache', None)
             if cache and cache.pdf_path:
@@ -418,7 +419,12 @@ class WeComApprovalIntegration:
                 if not os.path.isabs(pdf_path):
                     pdf_path = os.path.join(os.getcwd(), pdf_path)
                 if os.path.exists(pdf_path):
+                    self.logger.info(f"上传报价单PDF附件: {pdf_path}")
                     pdf_media_id = await self.upload_file_path(pdf_path)
+                else:
+                    self.logger.warning(f"报价单PDF文件不存在: {pdf_path}")
+            else:
+                self.logger.info("未找到报价单PDF缓存，跳过附件发送")
 
             if pdf_media_id:
                 file_message = {
