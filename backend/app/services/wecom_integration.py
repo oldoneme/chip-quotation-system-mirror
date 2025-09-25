@@ -32,6 +32,7 @@ class WeComApprovalIntegration:
     
     def __init__(self, db: Session):
         self.db = db
+        self.logger = logging.getLogger(__name__)
         self.corp_id = settings.WECOM_CORP_ID
         self.agent_id = settings.WECOM_AGENT_ID
         self.secret = settings.WECOM_SECRET
