@@ -7,9 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, List
 from datetime import datetime
+from pathlib import Path
 
 from ....database import get_db
 from ....services.wecom_integration import WeComApprovalIntegration
+from ....services.quote_service import QuoteService
 from ....auth import get_current_user
 from ....models import User, Quote
 
@@ -71,7 +73,40 @@ async def submit_quote_for_approval(
     
     # 初始化企业微信服务
     wecom_service = WeComApprovalIntegration(db)
-    
+    quote_service = QuoteService(db)
+
+    # 确保审批所需PDF已经就绪
+    acting_user = quote.creator
+    if not acting_user and quote.created_by:
+        acting_user = db.query(User).filter(User.id == quote.created_by).first()
+    if not acting_user:
+        acting_user = current_user
+    if not acting_user:
+        acting_user = (
+            db.query(User)
+            .filter(User.role.in_(['admin', 'super_admin']))
+            .order_by(User.id.asc())
+            .first()
+        )
+
+    if not acting_user:
+        raise HTTPException(status_code=500, detail="无法确认报价创建用户，暂不能提交审批")
+
+    try:
+        cache = quote_service.ensure_pdf_cache(quote, acting_user)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"生成PDF报价单失败，请稍后重试: {exc}")
+
+    pdf_ready = False
+    if cache and cache.pdf_path:
+        pdf_path = Path(cache.pdf_path)
+        if not pdf_path.is_absolute():
+            pdf_path = Path.cwd() / pdf_path
+        pdf_ready = pdf_path.exists() and pdf_path.stat().st_size > 0
+
+    if not pdf_ready:
+        raise HTTPException(status_code=409, detail="PDF报价单生成中，请稍后再试")
+
     try:
         # 提交企业微信审批
         result = await wecom_service.submit_quote_approval(quote_id)
