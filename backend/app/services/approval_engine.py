@@ -628,6 +628,12 @@ class UnifiedApprovalEngine:
             # 检查当前状态
             current_status = ApprovalStatus(quote.approval_status)
 
+            # 刷新状态避免使用脏数据
+            try:
+                self.db.refresh(quote)
+            except Exception:
+                pass
+
             # 如果状态已是目标状态，直接认定成功
             if quote.approval_status == new_status:
                 self.logger.info(f"报价单 {quote.id} 状态已是 {new_status}，无需更新")

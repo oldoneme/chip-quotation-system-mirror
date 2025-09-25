@@ -324,6 +324,10 @@ def upsert_pdf_cache(
     payload: Dict[str, Any],
 ) -> QuotePDFCache:
     cache = quote.pdf_cache
+
+    if cache is None:
+        cache = db_session.query(QuotePDFCache).filter(QuotePDFCache.quote_id == quote.id).first()
+
     if cache is None:
         cache = QuotePDFCache(
             quote_id=quote.id,
