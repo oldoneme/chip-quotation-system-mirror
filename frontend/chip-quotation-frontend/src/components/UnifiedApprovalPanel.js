@@ -231,6 +231,7 @@ const UnifiedApprovalPanel = ({
 
     const hasWeComApproval = approvalStatus.wecom_approval_id;
     const syncRequired = approvalStatus.sync_required || false;
+    const actionDisabledReason = permissions.reason;
 
     return (
       <div style={{ marginBottom: 16 }}>
@@ -241,11 +242,21 @@ const UnifiedApprovalPanel = ({
           message="当前审批方式: 统一审批"
           description={
             hasWeComApproval
-              ? `此报价单已创建企业微信审批 (ID: ${approvalStatus.wecom_approval_id})，支持内部和企业微信双渠道操作`
-              : '此报价单使用统一审批流程，支持内部和企业微信双渠道操作'
+              ? `此报价单已创建企业微信审批 (ID: ${approvalStatus.wecom_approval_id})，请在企业微信客户端完成审批操作，系统会同步状态`
+              : '此报价单将通过企业微信流程处理，内部审批入口已关闭，请在企业微信完成操作'
           }
           style={{ marginBottom: syncRequired ? 8 : 0 }}
         />
+
+        {actionDisabledReason && (
+          <Alert
+            type="warning"
+            showIcon
+            message="内部审批按钮不可用"
+            description={actionDisabledReason}
+            style={{ marginTop: 8 }}
+          />
+        )}
 
         {/* 同步状态信息 */}
         {syncRequired && (
