@@ -94,9 +94,12 @@ class Settings(BaseSettings):
     WECOM_CALLBACK_URL: str = os.getenv("WECOM_CALLBACK_URL", get_default_frontend_url())
     WECOM_BASE_URL: str = os.getenv("WECOM_BASE_URL", get_default_frontend_url())
     API_BASE_URL: str = os.getenv("API_BASE_URL", get_default_api_url())
+    WECOM_CORP_SECRET: str = os.getenv("WECOM_CORP_SECRET", "")
     
     # 前端基础URL（用于审批链接）
     FRONTEND_BASE_URL: str = os.getenv("FRONTEND_BASE_URL", get_default_frontend_url())
+    SNAPSHOT_BROWSER_POOL: int = int(os.getenv("SNAPSHOT_BROWSER_POOL", "2"))
+    SNAPSHOT_READY_SELECTOR: str = os.getenv("SNAPSHOT_READY_SELECTOR", "#quote-ready")
     
     # 审批链接配置
     APPROVAL_LINK_EXPIRE_DAYS: int = 7  # 审批链接有效期（天）

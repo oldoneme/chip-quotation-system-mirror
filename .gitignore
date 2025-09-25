@@ -159,3 +159,8 @@ node_modules/
 *.png
 *.jpeg
 chip-quotation-core.tar.gz
+
+# Generated media
+backend/pdf_cache/
+backend/media/
+media/

@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
+import api from '../services/api';
 import ApprovalApiService from '../services/approvalApi';
 import UnifiedApprovalPanel from '../components/UnifiedApprovalPanel';
 import ApprovalHistory from '../components/ApprovalHistory';
@@ -40,6 +41,11 @@ const QuoteDetail = () => {
     return searchParams.get('jwt');
   }, [location.search]);
 
+  const snapshotToken = useMemo(() => {
+    const searchParams = new URLSearchParams(location.search);
+    return searchParams.get('__snapshot_token');
+  }, [location.search]);
+
   // 检测移动端
   useEffect(() => {
     const checkIsMobile = () => {
@@ -55,17 +61,35 @@ const QuoteDetail = () => {
   useEffect(() => {
     (async () => {
       try {
-        // 1) 如果有JWT，先存起来并清理URL（防止反复触发）
+        // 1) 处理一次性鉴权token（JWT 或 __snapshot_token），并清理URL
+        const searchParams = new URLSearchParams(location.search);
+        let urlMutated = false;
+
         if (urlJwt) {
           console.log('🔑 发现URL中的JWT，正在保存...');
           localStorage.setItem('jwt_token', urlJwt);
-          
-          // 清理地址栏中的jwt参数
-          const searchParams = new URLSearchParams(location.search);
           searchParams.delete('jwt');
+          urlMutated = true;
+        }
+
+        if (snapshotToken) {
+          console.log('🪟 发现前端快照token，写入Cookie与请求头');
+          document.cookie = `auth_token=${snapshotToken}; path=/; SameSite=Lax`;
+          api.defaults.headers.common['Authorization'] = `Bearer ${snapshotToken}`;
+          sessionStorage.setItem('__snapshot_token', snapshotToken);
+          searchParams.delete('__snapshot_token');
+          urlMutated = true;
+        } else {
+          const storedSnapshot = sessionStorage.getItem('__snapshot_token');
+          if (storedSnapshot) {
+            api.defaults.headers.common['Authorization'] = `Bearer ${storedSnapshot}`;
+          }
+        }
+
+        if (urlMutated) {
           const cleanUrl = `${location.pathname}${searchParams.toString() ? `?${searchParams}` : ''}`;
           window.history.replaceState({}, '', cleanUrl);
-          console.log('✅ JWT已保存，URL已清理');
+          console.log('✅ 鉴权参数已处理，URL已清理');
         }
 
         // 2) 先探测登录状态（可选但推荐）
@@ -1514,6 +1538,8 @@ const QuoteDetail = () => {
           quote_type: quote?.type
         }}
       />
+
+      <div id="quote-ready" style={{ display: "none" }} />
 
     </div>
   );

@@ -43,6 +43,8 @@ PUBLIC_DIR = pathlib.Path(os.path.join(os.path.dirname(__file__), "..", "static"
 INDEX_FILE = PUBLIC_DIR / "index.html"
 WEWORK_UA_KEYS = ("wxwork", "wecom")
 VERSION_PREFIX = f"/v/{APP_VERSION}"
+MEDIA_DIR = pathlib.Path(os.path.join(os.path.dirname(__file__), "..", "media")).resolve()
+MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 def is_wework(req) -> bool:
     """检测是否是企业微信 WebView"""
@@ -266,6 +268,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
 
 @app.get("/dashboard")
 async def dashboard():

@@ -32,3 +32,16 @@ jest.mock('antd/lib/_util/responsiveObserver', () => ({
   responsiveArray: ['xxl', 'xl', 'lg', 'md', 'sm', 'xs'],
   matchScreen: () => undefined,
 }));
+
+const sessionStorageMock = (() => {
+  let store = {};
+  return {
+    getItem: (key) => store[key] || null,
+    setItem: (key, value) => { store[key] = value?.toString() ?? ''; },
+    removeItem: (key) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+})();
+Object.defineProperty(window, 'sessionStorage', {
+  value: sessionStorageMock,
+});

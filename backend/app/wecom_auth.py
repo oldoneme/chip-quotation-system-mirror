@@ -11,6 +11,8 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
+from .config import settings
+
 from .models import User, UserSession, Department
 from .auth_schemas import WeComUserInfo, UserCreate, UserResponse
 
@@ -19,10 +21,10 @@ class WeComOAuth:
     """企业微信OAuth认证类"""
     
     def __init__(self):
-        self.corp_id = os.getenv("WECOM_CORP_ID", "")
-        self.agent_id = os.getenv("WECOM_AGENT_ID", "")
-        self.corp_secret = os.getenv("WECOM_CORP_SECRET", "")
-        self.redirect_uri = "https://wecom-dev.chipinfos.com.cn/auth/callback"
+        self.corp_id = settings.WECOM_CORP_ID
+        self.agent_id = str(settings.WECOM_AGENT_ID) if settings.WECOM_AGENT_ID is not None else ""
+        self.corp_secret = settings.WECOM_CORP_SECRET or settings.WECOM_SECRET
+        self.redirect_uri = settings.WECOM_CALLBACK_URL.rstrip("/") + "/auth/callback"
         
         # API端点
         self.token_url = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
