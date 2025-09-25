@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from ..models import Quote, ApprovalRecord, User
 from ..database import get_db
 from ..config import settings
+from .quote_service import QuoteService
 
 
 class WeComApprovalIntegration:
@@ -409,6 +410,24 @@ class WeComApprovalIntegration:
         # 如果存在PDF缓存，追加发送文件消息
         pdf_media_id = None
         try:
+            acting_user = None
+            if quote.created_by:
+                acting_user = self.db.query(User).filter(User.id == quote.created_by).first()
+
+            if acting_user is None:
+                acting_user = (
+                    self.db.query(User)
+                    .filter(User.role.in_(['admin', 'super_admin']))
+                    .order_by(User.id.asc())
+                    .first()
+                )
+
+            if acting_user:
+                try:
+                    QuoteService(self.db).ensure_pdf_cache(quote, acting_user)
+                except Exception as ensure_exc:
+                    self.logger.error(f"确保PDF缓存失败: {ensure_exc}")
+
             self.db.refresh(quote)
             pdf_path = None
             cache = getattr(quote, 'pdf_cache', None)
