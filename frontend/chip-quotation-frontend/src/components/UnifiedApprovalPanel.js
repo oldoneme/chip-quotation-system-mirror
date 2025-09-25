@@ -28,7 +28,6 @@ import {
   EditOutlined,
   ClockCircleOutlined,
   SendOutlined,
-  InfoCircleOutlined,
   ExclamationCircleOutlined,
   RollbackOutlined
 } from '@ant-design/icons';
@@ -229,54 +228,30 @@ const UnifiedApprovalPanel = ({
       return null;
     }
 
-    const hasWeComApproval = approvalStatus.wecom_approval_id;
     const syncRequired = approvalStatus.sync_required || false;
-    const actionDisabledReason = permissions.reason;
+
+    if (!syncRequired && !approvalStatus.operation_id) {
+      return null;
+    }
 
     return (
       <div style={{ marginBottom: 16 }}>
-        {/* 审批方式信息 */}
-        <Alert
-          type="info"
-          showIcon
-          message="当前审批方式: 统一审批"
-          description={
-            hasWeComApproval
-              ? `此报价单已创建企业微信审批 (ID: ${approvalStatus.wecom_approval_id})，请在企业微信客户端完成审批操作，系统会同步状态`
-              : '此报价单将通过企业微信流程处理，内部审批入口已关闭，请在企业微信完成操作'
-          }
-          style={{ marginBottom: syncRequired ? 8 : 0 }}
-        />
-
-        {actionDisabledReason && (
-          <Alert
-            type="warning"
-            showIcon
-            message="内部审批按钮不可用"
-            description={actionDisabledReason}
-            style={{ marginTop: 8 }}
-          />
-        )}
-
-        {/* 同步状态信息 */}
         {syncRequired && (
           <Alert
             type="warning"
             showIcon
             message="同步状态"
             description="检测到状态变化，正在同步到企业微信审批系统..."
-            style={{ marginTop: 8 }}
+            style={{ marginBottom: 8 }}
           />
         )}
 
-        {/* 操作成功提示 */}
         {approvalStatus.operation_id && (
           <Alert
             type="success"
             showIcon
             message="操作已完成"
             description={`操作ID: ${approvalStatus.operation_id}`}
-            style={{ marginTop: 8 }}
             closable
           />
         )}
@@ -404,12 +379,7 @@ const UnifiedApprovalPanel = ({
   return (
     <div>
       <Card
-        title={
-          <Space>
-            <InfoCircleOutlined />
-            统一审批面板
-          </Space>
-        }
+        title="审批状态"
         extra={renderActionButtons()}
         loading={!approvalStatus}
       >
