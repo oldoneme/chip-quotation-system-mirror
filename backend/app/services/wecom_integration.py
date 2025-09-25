@@ -141,7 +141,7 @@ class WeComApprovalIntegration:
     async def upload_temp_file(self, content: str, filename: str = "quote_detail.txt") -> str:
         """上传临时文件到企业微信获取media_id"""
         access_token = await self.get_access_token()
-        
+
         url = f"https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={access_token}&type=file"
         
         files = {
@@ -157,6 +157,30 @@ class WeComApprovalIntegration:
             )
             
         return result["media_id"]
+
+    async def upload_file_path(self, file_path: str, mime_type: str = "application/pdf") -> Optional[str]:
+        """上传本地文件到企业微信，返回 media_id"""
+        if not file_path or not os.path.exists(file_path):
+            return None
+
+        access_token = await self.get_access_token()
+        url = f"https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={access_token}&type=file"
+
+        try:
+            with open(file_path, "rb") as f:
+                files = {
+                    'media': (os.path.basename(file_path), f, mime_type)
+                }
+                result = await self._retry_request("POST", url, files=files)
+        except Exception as exc:
+            self.logger.error(f"上传文件失败 {file_path}: {exc}")
+            return None
+
+        if result.get("errcode") != 0:
+            self.logger.error(f"企业微信文件上传失败: {result}")
+            return None
+
+        return result.get("media_id")
     
     async def submit_quote_approval(self, quote_id, approver_userid: str = None, creator_userid: str = None) -> Dict:
         """
@@ -374,13 +398,40 @@ class WeComApprovalIntegration:
                 "btntxt": msg_content["btntxt"]
             }
         }
-        
+
         # 发送消息
         url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}"
-        
+
         result = await self._retry_request("POST", url, json=message_data)
-            
-        return result.get("errcode") == 0
+
+        success = result.get("errcode") == 0
+
+        # 如果存在PDF缓存，追加发送文件消息
+        pdf_media_id = None
+        try:
+            pdf_path = None
+            cache = getattr(quote, 'pdf_cache', None)
+            if cache and cache.pdf_path:
+                pdf_path = cache.pdf_path
+
+            if pdf_path:
+                if not os.path.isabs(pdf_path):
+                    pdf_path = os.path.join(os.getcwd(), pdf_path)
+                if os.path.exists(pdf_path):
+                    pdf_media_id = await self.upload_file_path(pdf_path)
+
+            if pdf_media_id:
+                file_message = {
+                    "touser": approver_userid,
+                    "msgtype": "file",
+                    "agentid": self.agent_id,
+                    "file": {"media_id": pdf_media_id}
+                }
+                await self._retry_request("POST", url, json=file_message)
+        except Exception as exc:
+            self.logger.error(f"发送PDF附件失败: {exc}")
+
+        return success
     
     async def handle_approval_callback(self, callback_data: Dict) -> bool:
         """

@@ -628,8 +628,12 @@ class UnifiedApprovalEngine:
             # 检查当前状态
             current_status = ApprovalStatus(quote.approval_status)
 
-            # 🎯 关键修复：无论状态是否相同，都要检查是否为最终状态
-            # 如果是最终状态，需要告知用户"审批已完成，操作无效"
+            # 如果状态已是目标状态，直接认定成功
+            if quote.approval_status == new_status:
+                self.logger.info(f"报价单 {quote.id} 状态已是 {new_status}，无需更新")
+                return True
+
+            # 🎯 若当前已经处于其他最终状态，拒绝重复更新
             final_statuses = {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED}
             if current_status in final_statuses:
                 self.logger.warning(
@@ -652,11 +656,6 @@ class UnifiedApprovalEngine:
                     self.logger.error(f"发送审批完成通知失败: {e}")
 
                 return False
-
-            # 检查状态是否需要更新（仅针对非最终状态）
-            if quote.approval_status == new_status:
-                self.logger.info(f"报价单 {quote.id} 状态已是 {new_status}，无需更新")
-                return True
 
             # 获取操作人ID（企业微信操作人映射到内部用户）
             operator_id = self._get_or_create_wecom_user(operator_info or {})
