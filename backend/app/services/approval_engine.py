@@ -765,6 +765,11 @@ class UnifiedApprovalEngine:
                             fresh_quote.approval_method = 'wecom'  # 标记为企业微信审批
                             self.db.commit()
                             self.logger.info(f"已保存企业微信审批ID: {result['sp_no']} 到报价单 {quote_id}")
+
+                            if creator_userid:
+                                self._trigger_wecom_notification_async(quote_id, "pending", creator_userid)
+                            else:
+                                self.logger.warning(f"报价单 {quote_id} 创建者缺少企业微信ID，无法发送待审批通知")
                         else:
                             self.logger.error(f"无法找到报价单 {quote_id} 来保存企业微信审批ID")
                     else:
