@@ -184,6 +184,42 @@ class WeComApprovalIntegration:
             return None
 
         return result.get("media_id")
+
+    async def _prepare_pdf_media_id(self, quote: Quote) -> Optional[str]:
+        """确保生成PDF并上传获取媒体ID"""
+        acting_user = quote.creator
+        if not acting_user and quote.created_by:
+            acting_user = self.db.query(User).filter(User.id == quote.created_by).first()
+
+        if not acting_user:
+            acting_user = (
+                self.db.query(User)
+                .filter(User.role.in_(['admin', 'super_admin']))
+                .order_by(User.id.asc())
+                .first()
+            )
+
+        if acting_user:
+            try:
+                QuoteService(self.db).ensure_pdf_cache(quote, acting_user)
+                self.db.refresh(quote)
+            except Exception as exc:
+                self.logger.error(f"确保PDF缓存失败: {exc}")
+        else:
+            self.logger.warning(f"报价单 {quote.id} 缺少acting_user，无法生成PDF缓存")
+
+        cache = getattr(quote, 'pdf_cache', None)
+        if cache and cache.pdf_path:
+            pdf_path = cache.pdf_path
+            if not os.path.isabs(pdf_path):
+                pdf_path = os.path.join(os.getcwd(), pdf_path)
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                self.logger.info(f"上传报价单PDF附件: {pdf_path}")
+                return await self.upload_file_path(pdf_path, mime_type="application/pdf")
+            self.logger.warning(f"报价单PDF文件不存在或为空: {pdf_path}")
+        else:
+            self.logger.info(f"报价单 {quote.id} 未找到PDF缓存，跳过附件生成")
+        return None
     
     async def submit_quote_approval(self, quote_id, approver_userid: str = None, creator_userid: str = None) -> Dict:
         """
@@ -219,12 +255,13 @@ class WeComApprovalIntegration:
         
         # 构建简洁的描述信息（由于Text字段长度限制）
         total_amount = quote.total_amount or 0.0
-        description_with_link = f"{quote.description or ''}。💰总金额¥{total_amount:.2f}。📋详情链接见附件"
+        description_with_link = f"{quote.description or ''}。💰总金额¥{total_amount:.2f}。📎PDF附件见下方"
         
         # 创建简洁的链接文件
         link_file_content = f"报价单详情链接：\n{detail_link}\n\n点击上方链接查看详情"
         media_id = await self.upload_temp_file(link_file_content, f"{quote.quote_number}_链接.txt")
-        
+        pdf_media_id = await self._prepare_pdf_media_id(quote)
+
         # 构建审批申请数据 - 使用真实的模板字段ID
         # 如果没有传入creator_userid，尝试从报价单获取，但避免使用lazy-loaded关系
         if not creator_userid:
@@ -244,7 +281,15 @@ class WeComApprovalIntegration:
                     {"control": "Text", "id": "Text-1756706001498", "value": {"text": quote.customer_name}},
                     {"control": "Text", "id": "Text-1756706160253", "value": {"text": description_with_link}},
                     {"control": "Text", "id": "Text-1756897248857", "value": {"text": detail_link}},
-                    {"control": "File", "id": "File-1756709748491", "value": {"files": []}}
+                    {
+                        "control": "File",
+                        "id": "File-1756709748491",
+                        "value": {
+                            "files": (
+                                [{"file_id": pdf_media_id}] if pdf_media_id else []
+                            )
+                        }
+                    }
                 ]
             }
         }
