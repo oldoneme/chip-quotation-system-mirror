@@ -187,8 +187,8 @@ class WeComApprovalIntegration:
 
     async def _prepare_pdf_media_id(self, quote: Quote) -> Optional[str]:
         """确保生成PDF并上传获取媒体ID"""
-        acting_user = quote.creator
-        if not acting_user and quote.created_by:
+        acting_user = None
+        if quote.created_by:
             acting_user = self.db.query(User).filter(User.id == quote.created_by).first()
 
         if not acting_user:
