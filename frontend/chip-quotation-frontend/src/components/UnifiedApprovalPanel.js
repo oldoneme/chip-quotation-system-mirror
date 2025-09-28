@@ -28,7 +28,6 @@ import {
   EditOutlined,
   ClockCircleOutlined,
   SendOutlined,
-  InfoCircleOutlined,
   ExclamationCircleOutlined,
   RollbackOutlined
 } from '@ant-design/icons';
@@ -229,43 +228,30 @@ const UnifiedApprovalPanel = ({
       return null;
     }
 
-    const hasWeComApproval = approvalStatus.wecom_approval_id;
     const syncRequired = approvalStatus.sync_required || false;
+
+    if (!syncRequired && !approvalStatus.operation_id) {
+      return null;
+    }
 
     return (
       <div style={{ marginBottom: 16 }}>
-        {/* 审批方式信息 */}
-        <Alert
-          type="info"
-          showIcon
-          message="当前审批方式: 统一审批"
-          description={
-            hasWeComApproval
-              ? `此报价单已创建企业微信审批 (ID: ${approvalStatus.wecom_approval_id})，支持内部和企业微信双渠道操作`
-              : '此报价单使用统一审批流程，支持内部和企业微信双渠道操作'
-          }
-          style={{ marginBottom: syncRequired ? 8 : 0 }}
-        />
-
-        {/* 同步状态信息 */}
         {syncRequired && (
           <Alert
             type="warning"
             showIcon
             message="同步状态"
             description="检测到状态变化，正在同步到企业微信审批系统..."
-            style={{ marginTop: 8 }}
+            style={{ marginBottom: 8 }}
           />
         )}
 
-        {/* 操作成功提示 */}
         {approvalStatus.operation_id && (
           <Alert
             type="success"
             showIcon
             message="操作已完成"
             description={`操作ID: ${approvalStatus.operation_id}`}
-            style={{ marginTop: 8 }}
             closable
           />
         )}
@@ -393,12 +379,7 @@ const UnifiedApprovalPanel = ({
   return (
     <div>
       <Card
-        title={
-          <Space>
-            <InfoCircleOutlined />
-            统一审批面板
-          </Space>
-        }
+        title="审批状态"
         extra={renderActionButtons()}
         loading={!approvalStatus}
       >

@@ -10,16 +10,18 @@ from datetime import datetime, timedelta
 import redis
 import json
 
+from .config import settings
+
 logger = logging.getLogger(__name__)
 
 class WecomService:
     """企业微信服务类"""
     
     def __init__(self):
-        # 兼容两种环境变量命名方式
-        self.corp_id = os.getenv("WECOM_CORP_ID") or os.getenv("WECHAT_CORP_ID")
-        self.corp_secret = os.getenv("WECOM_CORP_SECRET") or os.getenv("WECHAT_AGENT_SECRET")
-        self.agent_id = os.getenv("WECOM_AGENT_ID") or os.getenv("WECHAT_AGENT_ID")
+        # 优先使用配置中的变量，兼容老环境变量
+        self.corp_id = settings.WECOM_CORP_ID or os.getenv("WECHAT_CORP_ID")
+        self.corp_secret = settings.WECOM_CORP_SECRET or settings.WECOM_SECRET or os.getenv("WECHAT_AGENT_SECRET")
+        self.agent_id = str(settings.WECOM_AGENT_ID or os.getenv("WECHAT_AGENT_ID") or "")
         self.base_url = "https://qyapi.weixin.qq.com/cgi-bin"
         
         # Redis客户端用于缓存token

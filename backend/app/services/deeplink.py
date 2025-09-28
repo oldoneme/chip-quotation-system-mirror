@@ -44,7 +44,7 @@ class DeepLinkService:
     def build_deeplink(self, quote_id: int, snapshot_id: int) -> str:
         """构建前端深链接"""
         token = self.make_token(quote_id, snapshot_id)
-        base_url = settings.WECOM_CALLBACK_URL
+        base_url = settings.WECOM_BASE_URL.rstrip('/')
         return f"{base_url}/quote/{quote_id}?snap={snapshot_id}&t={token}"
 
 # 全局实例

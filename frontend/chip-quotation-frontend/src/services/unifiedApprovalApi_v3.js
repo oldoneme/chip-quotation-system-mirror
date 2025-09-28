@@ -292,15 +292,26 @@ class UnifiedApprovalApiV3 {
       return result;
     }
 
-    // 从V2 API响应中获取权限信息
-    if (approvalData.can_approve !== undefined) {
-      result.canApprove = approvalData.can_approve;
-    }
-    if (approvalData.can_reject !== undefined) {
-      result.canReject = approvalData.can_reject;
-    }
-    if (approvalData.can_withdraw !== undefined) {
-      result.canWithdraw = approvalData.can_withdraw;
+    const hasWeComApproval = Boolean(
+      approvalData.wecom_approval_id ||
+      approvalData.has_wecom_approval ||
+      (approvalData.approval_channel && approvalData.approval_channel.toLowerCase() === 'wecom')
+    );
+
+    const isSubmittedToExternalFlow = ['pending', 'approved', 'rejected', 'withdrawn', 'cancelled']
+      .includes(approvalData.approval_status);
+
+    // 从V2 API响应中获取权限信息（仅在未交由企业微信处理时启用）
+    if (!hasWeComApproval && !isSubmittedToExternalFlow) {
+      if (approvalData.can_approve !== undefined) {
+        result.canApprove = approvalData.can_approve;
+      }
+      if (approvalData.can_reject !== undefined) {
+        result.canReject = approvalData.can_reject;
+      }
+      if (approvalData.can_withdraw !== undefined) {
+        result.canWithdraw = approvalData.can_withdraw;
+      }
     }
 
     // 提交权限：草稿状态或被拒绝状态的创建者可以提交/重新提交
@@ -309,6 +320,16 @@ class UnifiedApprovalApiV3 {
         approvalData.current_status === 'rejected' ||
         approvalData.approval_status === 'rejected') {
       result.canSubmit = true;
+    }
+
+    if (hasWeComApproval || isSubmittedToExternalFlow) {
+      result.canApprove = false;
+      result.canReject = false;
+      result.canWithdraw = false;
+      result.canDelegate = false;
+      result.reason = hasWeComApproval
+        ? '此报价单已转交企业微信审批流程，内部审批按钮已停用'
+        : '审批已提交，统一在企业微信流程中处理';
     }
 
     return result;

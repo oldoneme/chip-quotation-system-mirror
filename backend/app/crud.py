@@ -253,22 +253,61 @@ def delete_quotation(db: Session, quotation_id: int):
     return db_quotation
 
 def calculate_quotation(db: Session, quotation_request: schemas.QuotationRequest):
-    # Get the machine
+    from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+
     machine = db.query(models.Machine).filter(models.Machine.id == quotation_request.machine_id).first()
     if not machine:
         raise ValueError("Machine not found")
-    
-    # Calculate total: base hourly rate + configuration additional rate
-    total = machine.base_hourly_rate if machine.base_hourly_rate else 0.0
-    
-    # Add configuration additional rates
+
+    def to_decimal(value, field_name: str) -> Decimal:
+        if value is None:
+            value = 0
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError):
+            raise ValueError(f"Invalid numeric value for {field_name}: {value}")
+
+    details = quotation_request.details or {}
+
+    base_rate = to_decimal(machine.base_hourly_rate or 0, "base_hourly_rate")
+    discount_rate = to_decimal(machine.discount_rate or 1, "discount_rate")
+    hourly_total = base_rate * discount_rate
+
+    selected_config_ids = set(details.get('configuration_ids', []) or [])
+    include_all_configs = not selected_config_ids
     for config in machine.configurations:
-        total += config.additional_rate if config.additional_rate else 0.0
-    
-    # Multiply by test hours
-    total *= quotation_request.test_hours
-    
-    return total
+        if include_all_configs or config.id in selected_config_ids:
+            hourly_total += to_decimal(config.additional_rate or 0, f"configuration[{config.id}].additional_rate")
+
+    selected_card_ids = set(details.get('card_config_ids', []) or [])
+    include_all_cards = not selected_card_ids
+    exchange_default = to_decimal(machine.exchange_rate or 1, "exchange_rate")
+    machine_currency = (machine.currency or 'RMB').upper()
+
+    for card in machine.card_configs:
+        if include_all_cards or card.id in selected_card_ids:
+            card_price = to_decimal(card.unit_price or 0, f"card[{card.id}].unit_price")
+            card_currency = (card.currency or machine_currency).upper()
+            if card_currency == 'USD':
+                card_rate = to_decimal(card.exchange_rate or exchange_default, f"card[{card.id}].exchange_rate")
+                card_price *= card_rate
+            hourly_total += card_price
+
+    for extra in details.get('auxiliary_rates', []) or []:
+        hourly_total += to_decimal(extra, "auxiliary_rate")
+
+    hourly_total += to_decimal(details.get('extra_flat_fee') or 0, "extra_flat_fee")
+
+    if machine_currency == 'USD':
+        exchange_override = details.get('exchange_rate_override') or details.get('exchange_rate')
+        hourly_total *= to_decimal(exchange_override or exchange_default, "exchange_rate_override")
+
+    test_hours = to_decimal(quotation_request.test_hours or 0, "test_hours")
+    if test_hours < 0:
+        raise ValueError("Test hours cannot be negative")
+
+    total = (hourly_total * test_hours).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return float(total)
 
 # Enhanced Quotation CRUD operations with permission management
 def create_quotation(db: Session, quotation: dict, user_id: int):

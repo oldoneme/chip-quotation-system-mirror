@@ -9,15 +9,17 @@ import hashlib
 import secrets
 import os
 import asyncio
+import logging
 from typing import Dict, Optional, List, Any
 from datetime import datetime, timedelta
 import httpx
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..models import Quote, ApprovalRecord, User
 from ..database import get_db
 from ..config import settings
+from .quote_service import QuoteService, PDFGenerationInProgress
 
 
 class WeComApprovalIntegration:
@@ -31,12 +33,13 @@ class WeComApprovalIntegration:
     
     def __init__(self, db: Session):
         self.db = db
+        self.logger = logging.getLogger(__name__)
         self.corp_id = settings.WECOM_CORP_ID
         self.agent_id = settings.WECOM_AGENT_ID
         self.secret = settings.WECOM_SECRET
         self.approval_template_id = settings.WECOM_APPROVAL_TEMPLATE_ID
-        self.callback_url = settings.WECOM_CALLBACK_URL
-        self.base_url = settings.WECOM_BASE_URL
+        self.callback_url = settings.WECOM_CALLBACK_URL.rstrip('/')
+        self.base_url = settings.WECOM_BASE_URL.rstrip('/')
         self.callback_token = settings.WECOM_CALLBACK_TOKEN
         self.encoding_aes_key = settings.WECOM_ENCODING_AES_KEY
         self._access_token = None
@@ -141,7 +144,7 @@ class WeComApprovalIntegration:
     async def upload_temp_file(self, content: str, filename: str = "quote_detail.txt") -> str:
         """上传临时文件到企业微信获取media_id"""
         access_token = await self.get_access_token()
-        
+
         url = f"https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={access_token}&type=file"
         
         files = {
@@ -157,6 +160,96 @@ class WeComApprovalIntegration:
             )
             
         return result["media_id"]
+
+    async def upload_file_path(self, file_path: str, mime_type: str = "application/pdf") -> Optional[str]:
+        """上传本地文件到企业微信，返回 media_id"""
+        if not file_path or not os.path.exists(file_path):
+            return None
+
+        access_token = await self.get_access_token()
+        url = f"https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={access_token}&type=file"
+
+        try:
+            with open(file_path, "rb") as f:
+                files = {
+                    'media': (os.path.basename(file_path), f, mime_type)
+                }
+                result = await self._retry_request("POST", url, files=files)
+        except Exception as exc:
+            self.logger.error(f"上传文件失败 {file_path}: {exc}")
+            return None
+
+        if result.get("errcode") != 0:
+            self.logger.error(f"企业微信文件上传失败: {result}")
+            return None
+
+        return result.get("media_id")
+
+    async def _prepare_pdf_media_id(self, quote: Quote) -> Optional[str]:
+        """确保生成PDF并上传获取媒体ID"""
+        acting_user = None
+        if quote.created_by:
+            acting_user = self.db.query(User).filter(User.id == quote.created_by).first()
+
+        if not acting_user:
+            acting_user = (
+                self.db.query(User)
+                .filter(User.role.in_(['admin', 'super_admin']))
+                .order_by(User.id.asc())
+                .first()
+            )
+
+        fresh_quote = (
+            self.db.query(Quote)
+            .options(selectinload(Quote.pdf_cache))
+            .filter(Quote.id == quote.id)
+            .first()
+        )
+
+        cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+        pdf_ready = False
+        pdf_path = None
+
+        if cache and cache.pdf_path:
+            pdf_path = cache.pdf_path
+            if not os.path.isabs(pdf_path):
+                pdf_path = os.path.join(os.getcwd(), pdf_path)
+            pdf_ready = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+
+        if not pdf_ready and acting_user:
+            try:
+                QuoteService(self.db).ensure_pdf_cache(fresh_quote or quote, acting_user, prefer_playwright=True)
+                fresh_quote = (
+                    self.db.query(Quote)
+                    .options(selectinload(Quote.pdf_cache))
+                    .filter(Quote.id == quote.id)
+                    .first()
+                )
+                cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+                if cache and cache.pdf_path:
+                    pdf_path = cache.pdf_path
+                    if not os.path.isabs(pdf_path):
+                        pdf_path = os.path.join(os.getcwd(), pdf_path)
+                    pdf_ready = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+            except PDFGenerationInProgress:
+                raise
+            except Exception as exc:
+                self.logger.error(f"确保PDF缓存失败: {exc}")
+        elif not pdf_ready:
+            self.logger.warning(f"报价单 {quote.id} 缺少acting_user，无法生成PDF缓存")
+
+        cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+        if cache and cache.pdf_path:
+            pdf_path = cache.pdf_path if not os.path.isabs(cache.pdf_path) else cache.pdf_path
+            if not os.path.isabs(pdf_path):
+                pdf_path = os.path.join(os.getcwd(), pdf_path)
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                self.logger.info(f"上传报价单PDF附件: {pdf_path}")
+                return await self.upload_file_path(pdf_path, mime_type="application/pdf")
+            self.logger.warning(f"报价单PDF文件不存在或为空: {pdf_path}")
+        else:
+            self.logger.info(f"报价单 {quote.id} 未找到PDF缓存，跳过附件生成")
+        return None
     
     async def submit_quote_approval(self, quote_id, approver_userid: str = None, creator_userid: str = None) -> Dict:
         """
@@ -191,13 +284,17 @@ class WeComApprovalIntegration:
             detail_link = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={url_quote(oauth_redirect_url, safe='')}&response_type=code&scope=snsapi_base&state={detail_state}&agentid={self.agent_id}#wechat_redirect"
         
         # 构建简洁的描述信息（由于Text字段长度限制）
-        total_amount = quote.total_amount or 0.0
-        description_with_link = f"{quote.description or ''}。💰总金额¥{total_amount:.2f}。📋详情链接见附件"
+        description_fragments: List[str] = []
+        if quote.description:
+            description_fragments.append(str(quote.description))
+        description_fragments.append("📎PDF附件见下方")
+        description_with_link = "。".join(description_fragments)
         
         # 创建简洁的链接文件
         link_file_content = f"报价单详情链接：\n{detail_link}\n\n点击上方链接查看详情"
         media_id = await self.upload_temp_file(link_file_content, f"{quote.quote_number}_链接.txt")
-        
+        pdf_media_id = await self._prepare_pdf_media_id(quote)
+
         # 构建审批申请数据 - 使用真实的模板字段ID
         # 如果没有传入creator_userid，尝试从报价单获取，但避免使用lazy-loaded关系
         if not creator_userid:
@@ -217,7 +314,15 @@ class WeComApprovalIntegration:
                     {"control": "Text", "id": "Text-1756706001498", "value": {"text": quote.customer_name}},
                     {"control": "Text", "id": "Text-1756706160253", "value": {"text": description_with_link}},
                     {"control": "Text", "id": "Text-1756897248857", "value": {"text": detail_link}},
-                    {"control": "File", "id": "File-1756709748491", "value": {"files": []}}
+                    {
+                        "control": "File",
+                        "id": "File-1756709748491",
+                        "value": {
+                            "files": (
+                                [{"file_id": pdf_media_id}] if pdf_media_id else []
+                            )
+                        }
+                    }
                 ]
             }
         }
@@ -243,14 +348,27 @@ class WeComApprovalIntegration:
         
         # 保存审批ID到报价单
         quote.wecom_approval_id = result["sp_no"]
+        quote.status = "pending"
         quote.approval_status = "pending"
+        quote.approval_method = "wecom"
+        quote.submitted_at = datetime.utcnow()
         
         # 先提交SQLAlchemy的更改
         self.db.commit()
         
         # 保存审批实例映射（用于回调时查找）- 在SQLAlchemy提交后进行
         import sqlite3
-        conn = sqlite3.connect('app/test.db')
+        from sqlalchemy.engine.url import make_url
+
+        db_url = make_url(settings.DATABASE_URL)
+        db_path = db_url.database if db_url.drivername.startswith('sqlite') else None
+        if db_path and not os.path.isabs(db_path):
+            db_path = os.path.join(os.getcwd(), db_path)
+
+        if not db_path:
+            raise HTTPException(status_code=500, detail="仅支持SQLite数据库的审批实例映射存储")
+
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         try:
             cursor.execute("""
@@ -332,7 +450,11 @@ class WeComApprovalIntegration:
         messages = {
             "pending": {
                 "title": "待审批提醒",
-                "description": f"您有新的报价单待审批\\n报价单号：{quote.quote_number}\\n客户：{quote.customer_name}\\n金额：¥{quote.total_amount:.2f}",
+                "description": (
+                    "您有新的报价单待审批\\n"
+                    f"报价单号：{quote.quote_number}\\n"
+                    f"客户：{quote.customer_name}"
+                ),
                 "btntxt": "立即审批"
             },
             "approved": {
@@ -361,13 +483,84 @@ class WeComApprovalIntegration:
                 "btntxt": msg_content["btntxt"]
             }
         }
-        
+
         # 发送消息
         url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}"
-        
+
         result = await self._retry_request("POST", url, json=message_data)
-            
-        return result.get("errcode") == 0
+
+        success = result.get("errcode") == 0
+
+        # 如果存在PDF缓存，追加发送文件消息
+        pdf_media_id = None
+        try:
+            acting_user = None
+            if quote.created_by:
+                acting_user = self.db.query(User).filter(User.id == quote.created_by).first()
+
+            if acting_user is None:
+                acting_user = (
+                    self.db.query(User)
+                    .filter(User.role.in_(['admin', 'super_admin']))
+                    .order_by(User.id.asc())
+                    .first()
+                )
+
+            fresh_quote = (
+                self.db.query(Quote)
+                .options(selectinload(Quote.pdf_cache))
+                .filter(Quote.id == quote_id)
+                .first()
+            )
+
+            cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+            pdf_path = None
+            pdf_ready = False
+
+            if cache and cache.pdf_path:
+                pdf_path = cache.pdf_path
+                if not os.path.isabs(pdf_path):
+                    pdf_path = os.path.join(os.getcwd(), pdf_path)
+                pdf_ready = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+
+            if not pdf_ready and acting_user:
+                try:
+                    QuoteService(self.db).ensure_pdf_cache(fresh_quote or quote, acting_user, prefer_playwright=True)
+                    fresh_quote = (
+                        self.db.query(Quote)
+                        .options(selectinload(Quote.pdf_cache))
+                        .filter(Quote.id == quote_id)
+                        .first()
+                    )
+                    cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+                    if cache and cache.pdf_path:
+                        pdf_path = cache.pdf_path
+                        if not os.path.isabs(pdf_path):
+                            pdf_path = os.path.join(os.getcwd(), pdf_path)
+                        pdf_ready = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+                except PDFGenerationInProgress:
+                    raise
+                except Exception as ensure_exc:
+                    self.logger.error(f"确保PDF缓存失败: {ensure_exc}")
+
+            if pdf_ready and pdf_path:
+                self.logger.info(f"上传报价单PDF附件: {pdf_path}")
+                pdf_media_id = await self.upload_file_path(pdf_path)
+            else:
+                self.logger.info("未找到报价单PDF缓存，跳过附件发送")
+
+            if pdf_media_id:
+                file_message = {
+                    "touser": approver_userid,
+                    "msgtype": "file",
+                    "agentid": self.agent_id,
+                    "file": {"media_id": pdf_media_id}
+                }
+                await self._retry_request("POST", url, json=file_message)
+        except Exception as exc:
+            self.logger.error(f"发送PDF附件失败: {exc}")
+
+        return success
     
     async def handle_approval_callback(self, callback_data: Dict) -> bool:
         """
@@ -503,8 +696,15 @@ class WeComApprovalIntegration:
         
         new_status = status_mapping.get(sp_status, "unknown")
         
-        if quote.approval_status != new_status:
+        if quote.approval_status != new_status or quote.status != new_status:
             quote.approval_status = new_status
+            status_mapping_back = {
+                "pending": "pending",
+                "approved": "approved",
+                "rejected": "rejected",
+                "cancelled": "cancelled",
+            }
+            quote.status = status_mapping_back.get(new_status, quote.status)
             self.db.commit()
             
         return {
@@ -555,7 +755,7 @@ class WeComApprovalIntegration:
                 wecom_info = f"\n📱 企业微信审批单: {quote.wecom_approval_id}"
 
             # 构建详细的状态更新消息
-            detail_link = f"{self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}"
+            detail_link = f"{self.base_url}/quote-detail/{quote.quote_number}"
 
             title = f"🔔 审批状态更新通知"
             content = f"""
@@ -664,7 +864,7 @@ class WeComApprovalIntegration:
 • 企业微信通知仅作为流程辅助工具
 • 如有疑问，请咨询管理员
 
-💻 查看准确状态: {self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}"""
+💻 查看准确状态: {self.base_url}/quote-detail/{quote.quote_number}"""
 
             # 发送企业微信消息
             message_data = {
@@ -674,7 +874,7 @@ class WeComApprovalIntegration:
                 "textcard": {
                     "title": title,
                     "description": content,
-                    "url": f"{self.callback_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote.quote_number}",
+                    "url": f"{self.base_url}/quote-detail/{quote.quote_number}",
                     "btntxt": "查看详情"
                 }
             }

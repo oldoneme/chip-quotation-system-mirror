@@ -625,11 +625,21 @@ class UnifiedApprovalEngine:
                 self.logger.error(f"未找到对应的报价单: wecom_approval_id={sp_no}")
                 return False
 
+            # 刷新状态避免使用脏数据
+            try:
+                self.db.refresh(quote)
+            except Exception:
+                pass
+
             # 检查当前状态
             current_status = ApprovalStatus(quote.approval_status)
 
-            # 🎯 关键修复：无论状态是否相同，都要检查是否为最终状态
-            # 如果是最终状态，需要告知用户"审批已完成，操作无效"
+            # 如果状态已是目标状态，直接认定成功
+            if quote.approval_status == new_status:
+                self.logger.info(f"报价单 {quote.id} 状态已是 {new_status}，无需更新")
+                return True
+
+            # 🎯 若当前已经处于其他最终状态，拒绝重复更新
             final_statuses = {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED}
             if current_status in final_statuses:
                 self.logger.warning(
@@ -652,11 +662,6 @@ class UnifiedApprovalEngine:
                     self.logger.error(f"发送审批完成通知失败: {e}")
 
                 return False
-
-            # 检查状态是否需要更新（仅针对非最终状态）
-            if quote.approval_status == new_status:
-                self.logger.info(f"报价单 {quote.id} 状态已是 {new_status}，无需更新")
-                return True
 
             # 获取操作人ID（企业微信操作人映射到内部用户）
             operator_id = self._get_or_create_wecom_user(operator_info or {})
@@ -760,6 +765,11 @@ class UnifiedApprovalEngine:
                             fresh_quote.approval_method = 'wecom'  # 标记为企业微信审批
                             self.db.commit()
                             self.logger.info(f"已保存企业微信审批ID: {result['sp_no']} 到报价单 {quote_id}")
+
+                            if creator_userid:
+                                self._trigger_wecom_notification_async(quote_id, "pending", creator_userid)
+                            else:
+                                self.logger.warning(f"报价单 {quote_id} 创建者缺少企业微信ID，无法发送待审批通知")
                         else:
                             self.logger.error(f"无法找到报价单 {quote_id} 来保存企业微信审批ID")
                     else:
@@ -999,8 +1009,8 @@ class UnifiedApprovalEngine:
 
     def _get_quote_detail_url(self, quote_number: str) -> str:
         """获取报价单详情URL"""
-        base_url = getattr(self.wecom_integration, 'callback_url', 'http://localhost:3000')
-        return f"{base_url.replace('/api/v1/auth/callback', '')}/quote-detail/{quote_number}"
+        base_url = getattr(self.wecom_integration, 'base_url', 'http://localhost:3000').rstrip('/')
+        return f"{base_url}/quote-detail/{quote_number}"
 
     async def _send_wecom_notification_task(self, quote_id: int, recipient_userid: str, notification_type: str):
         """异步发送企业微信通知任务"""

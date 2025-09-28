@@ -2,14 +2,27 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
-import os
 
-# Use SQLite for development
-# 确保数据库文件路径正确
-db_path = os.path.join(os.path.dirname(__file__), "test.db")
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
+from app.config import settings as runtime_settings
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+
+def _build_engine_url() -> str:
+    """返回标准化的数据库连接URL"""
+    return runtime_settings.DATABASE_URL
+
+
+def _build_connect_args(url: str) -> dict:
+    """针对SQLite提供必要的连接参数"""
+    if url.startswith("sqlite"):
+        return {"check_same_thread": False}
+    return {}
+
+
+SQLALCHEMY_DATABASE_URL = _build_engine_url()
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args=_build_connect_args(SQLALCHEMY_DATABASE_URL),
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

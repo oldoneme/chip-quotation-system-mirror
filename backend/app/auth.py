@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 import jwt
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .database import get_db
 from .models import User
@@ -19,6 +19,18 @@ security = HTTPBearer(auto_error=False)
 # JWT配置（与auth.py保持一致）
 JWT_SECRET = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 JWT_ALG = "HS256"
+
+
+def create_user_token(user: User, expires_seconds: int = 300, scope: str = "snapshot") -> str:
+    """创建短期JWT令牌用于前端快照等场景"""
+    now = datetime.utcnow()
+    payload = {
+        "sub": user.userid,
+        "iat": now,
+        "exp": now + timedelta(seconds=expires_seconds),
+        "scope": scope,
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
 def decode_jwt(token: str):
     """解码JWT令牌"""

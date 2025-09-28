@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Table, DateTime, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from pathlib import Path
 import json
 import hashlib
 from .database import Base
@@ -147,6 +148,20 @@ class Quote(Base):
     deleter = relationship("User", foreign_keys=[deleted_by])
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
     approval_records = relationship("ApprovalRecord", back_populates="quote", cascade="all, delete-orphan")
+    pdf_cache = relationship("QuotePDFCache", back_populates="quote", uselist=False, cascade="all, delete-orphan")
+
+    @property
+    def pdf_url(self) -> str | None:
+        if not self.pdf_cache:
+            return None
+        path = Path(self.pdf_cache.pdf_path)
+        if not path.is_absolute():
+            path = Path(path)
+        try:
+            relative = path.relative_to(Path("media"))
+        except ValueError:
+            relative = path
+        return f"/media/{relative.as_posix()}"
 
 
 class QuoteItem(Base):
@@ -178,6 +193,24 @@ class QuoteItem(Base):
     quote = relationship("Quote", back_populates="items")
     machine = relationship("Machine")
     config = relationship("Configuration")
+
+
+class QuotePDFCache(Base):
+    """报价单PDF缓存"""
+    __tablename__ = "quote_pdf_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    quote_id = Column(Integer, ForeignKey("quotes.id"), unique=True)
+    pdf_path = Column(String, nullable=False)
+    source = Column(String, default="playwright")
+    file_size = Column(Integer, default=0)
+    generated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    content_hash = Column(String)
+    status = Column(String, default="ready")  # ready, generating, error
+    last_error = Column(Text)
+
+    quote = relationship("Quote", back_populates="pdf_cache")
 
 
 class ApprovalRecord(Base):

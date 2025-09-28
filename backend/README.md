@@ -62,6 +62,18 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 python3 sync_approval_daemon.py
 ```
 
+### 6. 安装 Playwright 与生成快照PDF
+```bash
+# 安装 Playwright 及 Chromium 依赖
+pip install playwright
+playwright install --with-deps chromium
+
+# 生成指定报价单的调试快照
+python3 scripts/debug_snapshot.py CIS-KS20250101001
+```
+
+调试脚本会在当前目录输出 `debug_quote.pdf` 并打印结构化日志，若看到 WeasyPrint 兜底或提示文件过小，请检查前端可访问性（确保页面包含 `#quote-ready` 标识并支持 `__snapshot_token` 鉴权）。
+
 ## 🧪 测试
 
 ### 运行测试
@@ -116,6 +128,9 @@ python3 tests/test_complete_flow.py
 主要环境变量：
 ```env
 # 企业微信配置
+FRONTEND_BASE_URL=https://your-frontend-domain
+SNAPSHOT_BROWSER_POOL=3
+SNAPSHOT_READY_SELECTOR=#quote-ready
 WECOM_CORP_ID=企业ID
 WECOM_AGENT_ID=应用ID  
 WECOM_SECRET=应用密钥

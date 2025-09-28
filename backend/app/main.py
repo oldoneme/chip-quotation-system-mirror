@@ -13,11 +13,6 @@ import re
 from typing import Optional
 from urllib.parse import urlencode, urlunparse
 
-# 设置环境变量供认证模块使用（必须在导入之前设置）
-os.environ["WECOM_CORP_ID"] = "ww3bf2288344490c5c"
-os.environ["WECOM_AGENT_ID"] = "1000029" 
-os.environ["WECOM_CORP_SECRET"] = "Q_JcyrQIsTcBJON2S3JPFqTvrjVi-zHJDXFVQ2pYqNg"
-
 # Add the project root directory to the path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
@@ -48,6 +43,8 @@ PUBLIC_DIR = pathlib.Path(os.path.join(os.path.dirname(__file__), "..", "static"
 INDEX_FILE = PUBLIC_DIR / "index.html"
 WEWORK_UA_KEYS = ("wxwork", "wecom")
 VERSION_PREFIX = f"/v/{APP_VERSION}"
+MEDIA_DIR = pathlib.Path(os.path.join(os.path.dirname(__file__), "..", "media")).resolve()
+MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 def is_wework(req) -> bool:
     """检测是否是企业微信 WebView"""
@@ -107,7 +104,8 @@ from app.api.v2.api import api_router as api_v2_router
 from app.auth_routes import router as auth_router
 from app.admin_routes import router as admin_router
 from app.api.v1.admin.quotes import router as admin_quotes_router
-from app.core.config import settings
+from app.core.config import settings as core_settings
+from app.config import settings as runtime_settings
 from app.core.logging import setup_logging
 from app.core.exceptions import (
     APIException,
@@ -120,13 +118,32 @@ from app.core.exceptions import (
 # 设置日志
 logger = setup_logging()
 
+missing_wecom_keys = [
+    key for key in [
+        "WECOM_CORP_ID",
+        "WECOM_AGENT_ID",
+        "WECOM_SECRET",
+        "WECOM_CALLBACK_TOKEN",
+        "WECOM_ENCODING_AES_KEY",
+    ]
+    if not getattr(runtime_settings, key, None)
+]
+
+if missing_wecom_keys:
+    logger.warning(
+        "企业微信配置缺失，将跳过相关功能：%s",
+        ", ".join(missing_wecom_keys),
+    )
+
 # Create database tables
-Base.metadata.create_all(bind=engine)
+if runtime_settings.DEBUG and runtime_settings.DATABASE_URL.startswith("sqlite"):
+    logger.info("开发模式下自动创建SQLite数据表")
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
-    debug=settings.DEBUG,
+    title=core_settings.APP_NAME,
+    version=core_settings.APP_VERSION,
+    debug=core_settings.DEBUG,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"
@@ -140,18 +157,18 @@ app.add_exception_handler(Exception, general_exception_handler)
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=core_settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_router, prefix=core_settings.API_V1_STR)
 app.include_router(api_v2_router, prefix="/api")  # V2 API: /api/v2/
 app.include_router(auth_router)
 app.include_router(admin_router)
-app.include_router(admin_quotes_router, prefix=settings.API_V1_STR + "/admin")
+app.include_router(admin_quotes_router, prefix=core_settings.API_V1_STR + "/admin")
 
 # 企业微信强校验回调路由 - 唯一安全入口
 from fastapi import Query, Request, Depends
@@ -251,6 +268,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
 
 @app.get("/dashboard")
 async def dashboard():
@@ -310,13 +328,13 @@ async def clear_cache():
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info(f"Starting {settings.APP_NAME} on port 8000")
+    logger.info(f"Starting {core_settings.APP_NAME} on port 8000")
     uvicorn.run(
         "app.main:app",
         host="127.0.0.1",
         port=8000,
-        reload=settings.DEBUG,
-        log_level=settings.LOG_LEVEL.lower()
+        reload=core_settings.DEBUG,
+        log_level=core_settings.LOG_LEVEL.lower()
     )
 
 # === injected:middleware-force-version ===
@@ -404,4 +422,3 @@ def launch():
     resp = RedirectResponse(url, status_code=302)
     resp.headers["Cache-Control"] = "no-store"
     return resp
-

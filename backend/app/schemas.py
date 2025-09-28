@@ -434,7 +434,7 @@ class QuoteBase(BaseModel):
 
 class QuoteCreate(QuoteBase):
     """创建报价单"""
-    items: List[QuoteItemCreate] = Field([], description="报价明细项")
+    items: List[QuoteItemCreate] = Field(default_factory=list, description="报价明细项")
 
 
 class QuoteUpdate(BaseModel):
@@ -466,6 +466,7 @@ class Quote(QuoteBase):
     id: int
     quote_number: str
     status: str
+    pdf_url: Optional[str] = None
     submitted_at: Optional[datetime] = None
     approved_at: Optional[datetime] = None
     approved_by: Optional[int] = None
@@ -474,7 +475,7 @@ class Quote(QuoteBase):
     created_by: int
     created_at: datetime
     updated_at: datetime
-    items: List[QuoteItem] = []
+    items: List[QuoteItem] = Field(default_factory=list)
     
     class Config:
         from_attributes = True
@@ -490,6 +491,7 @@ class QuoteList(BaseModel):
     currency: str
     total_amount: float
     status: str
+    pdf_url: Optional[str] = None
     version: str
     created_by: int
     created_at: datetime

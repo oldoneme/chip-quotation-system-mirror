@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict
 import logging
 from datetime import datetime
+import os
 
 from .database import get_db
 from .models import User
@@ -702,21 +703,14 @@ async def sync_wecom_users(admin_info: dict = Depends(require_admin_auth), db: S
         # 获取企业微信所有用户
         wecom_users = wecom.get_all_users()
         
-        # 如果无法从企业微信获取，使用已登录用户的信息
+        # 如果无法从企业微信获取，记录错误并提示用户
         if not wecom_users:
-            # 获取所有已登录过的用户（有last_login记录的）
-            existing_users = db.query(User).filter(User.last_login != None).all()
-            if existing_users:
-                message = f"企业微信通讯录权限未开启，当前显示{len(existing_users)}个已登录用户"
-                return {
-                    "success": True,
-                    "message": message,
-                    "total": len(existing_users),
-                    "new": 0,
-                    "updated": 0
-                }
-            else:
-                return {"success": False, "message": "企业微信通讯录权限未开启，请在管理后台配置", "synced": 0}
+            logger.error("企业微信通讯录权限未开启或corp_secret错误，无法获取用户列表")
+            return {
+                "success": False,
+                "message": "企业微信通讯录权限未开启或凭证配置错误，请在管理后台检查权限/密钥",
+                "synced": 0
+            }
         
         synced_count = 0
         updated_count = 0
@@ -788,39 +782,47 @@ async def sync_wecom_users(admin_info: dict = Depends(require_admin_auth), db: S
 async def cleanup_test_users(admin_info: dict = Depends(require_admin_auth), db: Session = Depends(get_db)):
     """清理测试用户数据"""
     try:
-        # 定义测试用户ID列表
-        test_userids = ['zhangsan', 'lisi', 'wangwu', 'zhaoliu', 'sunqi']
-        
-        deleted_count = 0
+        wecom = WecomService()
+        wecom_users = wecom.get_all_users()
+
+        if not wecom_users:
+            logger.error("无法获取企业微信用户，测试用户清理终止")
+            return {
+                "success": False,
+                "message": "无法连接企业微信通讯录，请稍后再试",
+                "deleted": 0,
+            }
+
+        valid_userids = {user.get("userid") for user in wecom_users if user.get("userid")}
+
+        # 读取保留名单（用于额外的管理员账号）
+        keep_userids_env = os.getenv("WECOM_KEEP_USERIDS", "")
+        keep_userids = {uid.strip() for uid in keep_userids_env.split(",") if uid.strip()}
+        valid_userids.update(keep_userids)
+
         deleted_users = []
-        
-        for userid in test_userids:
-            user = db.query(User).filter(User.userid == userid).first()
-            if user:
-                deleted_users.append(f"{user.name}({user.userid})")
+
+        for user in db.query(User).all():
+            if user.userid not in valid_userids:
+                deleted_users.append(f"{user.name or '未命名'}({user.userid})")
                 db.delete(user)
-                deleted_count += 1
-        
-        # 提交删除操作
+
+        deleted_count = len(deleted_users)
         db.commit()
-        
-        if deleted_count > 0:
+
+        if deleted_count:
             message = f"成功删除{deleted_count}个测试用户: {', '.join(deleted_users)}"
             logger.info(message)
-            return {
-                "success": True,
-                "message": message,
-                "deleted": deleted_count,
-                "deleted_users": deleted_users
-            }
         else:
-            return {
-                "success": True,
-                "message": "没有找到需要删除的测试用户",
-                "deleted": 0,
-                "deleted_users": []
-            }
-            
+            message = "没有找到需要删除的测试用户"
+
+        return {
+            "success": True,
+            "message": message,
+            "deleted": deleted_count,
+            "deleted_users": deleted_users
+        }
+
     except Exception as e:
         logger.error(f"删除测试用户失败: {e}")
         db.rollback()
