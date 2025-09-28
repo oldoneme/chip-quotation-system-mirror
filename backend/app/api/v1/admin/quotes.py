@@ -3,12 +3,14 @@
 提供完整的数据库管理功能，包括软删除数据的操作
 """
 
+import logging
 from typing import List, Optional, Union
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request, Body
 from pydantic import BaseModel, validator
-from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
-from datetime import datetime
+from sqlalchemy.orm import Session
 
 from ....database import get_db
 from ....models import Quote, QuoteItem, User
@@ -28,6 +30,7 @@ class BatchDeleteRequest(BaseModel):
         return [str(item) for item in v]
 
 router = APIRouter(prefix="/quotes", tags=["管理员-报价单管理"])
+logger = logging.getLogger("app.api.admin.quotes")
 
 
 @router.get("/all", response_model=dict)
@@ -342,6 +345,7 @@ async def batch_restore_quotes(
 
     except Exception as e:
         db.rollback()
+        logger.exception("batch_restore_failed", extra={"quote_ids": quote_ids if 'quote_ids' in locals() else None})
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"批量恢复失败: {str(e)}"
@@ -408,6 +412,10 @@ async def batch_soft_delete_quotes(
 
     except Exception as e:
         db.rollback()
+        logger.exception(
+            "batch_soft_delete_failed",
+            extra={"quote_ids": quote_ids if 'quote_ids' in locals() else None}
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"批量删除失败: {str(e)}"

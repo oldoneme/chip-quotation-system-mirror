@@ -25,7 +25,7 @@ from ....schemas import (
     QuoteStatistics,
     ApprovalRecord,
 )
-from ....services.quote_service import QuoteService
+from ....services.quote_service import QuoteService, PDFGenerationInProgress
 
 router = APIRouter(prefix="/quotes", tags=["报价单管理"])
 
@@ -1011,20 +1011,17 @@ async def get_quote_pdf(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限访问此报价单")
 
         service = QuoteService(db)
-        cache = await asyncio.to_thread(
-            service.ensure_pdf_cache, quote, current_user, False, column_configs
-        )
+        try:
+            cache = await asyncio.to_thread(
+                service.ensure_pdf_cache, quote, current_user, False, column_configs, True, False
+            )
+        except PDFGenerationInProgress:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="PDF生成中，请稍后再试")
         pdf_path = Path(cache.pdf_path)
         if not pdf_path.is_absolute():
             pdf_path = Path(pdf_path)
         if not pdf_path.exists():
-            cache = await asyncio.to_thread(
-                service.ensure_pdf_cache, quote, current_user, True, column_configs
-            )
-            pdf_path = Path(cache.pdf_path)
-
-        if not pdf_path.exists():
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="PDF文件生成失败")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="PDF生成中，请稍后再试")
 
         filename = f"{quote.quote_number}_quote.pdf"
         disposition = "attachment" if download else "inline"

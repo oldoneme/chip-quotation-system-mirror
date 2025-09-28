@@ -14,12 +14,12 @@ from typing import Dict, Optional, List, Any
 from datetime import datetime, timedelta
 import httpx
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..models import Quote, ApprovalRecord, User
 from ..database import get_db
 from ..config import settings
-from .quote_service import QuoteService
+from .quote_service import QuoteService, PDFGenerationInProgress
 
 
 class WeComApprovalIntegration:
@@ -199,18 +199,48 @@ class WeComApprovalIntegration:
                 .first()
             )
 
-        if acting_user:
-            try:
-                QuoteService(self.db).ensure_pdf_cache(quote, acting_user)
-                self.db.refresh(quote)
-            except Exception as exc:
-                self.logger.error(f"确保PDF缓存失败: {exc}")
-        else:
-            self.logger.warning(f"报价单 {quote.id} 缺少acting_user，无法生成PDF缓存")
+        fresh_quote = (
+            self.db.query(Quote)
+            .options(selectinload(Quote.pdf_cache))
+            .filter(Quote.id == quote.id)
+            .first()
+        )
 
-        cache = getattr(quote, 'pdf_cache', None)
+        cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+        pdf_ready = False
+        pdf_path = None
+
         if cache and cache.pdf_path:
             pdf_path = cache.pdf_path
+            if not os.path.isabs(pdf_path):
+                pdf_path = os.path.join(os.getcwd(), pdf_path)
+            pdf_ready = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+
+        if not pdf_ready and acting_user:
+            try:
+                QuoteService(self.db).ensure_pdf_cache(fresh_quote or quote, acting_user, prefer_playwright=True)
+                fresh_quote = (
+                    self.db.query(Quote)
+                    .options(selectinload(Quote.pdf_cache))
+                    .filter(Quote.id == quote.id)
+                    .first()
+                )
+                cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+                if cache and cache.pdf_path:
+                    pdf_path = cache.pdf_path
+                    if not os.path.isabs(pdf_path):
+                        pdf_path = os.path.join(os.getcwd(), pdf_path)
+                    pdf_ready = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+            except PDFGenerationInProgress:
+                raise
+            except Exception as exc:
+                self.logger.error(f"确保PDF缓存失败: {exc}")
+        elif not pdf_ready:
+            self.logger.warning(f"报价单 {quote.id} 缺少acting_user，无法生成PDF缓存")
+
+        cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+        if cache and cache.pdf_path:
+            pdf_path = cache.pdf_path if not os.path.isabs(cache.pdf_path) else cache.pdf_path
             if not os.path.isabs(pdf_path):
                 pdf_path = os.path.join(os.getcwd(), pdf_path)
             if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
@@ -254,8 +284,11 @@ class WeComApprovalIntegration:
             detail_link = f"https://open.weixin.qq.com/connect/oauth2/authorize?appid={self.corp_id}&redirect_uri={url_quote(oauth_redirect_url, safe='')}&response_type=code&scope=snsapi_base&state={detail_state}&agentid={self.agent_id}#wechat_redirect"
         
         # 构建简洁的描述信息（由于Text字段长度限制）
-        total_amount = quote.total_amount or 0.0
-        description_with_link = f"{quote.description or ''}。💰总金额¥{total_amount:.2f}。📎PDF附件见下方"
+        description_fragments: List[str] = []
+        if quote.description:
+            description_fragments.append(str(quote.description))
+        description_fragments.append("📎PDF附件见下方")
+        description_with_link = "。".join(description_fragments)
         
         # 创建简洁的链接文件
         link_file_content = f"报价单详情链接：\n{detail_link}\n\n点击上方链接查看详情"
@@ -417,7 +450,11 @@ class WeComApprovalIntegration:
         messages = {
             "pending": {
                 "title": "待审批提醒",
-                "description": f"您有新的报价单待审批\\n报价单号：{quote.quote_number}\\n客户：{quote.customer_name}\\n金额：¥{quote.total_amount:.2f}",
+                "description": (
+                    "您有新的报价单待审批\\n"
+                    f"报价单号：{quote.quote_number}\\n"
+                    f"客户：{quote.customer_name}"
+                ),
                 "btntxt": "立即审批"
             },
             "approved": {
@@ -469,26 +506,46 @@ class WeComApprovalIntegration:
                     .first()
                 )
 
-            if acting_user:
+            fresh_quote = (
+                self.db.query(Quote)
+                .options(selectinload(Quote.pdf_cache))
+                .filter(Quote.id == quote_id)
+                .first()
+            )
+
+            cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+            pdf_path = None
+            pdf_ready = False
+
+            if cache and cache.pdf_path:
+                pdf_path = cache.pdf_path
+                if not os.path.isabs(pdf_path):
+                    pdf_path = os.path.join(os.getcwd(), pdf_path)
+                pdf_ready = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+
+            if not pdf_ready and acting_user:
                 try:
-                    QuoteService(self.db).ensure_pdf_cache(quote, acting_user)
+                    QuoteService(self.db).ensure_pdf_cache(fresh_quote or quote, acting_user, prefer_playwright=True)
+                    fresh_quote = (
+                        self.db.query(Quote)
+                        .options(selectinload(Quote.pdf_cache))
+                        .filter(Quote.id == quote_id)
+                        .first()
+                    )
+                    cache = getattr(fresh_quote, 'pdf_cache', None) if fresh_quote else None
+                    if cache and cache.pdf_path:
+                        pdf_path = cache.pdf_path
+                        if not os.path.isabs(pdf_path):
+                            pdf_path = os.path.join(os.getcwd(), pdf_path)
+                        pdf_ready = os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+                except PDFGenerationInProgress:
+                    raise
                 except Exception as ensure_exc:
                     self.logger.error(f"确保PDF缓存失败: {ensure_exc}")
 
-            self.db.refresh(quote)
-            pdf_path = None
-            cache = getattr(quote, 'pdf_cache', None)
-            if cache and cache.pdf_path:
-                pdf_path = cache.pdf_path
-
-            if pdf_path:
-                if not os.path.isabs(pdf_path):
-                    pdf_path = os.path.join(os.getcwd(), pdf_path)
-                if os.path.exists(pdf_path):
-                    self.logger.info(f"上传报价单PDF附件: {pdf_path}")
-                    pdf_media_id = await self.upload_file_path(pdf_path)
-                else:
-                    self.logger.warning(f"报价单PDF文件不存在: {pdf_path}")
+            if pdf_ready and pdf_path:
+                self.logger.info(f"上传报价单PDF附件: {pdf_path}")
+                pdf_media_id = await self.upload_file_path(pdf_path)
             else:
                 self.logger.info("未找到报价单PDF缓存，跳过附件发送")
 

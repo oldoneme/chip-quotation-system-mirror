@@ -206,6 +206,9 @@ class QuotePDFCache(Base):
     file_size = Column(Integer, default=0)
     generated_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    content_hash = Column(String)
+    status = Column(String, default="ready")  # ready, generating, error
+    last_error = Column(Text)
 
     quote = relationship("Quote", back_populates="pdf_cache")
 

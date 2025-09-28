@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ....database import get_db
 from ....services.wecom_integration import WeComApprovalIntegration
-from ....services.quote_service import QuoteService
+from ....services.quote_service import QuoteService, PDFGenerationInProgress
 from ....auth import get_current_user
 from ....models import User, Quote
 
@@ -94,6 +94,8 @@ async def submit_quote_for_approval(
 
     try:
         cache = quote_service.ensure_pdf_cache(quote, acting_user)
+    except PDFGenerationInProgress:
+        raise HTTPException(status_code=409, detail="PDF报价单生成中，请稍后再试")
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"生成PDF报价单失败，请稍后重试: {exc}")
 
@@ -110,7 +112,7 @@ async def submit_quote_for_approval(
     try:
         # 提交企业微信审批
         result = await wecom_service.submit_quote_approval(quote_id)
-        
+    
         # 更新报价单状态 - 只更新审批状态，不改变quote.status
         if hasattr(quote, 'approval_status'):
             quote.approval_status = "pending"
@@ -121,7 +123,9 @@ async def submit_quote_for_approval(
         db.commit()
         
         return result
-        
+    except PDFGenerationInProgress:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="PDF报价单生成中，请稍后再试")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"提交审批失败: {str(e)}")

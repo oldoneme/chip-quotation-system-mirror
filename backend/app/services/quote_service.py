@@ -3,6 +3,8 @@
 处理报价单相关的业务逻辑
 """
 
+import logging
+from threading import Thread
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
@@ -10,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_, or_, desc, asc, func
 from sqlalchemy.exc import IntegrityError
 
-from ..models import Quote, QuoteItem, ApprovalRecord, User
+from ..models import Quote, QuoteItem, ApprovalRecord, User, QuotePDFCache
 from ..schemas import (
     QuoteCreate, QuoteUpdate, QuoteFilter,
     QuoteStatusUpdate, ApprovalRecordCreate,
@@ -20,6 +22,12 @@ from .frontend_snapshot_pdf_service import (
     get_frontend_snapshot_pdf_service,
     upsert_pdf_cache,
 )
+
+logger = logging.getLogger(__name__)
+
+
+class PDFGenerationInProgress(Exception):
+    """Raised when a PDF generation task is already in progress."""
 
 
 class QuoteService:
@@ -164,23 +172,158 @@ class QuoteService:
             .first()
         )
 
-    def ensure_pdf_cache(self, quote: Quote, user, force: bool = False, column_configs: Optional[Dict] = None):
+    def ensure_pdf_cache(
+        self,
+        quote: Quote,
+        user,
+        force: bool = False,
+        column_configs: Optional[Dict] = None,
+        prefer_playwright: bool = False,
+        wait: bool = True,
+    ):
         service = get_frontend_snapshot_pdf_service()
+        current_hash = service.compute_quote_hash(quote, column_configs)
         cache = quote.pdf_cache
         needs_regen = force or cache is None
+        cached_path = service.get_cached_pdf_path(quote) if cache is not None else None
+        file_ready = cached_path is not None
+        async_regen = False
+
         if not needs_regen and cache is not None:
-            cached_path = service.get_cached_pdf_path(quote)
-            if not cached_path:
+            if cache.status == 'generating' and not force:
+                if file_ready and cache.content_hash == current_hash:
+                    cache.status = 'ready'
+                    cache.last_error = None
+                    self.db.flush()
+                else:
+                    raise PDFGenerationInProgress()
+            if cache.status == 'error':
                 needs_regen = True
+            elif not file_ready:
+                needs_regen = True
+            elif cache.content_hash and cache.content_hash != current_hash:
+                needs_regen = True
+            elif cache.content_hash is None:
+                cache.content_hash = current_hash
+                cache.updated_at = quote.updated_at or cache.updated_at
+                self.db.flush()
+            elif prefer_playwright and cache.source != 'playwright':
+                if wait:
+                    needs_regen = True
+                else:
+                    async_regen = True
             elif quote.updated_at and cache.updated_at and quote.updated_at > cache.updated_at:
-                needs_regen = True
-            elif cache.source != 'playwright':
+                cache.updated_at = quote.updated_at
+                self.db.flush()
+            elif cache.source not in ('playwright', 'weasyprint'):
                 needs_regen = True
 
         if needs_regen:
-            result = service.generate_with_fallback(quote, user, self.db, column_configs=column_configs)
-            cache = upsert_pdf_cache(self.db, quote, result)
+            if not wait:
+                cache = self._mark_pdf_generating(quote, cache, current_hash)
+                self._schedule_pdf_generation(quote.id, getattr(user, 'id', None), column_configs, prefer_playwright)
+                raise PDFGenerationInProgress()
+
+            cache = self._mark_pdf_generating(quote, cache, current_hash)
+            try:
+                result = service.generate_with_fallback(quote, user, self.db, column_configs=column_configs)
+                result.setdefault('content_hash', current_hash)
+                result.setdefault('status', 'ready')
+                cache = upsert_pdf_cache(self.db, quote, result)
+            except Exception as exc:
+                self._mark_pdf_failed(cache, str(exc))
+                raise
+        elif async_regen and cache.status != 'generating':
+            self._schedule_pdf_generation(quote.id, getattr(user, 'id', None), column_configs, True)
         return cache
+
+    def _mark_pdf_generating(
+        self,
+        quote: Quote,
+        cache: Optional[QuotePDFCache],
+        content_hash: str,
+    ) -> QuotePDFCache:
+        now = datetime.utcnow()
+        if cache is None:
+            cache = QuotePDFCache(
+                quote_id=quote.id,
+                pdf_path=f"media/quotes/{quote.id}/quote_{quote.quote_number}.pdf",
+                source='pending',
+                file_size=0,
+                status='generating',
+                content_hash=content_hash,
+                updated_at=now,
+            )
+            self.db.add(cache)
+            quote.pdf_cache = cache
+        else:
+            cache.status = 'generating'
+            cache.last_error = None
+            cache.content_hash = content_hash
+            cache.updated_at = now
+        self.db.commit()
+        return cache
+
+    def _mark_pdf_failed(self, cache: QuotePDFCache, error_message: str):
+        cache.status = 'error'
+        cache.last_error = error_message[:500]
+        cache.updated_at = datetime.utcnow()
+        self.db.commit()
+
+    def _schedule_pdf_generation(
+        self,
+        quote_id: int,
+        user_id: Optional[int],
+        column_configs: Optional[Dict],
+        prefer_playwright: bool,
+    ):
+        from ..database import SessionLocal
+
+        def task():
+            with SessionLocal() as session:
+                service = QuoteService(session)
+                quote = (
+                    session.query(Quote)
+                    .options(selectinload(Quote.items), selectinload(Quote.pdf_cache))
+                    .filter(Quote.id == quote_id)
+                    .first()
+                )
+                if not quote:
+                    logger.warning("quote_not_found_for_pdf", extra={"quote_id": quote_id})
+                    return
+
+                user = None
+                if user_id:
+                    user = session.query(User).filter(User.id == user_id).first()
+                if user is None and quote.created_by:
+                    user = session.query(User).filter(User.id == quote.created_by).first()
+                if user is None:
+                    user = (
+                        session.query(User)
+                        .filter(User.role.in_(['admin', 'super_admin']))
+                        .order_by(User.id.asc())
+                        .first()
+                    )
+
+                if user is None:
+                    logger.error("pdf_generation_no_user", extra={"quote_id": quote_id})
+                    if quote.pdf_cache:
+                        service._mark_pdf_failed(quote.pdf_cache, "缺少可用的用户用于生成PDF")
+                    return
+
+                try:
+                    service.ensure_pdf_cache(
+                        quote,
+                        user,
+                        force=True,
+                        column_configs=column_configs,
+                        prefer_playwright=prefer_playwright,
+                        wait=True,
+                    )
+                except Exception as exc:
+                    logger.error("pdf_generation_async_failed", extra={"quote_id": quote_id, "error": str(exc)})
+
+        Thread(target=task, daemon=True).start()
 
     def get_pdf_url(self, quote: Quote) -> Optional[str]:
         if getattr(quote, 'pdf_cache', None):

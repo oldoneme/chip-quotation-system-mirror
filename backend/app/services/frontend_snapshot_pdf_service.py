@@ -4,9 +4,11 @@ import json
 import logging
 import time
 from datetime import datetime
+import hashlib
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from playwright.sync_api import sync_playwright
@@ -194,6 +196,8 @@ class FrontendSnapshotPDFService:
         token = create_user_token(user, expires_seconds=1800, scope="snapshot")
         pdf_path, png_path = self._compute_output_paths(quote)
 
+        content_hash = self._compute_quote_hash(quote, column_configs)
+
         try:
             auth_service = AuthService(db_session)
             user_session = auth_service.create_session(
@@ -217,6 +221,7 @@ class FrontendSnapshotPDFService:
                 "pdf_path": str(pdf_file),
                 "png_path": result.get("png"),
                 "file_size": file_size,
+                "content_hash": content_hash,
             }
             LOGGER.info(
                 json.dumps(
@@ -251,6 +256,7 @@ class FrontendSnapshotPDFService:
                 "pdf_path": str(pdf_path),
                 "png_path": str(png_path),
                 "file_size": pdf_path.stat().st_size if pdf_path.exists() else 0,
+                "content_hash": content_hash,
             }
             LOGGER.warning(
                 json.dumps(
@@ -307,6 +313,57 @@ class FrontendSnapshotPDFService:
             data["column_configs"] = column_configs
         return data
 
+    def _compute_quote_hash(
+        self,
+        quote: Quote,
+        column_configs: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        serialized = self._sanitize_for_hash(self._serialize_quote(quote, column_configs))
+        serialized_json = json.dumps(serialized, sort_keys=True, ensure_ascii=False)
+        return hashlib.sha256(serialized_json.encode("utf-8")).hexdigest()
+
+    def compute_quote_hash(
+        self,
+        quote: Quote,
+        column_configs: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        return self._compute_quote_hash(quote, column_configs)
+
+    def _sanitize_for_hash(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        meta_keys = {
+            'status',
+            'approval_status',
+            'approval_method',
+            'rejection_reason',
+            'submitted_at',
+            'approved_at',
+            'approved_by',
+            'wecom_approval_id',
+            'current_approver_id',
+            'deleted_at',
+            'deleted_by',
+            'is_deleted',
+            'created_at',
+            'updated_at',
+            'pdf_cache',
+        }
+
+        sanitized: Dict[str, Any] = {}
+        for key, value in data.items():
+            if key in meta_keys:
+                continue
+            if isinstance(value, dict):
+                sanitized_value = self._sanitize_for_hash(value)
+                sanitized[key] = sanitized_value
+            elif isinstance(value, list):
+                sanitized[key] = [
+                    self._sanitize_for_hash(item) if isinstance(item, dict) else item
+                    for item in value
+                ]
+            else:
+                sanitized[key] = value
+        return sanitized
+
 
 _frontend_snapshot_service: Optional[FrontendSnapshotPDFService] = None
 
@@ -323,26 +380,61 @@ def upsert_pdf_cache(
     quote: Quote,
     payload: Dict[str, Any],
 ) -> QuotePDFCache:
+    """Insert or update the PDF cache record for a quote."""
+
+    def _apply_updates(target: QuotePDFCache) -> QuotePDFCache:
+        target.pdf_path = payload.get("pdf_path", target.pdf_path)
+        target.source = payload.get("source", target.source)
+        target.file_size = payload.get("file_size", target.file_size)
+        target.updated_at = datetime.utcnow()
+        target.content_hash = payload.get("content_hash", target.content_hash)
+        target.status = payload.get("status", target.status or 'ready')
+        if payload.get("last_error") is not None:
+            target.last_error = payload.get("last_error")
+        elif target.status == 'ready':
+            target.last_error = None
+        return target
+
     cache = quote.pdf_cache
 
     if cache is None:
-        cache = db_session.query(QuotePDFCache).filter(QuotePDFCache.quote_id == quote.id).first()
-
-    if cache is None:
-        cache = QuotePDFCache(
-            quote_id=quote.id,
-            pdf_path=payload.get("pdf_path"),
-            source=payload.get("source", "playwright"),
-            file_size=payload.get("file_size", 0),
+        cache = (
+            db_session.query(QuotePDFCache)
+            .filter(QuotePDFCache.quote_id == quote.id)
+            .first()
         )
-        db_session.add(cache)
-        quote.pdf_cache = cache
-    else:
-        cache.pdf_path = payload.get("pdf_path", cache.pdf_path)
-        cache.source = payload.get("source", cache.source)
-        cache.file_size = payload.get("file_size", cache.file_size)
-        cache.updated_at = datetime.utcnow()
 
-    db_session.commit()
+    try:
+        if cache is None:
+            cache = QuotePDFCache(
+                quote_id=quote.id,
+                pdf_path=payload.get("pdf_path"),
+                source=payload.get("source", "playwright"),
+                file_size=payload.get("file_size", 0),
+                content_hash=payload.get("content_hash"),
+                status=payload.get("status", "ready"),
+                last_error=payload.get("last_error"),
+            )
+            db_session.add(cache)
+            quote.pdf_cache = cache
+        else:
+            cache = _apply_updates(cache)
+
+        db_session.commit()
+    except IntegrityError:
+        db_session.rollback()
+        cache = (
+            db_session.query(QuotePDFCache)
+            .filter(QuotePDFCache.quote_id == quote.id)
+            .first()
+        )
+
+        if cache is None:
+            raise
+
+        cache = _apply_updates(cache)
+        quote.pdf_cache = cache
+        db_session.commit()
+
     db_session.refresh(cache)
     return cache
