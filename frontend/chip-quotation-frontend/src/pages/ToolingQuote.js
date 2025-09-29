@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { message } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { formatQuotePrice } from '../utils';
+import useQuoteEditMode from '../hooks/useQuoteEditMode';
+import { QuoteApiService } from '../services/quoteApi';
 import '../App.css';
 
 const ToolingQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMounted, setIsMounted] = useState(false);
+
+  // 编辑模式相关状态
+  const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editMessageShown, setEditMessageShown] = useState(false);
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -96,26 +104,56 @@ const ToolingQuote = () => {
   // 组件挂载和状态管理
   useEffect(() => {
     // 标记组件已挂载
-    setIsMounted(true);
-    
-    // 检查是否从结果页返回
-    const isFromResultPage = location.state?.fromResultPage;
-    if (isFromResultPage) {
-      const savedState = sessionStorage.getItem('toolingQuoteState');
-      if (savedState) {
-        try {
-          const parsedState = JSON.parse(savedState);
-          console.log('从 sessionStorage 恢复工装夹具报价状态:', parsedState);
-          setFormData(parsedState);
-        } catch (error) {
-          console.error('解析保存状态时出错:', error);
-        }
-      }
-    } else {
-      sessionStorage.removeItem('toolingQuoteState');
-      console.log('开始全新工装夹具报价流程');
+    if (!isMounted) {
+      setIsMounted(true);
     }
-  }, [location.state?.fromResultPage]);
+
+    // 编辑模式优先级最高
+    if (isEditMode && editingQuote && !editLoading && isMounted) {
+      console.log('编辑模式: 预填充报价数据', editingQuote);
+      console.log('编辑模式: 报价项目数据', editingQuote.items);
+      const convertedFormData = convertQuoteToFormData(editingQuote, 'tooling');
+      console.log('编辑模式: 转换后的表单数据', convertedFormData);
+      if (convertedFormData) {
+        setFormData(convertedFormData);
+        // 只在第一次显示消息
+        if (!editMessageShown) {
+          message.info(`正在编辑报价单: ${editingQuote.quote_number || editingQuote.id || '未知'}`);
+          setEditMessageShown(true);
+        }
+      } else {
+        console.error('编辑模式: 数据转换失败');
+      }
+      return;
+    }
+
+    // 检查是否从结果页返回（非编辑模式）
+    if (!isEditMode) {
+      const isFromResultPage = location.state?.fromResultPage;
+      if (isFromResultPage) {
+        const savedState = sessionStorage.getItem('toolingQuoteState');
+        if (savedState) {
+          try {
+            const parsedState = JSON.parse(savedState);
+            console.log('从 sessionStorage 恢复工装夹具报价状态:', parsedState);
+            setFormData(parsedState);
+          } catch (error) {
+            console.error('解析保存状态时出错:', error);
+          }
+        }
+      } else {
+        sessionStorage.removeItem('toolingQuoteState');
+        console.log('开始全新工装夹具报价流程');
+      }
+    }
+  }, [location.state?.fromResultPage, isEditMode, editingQuote, editLoading, isMounted]);
+
+  // 重置编辑消息标志当退出编辑模式时
+  useEffect(() => {
+    if (!isEditMode) {
+      setEditMessageShown(false);
+    }
+  }, [isEditMode]);
 
   // 保存状态到sessionStorage（只有在已挂载且不是从结果页面返回时才保存）
   useEffect(() => {
@@ -219,106 +257,148 @@ const ToolingQuote = () => {
     return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
   };
 
-  const handleSubmit = () => {
-    const totalCost = calculateTotalCost();
-    
-    // 生成工装夹具报价项目
-    const generateToolingQuoteItems = () => {
-      const items = [];
-      
-      // 1. 工装夹具类报价项目 - 按照具体工装夹具清单
-      formData.toolingItems.forEach((item, index) => {
-        if (item.category && item.type && item.totalPrice > 0) {
-          items.push({
-            item_name: item.type,
-            item_description: `${item.category} - ${item.specification || ''}`.trim(),
-            quantity: item.quantity || 1,
-            unit_price: item.unitPrice,
-            total_price: item.totalPrice,
-            unit: '件',
-            category_type: 'tooling_hardware', // 标记为工装夹具类
-            category_name: item.category
-          });
-        }
-      });
-      
-      // 2. 工程费用项目 - 只有非零项目才显示
-      Object.entries(formData.engineeringFees).forEach(([key, value]) => {
-        if (value > 0) {
-          const feeNames = {
-            testProgramDevelopment: '测试程序开发',
-            fixtureDesign: '夹具设计',
-            testValidation: '测试验证',
-            documentation: '文档编制'
-          };
-          
-          items.push({
-            item_name: feeNames[key],
-            item_description: '工程开发服务费',
-            quantity: 1,
-            unit_price: value,
-            total_price: value,
-            unit: '项',
-            category_type: 'engineering_fee', // 标记为工程费用
-            category_name: '工程费用'
-          });
-        }
-      });
-      
-      // 3. 量产准备费用项目 - 只有非零项目才显示
-      Object.entries(formData.productionSetup).forEach(([key, value]) => {
-        if (value > 0) {
-          const setupNames = {
-            setupFee: '设备调试费',
-            calibrationFee: '校准费',
-            firstArticleInspection: '首件检验费'
-          };
-          
-          items.push({
-            item_name: setupNames[key],
-            item_description: '量产准备服务费',
-            quantity: 1,
-            unit_price: value,
-            total_price: value,
-            unit: '项',
-            category_type: 'production_setup', // 标记为量产准备费用
-            category_name: '量产准备费用'
-          });
-        }
-      });
-      
-      return items;
-    };
-    
-    // 准备数据库创建数据
-    const quoteCreateData = {
-      title: `${formData.projectInfo.projectName || '工装夹具报价'} - ${formData.customerInfo.companyName}`,
-      quote_type: 'tooling',
-      customer_name: formData.customerInfo.companyName,
-      customer_contact: formData.customerInfo.contactPerson,
-      customer_phone: formData.customerInfo.phone,
-      customer_email: formData.customerInfo.email,
-      quote_unit: formData.projectInfo.quoteUnit,
-      currency: formData.currency,
-      subtotal: totalCost,
-      total_amount: totalCost,
-      payment_terms: formData.paymentTerms,
-      description: `项目：${formData.projectInfo.projectName}，芯片封装：${formData.projectInfo.chipPackage}，测试类型：${formData.projectInfo.testType}`,
-      notes: `交期：${formData.deliveryTime}，备注：${formData.remarks}`,
-      items: generateToolingQuoteItems()
-    };
-    
-    const quoteData = {
-      type: '工装夹具报价',
-      number: generateTempQuoteNumber(formData.projectInfo.quoteUnit),
-      date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      ...formData,
-      totalCost,
-      generatedAt: new Date().toISOString(),
-      quoteCreateData // 添加数据库创建数据
-    };
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
 
-    navigate('/quote-result', { state: quoteData });
+    try {
+      const totalCost = calculateTotalCost();
+
+      // 生成工装夹具报价项目
+      const generateToolingQuoteItems = () => {
+        const items = [];
+
+        // 1. 工装夹具类报价项目 - 按照具体工装夹具清单
+        formData.toolingItems.forEach((item, index) => {
+          if (item.category && item.type && item.totalPrice > 0) {
+            items.push({
+              item_name: item.type,
+              item_description: `${item.category} - ${item.specification || ''}`.trim(),
+              quantity: item.quantity || 1,
+              unit_price: item.unitPrice,
+              total_price: item.totalPrice,
+              unit: '件',
+              category_type: 'tooling_hardware', // 标记为工装夹具类
+              category_name: item.category
+            });
+          }
+        });
+
+        // 2. 工程费用项目 - 只有非零项目才显示
+        Object.entries(formData.engineeringFees).forEach(([key, value]) => {
+          if (value > 0) {
+            const feeNames = {
+              testProgramDevelopment: '测试程序开发',
+              fixtureDesign: '夹具设计',
+              testValidation: '测试验证',
+              documentation: '文档编制'
+            };
+
+            items.push({
+              item_name: feeNames[key],
+              item_description: '工程开发服务费',
+              quantity: 1,
+              unit_price: value,
+              total_price: value,
+              unit: '项',
+              category_type: 'engineering_fee', // 标记为工程费用
+              category_name: '工程费用'
+            });
+          }
+        });
+
+        // 3. 量产准备费用项目 - 只有非零项目才显示
+        Object.entries(formData.productionSetup).forEach(([key, value]) => {
+          if (value > 0) {
+            const setupNames = {
+              setupFee: '设备调试费',
+              calibrationFee: '校准费',
+              firstArticleInspection: '首件检验费'
+            };
+
+            items.push({
+              item_name: setupNames[key],
+              item_description: '量产准备服务费',
+              quantity: 1,
+              unit_price: value,
+              total_price: value,
+              unit: '项',
+              category_type: 'production_setup', // 标记为量产准备费用
+              category_name: '量产准备费用'
+            });
+          }
+        });
+
+        return items;
+      };
+
+      // 准备API数据
+      const apiData = {
+        title: `${formData.projectInfo.projectName || '工装夹具报价'} - ${formData.customerInfo.companyName}`,
+        quote_type: 'tooling',
+        customer_name: formData.customerInfo.companyName,
+        customer_contact: formData.customerInfo.contactPerson,
+        customer_phone: formData.customerInfo.phone,
+        customer_email: formData.customerInfo.email,
+        quote_unit: formData.projectInfo.quoteUnit,
+        currency: formData.currency,
+        subtotal: totalCost,
+        total_amount: totalCost,
+        payment_terms: formData.paymentTerms,
+        description: `项目：${formData.projectInfo.projectName}，芯片封装：${formData.projectInfo.chipPackage}，测试类型：${formData.projectInfo.testType}`,
+        notes: `交期：${formData.deliveryTime}，备注：${formData.remarks}`,
+        items: generateToolingQuoteItems()
+      };
+
+      let response;
+
+      if (isEditMode && editingQuote) {
+        // 编辑模式：更新现有报价
+        response = await QuoteApiService.updateQuote(editingQuote.id, apiData);
+
+        // 编辑成功后跳转到报价详情页面
+        navigate(`/quote-detail/${editingQuote.quote_number}`, {
+          state: {
+            message: '报价单更新成功',
+            updatedQuote: response
+          }
+        });
+      } else {
+        // 新建模式：创建新报价
+        response = await QuoteApiService.createQuote(apiData);
+
+        // 准备结果页面数据（保持原有逻辑）
+        const quoteData = {
+          type: '工装夹具报价',
+          number: response.quote_number, // 使用后端返回的真实报价号
+          date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          ...formData,
+          totalCost,
+          generatedAt: new Date().toISOString(),
+          quoteCreateData: response // 添加后端返回的数据
+        };
+
+        navigate('/quote-result', { state: quoteData });
+      }
+
+    } catch (error) {
+      console.error('提交报价失败:', error);
+
+      let errorMessage = '提交失败，请稍后重试';
+      if (error.response) {
+        // 服务器返回了错误状态码
+        errorMessage = `提交失败: ${error.response.status} - ${error.response.data?.detail || error.response.statusText}`;
+      } else if (error.request) {
+        // 请求发送了但没有收到响应
+        errorMessage = '网络连接失败，请检查网络或稍后重试';
+      } else {
+        // 其他错误
+        errorMessage = `提交失败: ${error.message}`;
+      }
+
+      alert(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleBack = () => {
@@ -333,9 +413,9 @@ const ToolingQuote = () => {
 
   return (
     <div className="quote-container">
-      <PageTitle 
-        title="工装夹具报价" 
-        subtitle="专业的测试工装和夹具定制服务" 
+      <PageTitle
+        title={isEditMode ? "编辑工装夹具报价" : "工装夹具报价"}
+        subtitle={isEditMode ? `编辑报价单 ${editingQuote?.quote_number || editingQuote?.id || ''}` : "专业的测试工装和夹具定制服务"}
       />
 
       <div className="form-section">
@@ -711,8 +791,8 @@ const ToolingQuote = () => {
         <SecondaryButton onClick={handleBack}>
           返回
         </SecondaryButton>
-        <PrimaryButton onClick={handleSubmit}>
-          生成报价单
+        <PrimaryButton onClick={handleSubmit} disabled={isSubmitting}>
+          {isSubmitting ? '提交中...' : (isEditMode ? '更新报价单' : '生成报价单')}
         </PrimaryButton>
       </div>
     </div>

@@ -75,20 +75,44 @@ const UnifiedApprovalPanel = ({
     }
   }, [quote?.id, showHistory]);
 
-  // 实时更新 useEffect
+  // 实时更新 useEffect - 优化性能
   useEffect(() => {
     let intervalId;
 
-    if (enableRealTimeUpdate && quote?.id && !loading) {
+    // 只有在启用实时更新、有报价ID、非加载状态，且页面可见时才启动轮询
+    if (enableRealTimeUpdate && quote?.id && !loading && !document.hidden) {
+      // 增加轮询间隔到60秒以减少服务器负载
       intervalId = setInterval(() => {
-        fetchApprovalStatus(true); // 静默刷新
-      }, updateInterval);
+        // 检查页面是否仍然可见
+        if (!document.hidden) {
+          fetchApprovalStatus(true); // 静默刷新
+        }
+      }, Math.max(updateInterval, 60000)); // 最小60秒间隔
     }
+
+    // 监听页面可见性变化
+    const handleVisibilityChange = () => {
+      if (document.hidden && intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      } else if (!document.hidden && enableRealTimeUpdate && quote?.id && !loading) {
+        if (!intervalId) {
+          intervalId = setInterval(() => {
+            if (!document.hidden) {
+              fetchApprovalStatus(true);
+            }
+          }, Math.max(updateInterval, 60000));
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [enableRealTimeUpdate, quote?.id, loading, updateInterval]);
 

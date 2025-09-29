@@ -36,10 +36,12 @@ const QuoteManagement = () => {
       
       // 格式化数据显示
       const formattedQuotes = quotesData.map(quote => ({
-        id: quote.quote_number,
+        id: quote.id,  // 使用数字ID作为主键
         quoteId: quote.id,  // 保存实际ID用于操作
         title: quote.title,
         type: QuoteApiService.mapQuoteTypeFromBackend(quote.quote_type),
+        quote_type: quote.quote_type, // 保留原始类型用于编辑跳转
+        quote_number: quote.quote_number, // 保留报价单号
         customer: quote.customer_name,
         currency: quote.currency || 'CNY',
         status: QuoteApiService.mapStatusFromBackend(quote.status),
@@ -49,7 +51,9 @@ const QuoteManagement = () => {
         updatedAt: new Date(quote.updated_at).toLocaleString('zh-CN'),
         validUntil: quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('zh-CN') : '-',
         totalAmount: quote.total_amount,
-        quoteDetails: quote.quote_details || []
+        quoteDetails: quote.quote_details || [],
+        // 为编辑功能保留完整的原始数据
+        ...quote
       }));
       
       setQuotes(formattedQuotes);
@@ -137,8 +141,8 @@ const QuoteManagement = () => {
   const columns = [
     {
       title: '报价单号',
-      dataIndex: 'id',
-      key: 'id',
+      dataIndex: 'quote_number',
+      key: 'quote_number',
       width: 160,
       render: (text) => <Button type="link" onClick={() => handleView(text)}>{text}</Button>
     },
@@ -235,9 +239,38 @@ const QuoteManagement = () => {
     navigate(`/quote-detail/${id}`);
   };
 
-  const handleEdit = (record) => {
-    message.info(`编辑报价单 ${record.id}`);
-    // 根据类型导航到对应的编辑页面
+  const handleEdit = async (record) => {
+    // 根据报价类型跳转到对应的编辑页面
+    const quoteTypeToPath = {
+      'inquiry': '/inquiry-quote',
+      'tooling': '/tooling-quote',
+      'engineering': '/engineering-quote',
+      'mass_production': '/mass-production-quote',
+      'process': '/process-quote',
+      'comprehensive': '/comprehensive-quote'
+    };
+
+    const editPath = quoteTypeToPath[record.quote_type];
+    if (editPath) {
+      try {
+        // 获取完整的报价单详情数据（包含items字段）
+        const fullQuoteData = await QuoteApiService.getQuoteDetailById(record.quoteId);
+
+        // 传递完整的报价单数据到编辑页面
+        navigate(editPath, {
+          state: {
+            editingQuote: fullQuoteData, // 使用完整的数据
+            isEditing: true,
+            quoteId: record.quoteId // 使用实际的数据库ID
+          }
+        });
+      } catch (error) {
+        console.error('获取报价单详情失败:', error);
+        message.error('获取报价单详情失败，请稍后重试');
+      }
+    } else {
+      message.error(`未知的报价类型：${record.quote_type}，无法编辑`);
+    }
   };
 
   const handleDelete = (record) => {

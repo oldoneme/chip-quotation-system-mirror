@@ -110,7 +110,7 @@ const QuoteDetail = () => {
         setLoading(false);
       }
     })();
-  }, [id, urlJwt, location.pathname, location.search]);
+  }, [id, urlJwt]); // 移除 location.pathname 和 location.search 以避免过度刷新
 
   const fetchQuoteDetail = async () => {
     setLoading(true);
@@ -251,27 +251,44 @@ const QuoteDetail = () => {
     return <Tag color={typeColors[type]} style={{ fontSize: '14px', padding: '4px 12px' }}>{type}</Tag>;
   };
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     // 根据报价类型跳转到对应的编辑页面
     const quoteTypeToPath = {
       '询价报价': '/inquiry-quote',
-      '工装夹具报价': '/tooling-quote', 
+      '工装夹具报价': '/tooling-quote',
       '工程机时报价': '/engineering-quote',
       '量产机时报价': '/mass-production-quote',
       '量产工序报价': '/process-quote',
       '综合报价': '/comprehensive-quote'
     };
-    
+
     const editPath = quoteTypeToPath[quote.type];
     if (editPath) {
-      // 传递报价单数据到编辑页面
-      navigate(editPath, { 
-        state: { 
-          editingQuote: quote,
-          isEditing: true,
-          quoteId: quote.id 
-        } 
-      });
+      try {
+        console.log('📝 从详情页编辑报价单:', quote.quoteId || quote.id);
+
+        // 获取完整的报价单详情数据（包含items字段）
+        // 使用原始的API数据，确保包含所有字段
+        let fullQuoteData;
+        if (quote.quoteId) {
+          fullQuoteData = await QuoteApiService.getQuoteDetailById(quote.quoteId);
+        } else {
+          fullQuoteData = await QuoteApiService.getQuoteDetailById(quote.id);
+        }
+        console.log('📝 详情页获取完整报价数据:', fullQuoteData);
+
+        // 传递完整的报价单数据到编辑页面
+        navigate(editPath, {
+          state: {
+            editingQuote: fullQuoteData, // 使用完整的API数据
+            isEditing: true,
+            quoteId: quote.quoteId || quote.id
+          }
+        });
+      } catch (error) {
+        console.error('从详情页获取报价单详情失败:', error);
+        message.error('获取报价单详情失败，请稍后重试');
+      }
     } else {
       message.error('未知的报价类型，无法编辑');
     }
