@@ -1,0 +1,141 @@
+# backend/app/services/frontend_snapshot_pdf_service.py
+from playwright.sync_api import sync_playwright
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlencode
+import logging
+
+logger = logging.getLogger(__name__)
+
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+READY_SELECTOR = os.getenv("SNAPSHOT_READY_SELECTOR", "#quote-ready")
+
+def _quote_detail_path(quote_number: str) -> str:
+    # 根据实际前端路由修改 - 使用正确的路径
+    return f"/quote-detail/{quote_number}"
+
+def _build_url(path: str, token: str | None):
+    base = FRONTEND_BASE_URL.rstrip("/")
+    if token:
+        return f"{base}{path}?{urlencode({'__snapshot_token': token})}"
+    return f"{base}{path}"
+
+def _inject_auth(page, jwt_token: str | None, cookies: list[dict] | None):
+    if jwt_token:
+        page.set_extra_http_headers({"Authorization": f"Bearer {jwt_token}"})
+    if cookies:
+        page.context.add_cookies(cookies)
+
+def _run_playwright_in_thread(
+    quote_number: str,
+    output_path: str,
+    jwt_token: str | None = None,
+    cookies: list[dict] | None = None,
+    ready_selector: str | None = READY_SELECTOR,
+) -> bytes:
+    """在独立线程中运行Playwright，避免asyncio冲突"""
+    with sync_playwright() as p:
+        try:
+            logger.info(f"📸 开始前端快照: {quote_number}")
+
+            # 创建新浏览器实例
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"]
+            )
+
+            context = browser.new_context()
+            page = context.new_page()
+            _inject_auth(page, jwt_token, cookies)
+
+            url = _build_url(_quote_detail_path(quote_number), token=None)
+            logger.info(f"🌐 访问URL: {url}")
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+
+            # 等待前端渲染完毕标记
+            if ready_selector:
+                logger.info(f"⏳ 等待渲染完成标记: {ready_selector}")
+
+                # 调试：检查页面内容
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=10000)
+                    # 等待一些基本内容加载
+                    page.wait_for_selector("body", timeout=10000)
+
+                    # 检查是否有任何#quote-ready元素
+                    ready_elements = page.query_selector_all("#quote-ready")
+                    logger.info(f"🔍 找到 {len(ready_elements)} 个 #quote-ready 元素")
+
+                    if ready_elements:
+                        element = ready_elements[0]
+                        visible = element.is_visible()
+                        enabled = element.is_enabled()
+                        logger.info(f"🔍 #quote-ready 状态: visible={visible}, enabled={enabled}")
+
+                        # 尝试等待可见
+                        if not visible:
+                            logger.info("⏳ #quote-ready存在但不可见，等待变为可见...")
+                            page.wait_for_selector(ready_selector, state="visible", timeout=60000)
+                        else:
+                            logger.info("✅ #quote-ready已可见!")
+                    else:
+                        logger.info("⏳ #quote-ready尚未创建，等待创建...")
+                        page.wait_for_selector(ready_selector, timeout=60000)
+
+                except Exception as debug_e:
+                    logger.warning(f"🔍 调试检查失败: {debug_e}")
+                    # 回退到原始等待
+                    page.wait_for_selector(ready_selector, timeout=60000)
+            else:
+                logger.info("⏳ 等待网络空闲")
+                page.wait_for_load_state("networkidle", timeout=60000)
+
+            logger.info("🖨️ 开始生成PDF")
+            page.emulate_media(media="print")
+            pdf_bytes = page.pdf(
+                format="A4",
+                margin={"top": "8mm","bottom":"8mm","left":"8mm","right":"8mm"},
+                print_background=True,
+            )
+
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            with open(output_path, "wb") as f:
+                f.write(pdf_bytes)
+
+            logger.info(f"✅ 快照成功: {quote_number} size={len(pdf_bytes)} path={output_path}")
+            return pdf_bytes
+
+        except Exception as e:
+            logger.error(f"❌ 快照失败: {quote_number} {str(e)}")
+            raise
+        finally:
+            try:
+                browser.close()
+            except:
+                pass
+
+def generate_quote_pdf_from_frontend_snapshot_sync(
+    quote_number: str,
+    output_path: str,
+    jwt_token: str | None = None,
+    cookies: list[dict] | None = None,
+    ready_selector: str | None = READY_SELECTOR,
+) -> bytes:
+    """在独立线程中运行Playwright，避免asyncio冲突"""
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            _run_playwright_in_thread,
+            quote_number,
+            output_path,
+            jwt_token,
+            cookies,
+            ready_selector
+        )
+        return future.result(timeout=120)  # 2分钟超时
+
+class FrontendSnapshotPdfService:
+    def generate_quote_pdf_from_frontend_snapshot_sync(self, *args, **kwargs) -> bytes:
+        return generate_quote_pdf_from_frontend_snapshot_sync(*args, **kwargs)
+
+frontend_snapshot_pdf_service = FrontendSnapshotPdfService()
