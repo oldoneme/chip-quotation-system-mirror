@@ -1204,11 +1204,6 @@ const useQuoteEditMode = () => {
 
     if (!items || items.length === 0) return config;
 
-    console.log('parseMassProductionDevicesFromItems: 开始解析', {
-      itemsCount: items.length,
-      availableMachinesCount: availableMachines.length
-    });
-
     // 解析每个报价项，从configuration JSON中提取设备信息
     items.forEach(item => {
       let configData = null;
@@ -1346,58 +1341,25 @@ const useQuoteEditMode = () => {
 
       // 解析辅助设备
       if (deviceType === '辅助设备' || item.category_type === 'auxiliary_device' || item.category_type === 'auxiliary' || item.machine_type === '辅助设备') {
-        console.log('parseMassProductionDevicesFromItems: 发现辅助设备', {
-          item_name: item.item_name,
-          machine_type: item.machine_type,
-          category_type: item.category_type,
-          machine_id: item.machine_id,
-          deviceType: deviceType
-        });
-
         const machineId = item.machine_id;
 
         if (machineId) {
           // 有 machine_id 的情况（新格式）
           const fullMachine = availableMachines.find(m => m.id === machineId);
-          console.log('parseMassProductionDevicesFromItems: 通过machine_id查找设备', {
-            machineId,
-            found: !!fullMachine,
-            machineName: fullMachine?.name
-          });
           if (fullMachine && !config.auxDevices.find(d => d.id === machineId)) {
             config.auxDevices.push(fullMachine);
-            console.log('parseMassProductionDevicesFromItems: 添加辅助设备到config', fullMachine.name);
           }
         } else {
           // 旧格式：没有 machine_id，尝试通过名称匹配
           const deviceName = item.item_name || configData?.device_model || item.machine_model;
-          console.log('parseMassProductionDevicesFromItems: 通过名称查找设备', {
-            deviceName,
-            availableMachinesNames: availableMachines.map(m => m.name)
-          });
           if (deviceName) {
             const fullMachine = availableMachines.find(m => m.name === deviceName);
-            console.log('parseMassProductionDevicesFromItems: 名称匹配结果', {
-              found: !!fullMachine,
-              machineName: fullMachine?.name
-            });
             if (fullMachine && !config.auxDevices.find(d => d.id === fullMachine.id)) {
               config.auxDevices.push(fullMachine);
-              console.log('parseMassProductionDevicesFromItems: 添加辅助设备到config', fullMachine.name);
             }
           }
         }
       }
-    });
-
-    console.log('parseMassProductionDevicesFromItems: 解析完成', {
-      selectedTypes: config.selectedTypes,
-      ftMachine: config.ftData.testMachine?.name,
-      ftHandler: config.ftData.handler?.name,
-      cpMachine: config.cpData.testMachine?.name,
-      cpProber: config.cpData.prober?.name,
-      auxDevicesCount: config.auxDevices.length,
-      auxDevicesNames: config.auxDevices.map(d => d.name)
     });
 
     return config;
