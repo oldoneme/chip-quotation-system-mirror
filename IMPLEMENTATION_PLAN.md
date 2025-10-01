@@ -28,9 +28,9 @@
 ### Phase 3: 完整功能覆盖 🔄 进行中
 **目标**: 覆盖所有报价类型
 - [x] ToolingQuote（工装夹具报价）✅ 完全实现并修复表单编辑问题
-- [ ] InquiryQuote（询价报价）- 进行中
-- [ ] EngineeringQuote（工程机时报价）- 待实现
-- [ ] MassProductionQuote（量产机时报价）- 待实现
+- [x] InquiryQuote（询价报价）✅ 完全实现
+- [x] EngineeringQuote（工程机时报价）✅ 完全实现（含统一新建/编辑、板卡JSON存储、价格取整优化）
+- [ ] MassProductionQuote（量产机时报价）- 🔄 待应用工程报价优化模式
 - [ ] ProcessQuote（量产工序报价）- 待实现
 - [ ] ComprehensiveQuote（综合报价）- 待实现
 - [ ] 删除临时QuoteEdit页面
@@ -163,13 +163,22 @@ const convertQuoteToFormData = (quote) => {
 
 **当前状态**:
 - ✅ ToolingQuote: 完全实现，包括表单编辑问题修复
+- ✅ InquiryQuote: 完全实现
+- ✅ EngineeringQuote: 完全实现（已完成统一新建/编辑逻辑优化）
 - ✅ 通用编辑框架：useQuoteEditMode Hook已稳定
-- 🔄 继续实现剩余5种报价类型
+- 🔄 继续实现剩余3种报价类型
+
+**EngineeringQuote 完成的关键优化** (参考 ENGINEERING_QUOTE_SUMMARY.md):
+1. ⭐ **统一新建/编辑体验**: 相同底层逻辑，不同初始数据源
+2. ⭐ **板卡JSON序列化存储**: 避免重复项，配置字段存储完整板卡信息
+3. ⭐ **价格向上取整**: CNY取整到元，USD取整到分，应用于所有项目
+4. ⭐ **完整状态保持**: "上一步"功能保留所有数据（客户、项目、设备、板卡数量）
+5. ⭐ **编辑模式识别**: 页面标题正确显示报价单号
 
 **下一步优先级**:
-1. InquiryQuote（询价报价）- 已有基础框架，需完善数据转换
-2. EngineeringQuote（工程机时报价）- 需重点实现
-3. 其他类型按使用频率排序
+1. 🎯 **MassProductionQuote（量产机时报价）** - 应用EngineeringQuote的5大优化模式
+2. ProcessQuote（量产工序报价）- 待实现
+3. ComprehensiveQuote（综合报价）- 待实现
 
 ---
 
