@@ -1442,7 +1442,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: (ftData.testMachineCards || []).map(card => card.id)
                         }}
                         columns={cardColumns('ft', 'testMachine')}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
@@ -1500,7 +1500,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: (ftData.handlerCards || []).map(card => card.id)
                         }}
                         columns={cardColumns('ft', 'handler')}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
@@ -1564,7 +1564,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: (cpData.testMachineCards || []).map(card => card.id)
                         }}
                         columns={cardColumns('cp', 'testMachine')}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
@@ -1622,7 +1622,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: (cpData.proberCards || []).map(card => card.id)
                         }}
                         columns={cardColumns('cp', 'prober')}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
@@ -1660,7 +1660,7 @@ const MassProductionQuote = () => {
                         selectedRowKeys: selectedAuxDevices.map(device => device.id)
                       }}
                       columns={auxDeviceColumns}
-                      pagination={{ pageSize: 5, showSizeChanger: false }}
+                      pagination={false}
                     />
                   )
                 }] : []),
@@ -1668,7 +1668,7 @@ const MassProductionQuote = () => {
                   key: 'probers',
                   label: '探针台类',
                   children: (
-                    <Table 
+                    <Table
                       dataSource={auxDevices.probers}
                       rowKey="id"
                       rowSelection={{
@@ -1677,7 +1677,7 @@ const MassProductionQuote = () => {
                         selectedRowKeys: selectedAuxDevices.map(device => device.id)
                       }}
                       columns={auxDeviceColumns}
-                      pagination={{ pageSize: 5, showSizeChanger: false }}
+                      pagination={false}
                     />
                   )
                 }] : []),
@@ -1695,7 +1695,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: selectedAuxDevices.map(device => device.id)
                         }}
                         columns={auxDeviceColumns}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
