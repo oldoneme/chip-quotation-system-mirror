@@ -34,6 +34,9 @@ const MassProductionQuote = () => {
   // 编辑模式相关状态
   const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
 
+  // 编辑模式数据加载标志（确保只加载一次）
+  const [editDataLoaded, setEditDataLoaded] = useState(false);
+
   // 移除步骤管理，统一为单页面模式
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -156,21 +159,66 @@ const MassProductionQuote = () => {
 
   // 编辑模式数据预填充
   useEffect(() => {
-    if (!isMounted) {
-      setIsMounted(true);
-    }
+    // 只在编辑模式下，且数据未加载过时执行，并且需要等待cardTypes和machines数据加载完成
+    if (isEditMode && editingQuote && !editLoading && !editDataLoaded && cardTypes.length > 0 && machines.length > 0) {
+      console.log('MassProductionQuote 编辑模式：开始预填充数据', editingQuote);
 
-    if (isEditMode && editingQuote && !editLoading && isMounted) {
-      console.log('MassProductionQuote 编辑模式：预填充数据', editingQuote);
-      const convertedFormData = convertQuoteToFormData(editingQuote, 'mass_production');
-      if (convertedFormData) {
-        // 设置基础信息
-        if (convertedFormData.customerInfo) {
-          setCustomerInfo(convertedFormData.customerInfo);
+      // 合并所有机器数据供ID匹配使用
+      const allMachines = [...machines, ...handlers, ...probers, ...auxDevices.others];
+      const formData = convertQuoteToFormData(editingQuote, 'mass_production', cardTypes, allMachines);
+
+      if (formData) {
+        // 填充基本信息
+        setCustomerInfo(formData.customerInfo);
+        setProjectInfo(formData.projectInfo);
+
+        // 填充报价参数
+        if (formData.quoteCurrency) setQuoteCurrency(formData.quoteCurrency);
+        if (formData.quoteExchangeRate) setQuoteExchangeRate(formData.quoteExchangeRate);
+
+        // 填充设备配置（从deviceConfig中获取）
+        if (formData.deviceConfig) {
+          const { deviceConfig } = formData;
+
+          // 设置测试类型
+          if (deviceConfig.selectedTypes) {
+            setSelectedTypes(deviceConfig.selectedTypes);
+          }
+
+          // 设置FT数据
+          if (deviceConfig.ftData) {
+            setFtData(deviceConfig.ftData);
+          }
+
+          // 设置CP数据
+          if (deviceConfig.cpData) {
+            setCpData(deviceConfig.cpData);
+          }
+
+          // 设置辅助设备
+          if (deviceConfig.auxDevices) {
+            setSelectedAuxDevices(deviceConfig.auxDevices);
+          }
+
+          // 为板卡数量创建持久化数据
+          const cardQuantities = {};
+          deviceConfig.ftData?.testMachineCards?.forEach(card => {
+            cardQuantities[`ft-testMachine-${card.id}`] = card.quantity || 1;
+          });
+          deviceConfig.ftData?.handlerCards?.forEach(card => {
+            cardQuantities[`ft-handler-${card.id}`] = card.quantity || 1;
+          });
+          deviceConfig.cpData?.testMachineCards?.forEach(card => {
+            cardQuantities[`cp-testMachine-${card.id}`] = card.quantity || 1;
+          });
+          deviceConfig.cpData?.proberCards?.forEach(card => {
+            cardQuantities[`cp-prober-${card.id}`] = card.quantity || 1;
+          });
+          setPersistedCardQuantities(cardQuantities);
         }
-        if (convertedFormData.projectInfo) {
-          setProjectInfo(convertedFormData.projectInfo);
-        }
+
+        // 标记数据已加载
+        setEditDataLoaded(true);
 
         // 只在第一次显示消息
         if (!editMessageShown) {
@@ -179,7 +227,7 @@ const MassProductionQuote = () => {
         }
       }
     }
-  }, [isEditMode, editingQuote, editLoading, isMounted, editMessageShown]);
+  }, [isEditMode, editingQuote, editLoading, editDataLoaded, cardTypes, machines, handlers, probers, auxDevices, editMessageShown]);
 
   // 重置编辑消息标志
   useEffect(() => {

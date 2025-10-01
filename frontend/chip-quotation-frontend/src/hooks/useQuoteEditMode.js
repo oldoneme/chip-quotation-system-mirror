@@ -173,7 +173,7 @@ const useQuoteEditMode = () => {
       case 'engineering':
         return convertEngineeringQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes, availableMachines);
       case 'mass_production':
-        return convertMassProductionQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
+        return convertMassProductionQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes, availableMachines);
       case 'process':
         return convertProcessQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
       case 'comprehensive':
@@ -234,7 +234,14 @@ const useQuoteEditMode = () => {
   /**
    * 量产机时报价数据转换
    */
-  const convertMassProductionQuoteToFormData = (quote, baseFormData, availableCardTypes = []) => {
+  const convertMassProductionQuoteToFormData = (quote, baseFormData, availableCardTypes = [], availableMachines = []) => {
+
+    // 解析币种和汇率
+    const currency = quote.currency || 'CNY';
+    const exchangeRate = extractExchangeRateFromNotes(quote.notes);
+
+    // 从items中解析设备配置（FT/CP设备和辅助设备）
+    const deviceConfig = parseMassProductionDevicesFromItems(quote.items, availableCardTypes, availableMachines);
 
     return {
       ...baseFormData,
@@ -244,6 +251,9 @@ const useQuoteEditMode = () => {
         testType: 'mass_production',
         urgency: extractUrgencyFromNotes(quote.notes)
       },
+      quoteCurrency: currency,
+      quoteExchangeRate: exchangeRate,
+      deviceConfig: deviceConfig,
       remarks: extractRemarksFromNotes(quote.notes)
     };
   };
@@ -1166,6 +1176,166 @@ const useQuoteEditMode = () => {
         machine_type: item.machine_type,
         model: machineName
       };
+    });
+
+    return config;
+  };
+
+  /**
+   * 从报价项目中解析量产设备配置（FT/CP设备和辅助设备）
+   */
+  const parseMassProductionDevicesFromItems = (items, availableCardTypes = [], availableMachines = []) => {
+    const config = {
+      selectedTypes: [],
+      ftData: {
+        testMachine: null,
+        handler: null,
+        testMachineCards: [],
+        handlerCards: []
+      },
+      cpData: {
+        testMachine: null,
+        prober: null,
+        testMachineCards: [],
+        proberCards: []
+      },
+      auxDevices: []
+    };
+
+    if (!items || items.length === 0) return config;
+
+    // 解析每个报价项，从configuration JSON中提取设备信息
+    items.forEach(item => {
+      if (!item.configuration) return;
+
+      let configData;
+      try {
+        configData = JSON.parse(item.configuration);
+      } catch (e) {
+        console.warn('无法解析configuration JSON:', item.configuration);
+        return;
+      }
+
+      const deviceType = configData.device_type;
+      const testType = configData.test_type;
+
+      // 解析FT测试机
+      if (testType === 'FT' && deviceType === '测试机') {
+        if (!config.selectedTypes.includes('ft')) {
+          config.selectedTypes.push('ft');
+        }
+
+        const machineId = item.machine_id;
+        const fullMachine = availableMachines.find(m => m.id === machineId);
+
+        if (fullMachine) {
+          config.ftData.testMachine = fullMachine;
+        }
+
+        // 解析板卡信息
+        if (configData.cards && Array.isArray(configData.cards)) {
+          config.ftData.testMachineCards = configData.cards.map(cardInfo => {
+            const realCard = availableCardTypes.find(c => c.id === cardInfo.id);
+            return {
+              id: cardInfo.id,
+              board_name: cardInfo.board_name || '',
+              part_number: cardInfo.part_number || '',
+              quantity: cardInfo.quantity || 1,
+              unit_price: realCard ? realCard.unit_price : 0,
+              machine_id: machineId
+            };
+          });
+        }
+      }
+
+      // 解析FT分选机
+      if (testType === 'FT' && deviceType === '分选机') {
+        const machineId = item.machine_id;
+        const fullMachine = availableMachines.find(m => m.id === machineId);
+
+        if (fullMachine) {
+          config.ftData.handler = fullMachine;
+        }
+
+        // 解析板卡信息
+        if (configData.cards && Array.isArray(configData.cards)) {
+          config.ftData.handlerCards = configData.cards.map(cardInfo => {
+            const realCard = availableCardTypes.find(c => c.id === cardInfo.id);
+            return {
+              id: cardInfo.id,
+              board_name: cardInfo.board_name || '',
+              part_number: cardInfo.part_number || '',
+              quantity: cardInfo.quantity || 1,
+              unit_price: realCard ? realCard.unit_price : 0,
+              machine_id: machineId
+            };
+          });
+        }
+      }
+
+      // 解析CP测试机
+      if (testType === 'CP' && deviceType === '测试机') {
+        if (!config.selectedTypes.includes('cp')) {
+          config.selectedTypes.push('cp');
+        }
+
+        const machineId = item.machine_id;
+        const fullMachine = availableMachines.find(m => m.id === machineId);
+
+        if (fullMachine) {
+          config.cpData.testMachine = fullMachine;
+        }
+
+        // 解析板卡信息
+        if (configData.cards && Array.isArray(configData.cards)) {
+          config.cpData.testMachineCards = configData.cards.map(cardInfo => {
+            const realCard = availableCardTypes.find(c => c.id === cardInfo.id);
+            return {
+              id: cardInfo.id,
+              board_name: cardInfo.board_name || '',
+              part_number: cardInfo.part_number || '',
+              quantity: cardInfo.quantity || 1,
+              unit_price: realCard ? realCard.unit_price : 0,
+              machine_id: machineId
+            };
+          });
+        }
+      }
+
+      // 解析CP探针台
+      if (testType === 'CP' && deviceType === '探针台') {
+        const machineId = item.machine_id;
+        const fullMachine = availableMachines.find(m => m.id === machineId);
+
+        if (fullMachine) {
+          config.cpData.prober = fullMachine;
+        }
+
+        // 解析板卡信息
+        if (configData.cards && Array.isArray(configData.cards)) {
+          config.cpData.proberCards = configData.cards.map(cardInfo => {
+            const realCard = availableCardTypes.find(c => c.id === cardInfo.id);
+            return {
+              id: cardInfo.id,
+              board_name: cardInfo.board_name || '',
+              part_number: cardInfo.part_number || '',
+              quantity: cardInfo.quantity || 1,
+              unit_price: realCard ? realCard.unit_price : 0,
+              machine_id: machineId
+            };
+          });
+        }
+      }
+
+      // 解析辅助设备
+      if (deviceType === '辅助设备' || item.category_type === 'auxiliary_device') {
+        const machineId = item.machine_id;
+        const fullMachine = availableMachines.find(m => m.id === machineId);
+
+        if (fullMachine && !config.auxDevices.find(d => d.id === machineId)) {
+          config.auxDevices.push(fullMachine);
+        }
+      }
     });
 
     return config;
