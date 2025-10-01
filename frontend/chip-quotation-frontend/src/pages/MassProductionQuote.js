@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Select, Table, Tabs, Spin, Alert, Checkbox, Button, Card, InputNumber, message, Divider } from 'antd';
-import StepIndicator from '../components/StepIndicator';
+// 移除StepIndicator导入，统一为单页面模式
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,7 +34,7 @@ const MassProductionQuote = () => {
   // 编辑模式相关状态
   const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
 
-  const [currentStep, setCurrentStep] = useState(0);
+  // 移除步骤管理，统一为单页面模式
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -108,7 +108,6 @@ const MassProductionQuote = () => {
           
           if (isMounted) {
             // 恢复所有状态
-            setCurrentStep(parsedState.currentStep || 0);
             setSelectedTypes(parsedState.selectedTypes || ['ft', 'cp']);
             setFtData(parsedState.ftData || {
               testMachine: null,
@@ -616,26 +615,22 @@ const MassProductionQuote = () => {
     return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
   };
 
-  const handleNextStep = async () => {
-    const nextStepValue = currentStep + 1;
-    
-    // 保存当前状态到sessionStorage
+  const handleConfirmQuote = async () => {
+    // 保存当前状态到sessionStorage（用于"上一步"功能）
     const currentState = {
-      currentStep: nextStepValue,
       selectedTypes,
       ftData,
       cpData,
       selectedAuxDevices,
       persistedCardQuantities,
       quoteCurrency,
-      quoteExchangeRate
+      quoteExchangeRate,
+      customerInfo,
+      projectInfo
     };
     sessionStorage.setItem('massProductionQuoteState', JSON.stringify(currentState));
-    
-    if (nextStepValue < 2) {
-      // Save current step data and navigate to next step
-      setCurrentStep(nextStepValue);
-    } else {
+
+    {
       // 生成量产报价项目
       const generateMassProductionQuoteItems = () => {
         const items = [];
@@ -1019,60 +1014,6 @@ const MassProductionQuote = () => {
     }
   };
   
-  const handlePrevStep = () => {
-    const prevStepValue = currentStep - 1;
-    
-    // 保存当前状态到sessionStorage
-    const currentState = {
-      currentStep: prevStepValue,
-      selectedTypes,
-      ftData,
-      cpData,
-      selectedAuxDevices,
-      persistedCardQuantities,
-      quoteCurrency,
-      quoteExchangeRate
-    };
-    sessionStorage.setItem('massProductionQuoteState', JSON.stringify(currentState));
-    
-    // Navigate to previous step
-    setCurrentStep(prevStepValue);
-  };
-  
-  const resetQuote = () => {
-    ConfirmDialog.showResetConfirm({
-      title: '确认重置报价',
-      content: '您确定要重置所有选择吗？这将清除您当前的所有配置和选择。',
-      onOk: () => {
-        setSelectedMachine(null);
-        setSelectedConfig(null);
-        setSelectedCards([]);
-        setSelectedAuxDevices([]);
-        setSelectedTypes(['ft', 'cp']);
-        setFtData({ 
-          testMachine: null, 
-          handler: null, 
-          testMachineCards: [], 
-          handlerCards: [] 
-        });
-        setCpData({ 
-          testMachine: null, 
-          prober: null, 
-          testMachineCards: [], 
-          proberCards: [] 
-        });
-        setPersistedCardQuantities({});
-        setQuoteCurrency('CNY');
-        setQuoteExchangeRate(7.2);
-        setCurrentStep(0);
-        
-        // 清除sessionStorage中的状态
-        sessionStorage.removeItem('massProductionQuoteState');
-        message.success('报价已重置');
-      }
-    });
-  };
-  
   const handleAuxDeviceSelect = (selectedRowKeys, selectedRows) => {
     setSelectedAuxDevices(selectedRows);
   };
@@ -1254,21 +1195,10 @@ const MassProductionQuote = () => {
           </div>
         </div>
       </Card>
-      
-      {/* 步骤指示器 */}
-      <StepIndicator 
-        currentStep={currentStep}
-        steps={[
-          '基本信息',
-          '机器选择',
-          '辅助设备'
-        ]}
-      />
 
-      {/* 第0步：基本信息 */}
-      {currentStep === 0 && (
-        <div>
-          <h2 className="section-title">基本信息</h2>
+      {/* 基本信息 - 单页面显示 */}
+      <div>
+        <h2 className="section-title">基本信息</h2>
           
           {/* 客户信息 */}
           <Card title="客户信息" style={{ marginBottom: 20 }}>
@@ -1449,10 +1379,11 @@ const MassProductionQuote = () => {
         </div>
       )}
 
-      {/* 第一步：机器选择 */}
-      {currentStep === 1 && (
-        <>
-          {/* 选择FT或CP */}
+      {/* 机器选择 - 单页面显示 */}
+      <div>
+        <h2 className="section-title">机器选择</h2>
+
+        {/* 选择FT或CP */}
           <Card title="测试类型选择" style={{ marginBottom: 20 }}>
             <Checkbox.Group value={selectedTypes} onChange={handleProductionTypeChange}>
               <Checkbox value="ft" style={{ marginRight: 20 }}>FT</Checkbox>
@@ -1704,15 +1635,13 @@ const MassProductionQuote = () => {
               )}
               
               <p><strong>CP小时费: {formatPrice(cpHourlyFee)}</strong></p>
-            </Card>
-          )}
-        </>
-      )}
+          </Card>
+        )}
+      </div>
 
-      {/* 第二步：辅助设备选择 */}
-      {currentStep === 2 && (
-        <div>
-          <h2 className="section-title">辅助设备选择</h2>
+      {/* 辅助设备选择 - 单页面显示 */}
+      <div>
+        <h2 className="section-title">辅助设备选择</h2>
           
           <Card title="辅助设备选择" style={{ marginBottom: 20 }}>
             <Tabs 
@@ -1814,61 +1743,30 @@ const MassProductionQuote = () => {
               )}
             </div>
           </Card>
-        </div>
-      )}
+      </div>
 
-      {/* 导航按钮 */}
+      {/* 确认报价按钮 - 单页面模式 */}
       <Card style={{ marginTop: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <Button 
-              onClick={handlePrevStep} 
-              disabled={currentStep === 0}
-              size="large"
-            >
-              返回上一步
-            </Button>
-            <Button 
-              onClick={resetQuote}
-              style={{ marginLeft: 10 }}
-              size="large"
-              danger
-            >
-              重置报价
-            </Button>
-          </div>
-          
-          {/* 进度提示 */}
-          <div style={{ textAlign: 'center', color: '#666' }}>
-            <div>步骤 {currentStep + 1} / 3</div>
-            <div style={{ fontSize: '12px', marginTop: '4px' }}>
-              {currentStep === 0 ? '填写基本信息' : currentStep === 1 ? '配置测试机器和板卡' : '选择辅助设备并确认费用'}
-            </div>
-          </div>
-          
-          <div>
-            <Button 
-              onClick={() => {
-                ConfirmDialog.showCustomConfirm({
-                  title: '退出报价确认',
-                  content: '您确定要退出当前报价吗？未保存的配置将会丢失。',
-                  onOk: () => navigate('/')
-                });
-              }}
-              style={{ marginRight: 10 }}
-              size="large"
-            >
-              退出报价
-            </Button>
-            <Button 
-              type="primary" 
-              onClick={handleNextStep}
-              size="large"
-              disabled={currentStep === 0 && !selectedTypes.length}
-            >
-              {currentStep === 1 ? '生成报价结果' : '继续下一步'}
-            </Button>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <Button
+            onClick={() => {
+              ConfirmDialog.showCustomConfirm({
+                title: '退出报价确认',
+                content: '您确定要退出当前报价吗？未保存的配置将会丢失。',
+                onOk: () => navigate('/')
+              });
+            }}
+            size="large"
+          >
+            退出报价
+          </Button>
+          <Button
+            type="primary"
+            onClick={handleConfirmQuote}
+            size="large"
+          >
+            {isEditMode ? '保存编辑' : '确认报价'}
+          </Button>
         </div>
       </Card>
     </div>

@@ -1586,9 +1586,8 @@ const QuoteResult = () => {
                 }
               });
             } else {
-              // 量产报价：真正的上一步，回到步骤1并保留所有数据
+              // 量产报价：真正的上一步，回到报价页面并保留所有数据
               const previousStepData = {
-                currentStep: 1, // 返回到步骤1（辅助设备选择）
                 selectedTypes: quoteData.selectedTypes || ['ft', 'cp'],
                 ftData: quoteData.ftData || {
                   testMachine: null,
