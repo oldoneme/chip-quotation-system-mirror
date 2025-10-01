@@ -313,6 +313,8 @@ async def get_quote_detail_by_id(
                 "unit": item.unit,
                 "unit_price": item.unit_price,
                 "total_price": item.total_price,
+                "machine_id": item.machine_id,
+                "configuration_id": item.configuration_id,
                 "uph": uph,
                 "hourly_rate": hourly_rate
             })
@@ -405,6 +407,8 @@ async def get_quote_detail_test(
                 "unit": item.unit,
                 "unit_price": item.unit_price,
                 "total_price": item.total_price,
+                "machine_id": item.machine_id,
+                "configuration_id": item.configuration_id,
                 "uph": uph,
                 "hourly_rate": hourly_rate
             })

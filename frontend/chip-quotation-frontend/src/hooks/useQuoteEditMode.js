@@ -671,7 +671,8 @@ const useQuoteEditMode = () => {
     if (deviceGroups.testMachine.length > 0) {
       const firstItem = deviceGroups.testMachine[0];
       const machineName = firstItem.machine_model || firstItem.item_name;
-      const machineId = findMachineIdByName(machineName, '测试机');
+      // 优先使用数据库中的 machine_id，如果没有则尝试通过名称查找
+      const machineId = firstItem.machine_id || findMachineIdByName(machineName, '测试机');
 
       if (machineId) {
         // 查找完整的机器数据
@@ -748,9 +749,47 @@ const useQuoteEditMode = () => {
           };
         });
 
+      // JSON格式：从configuration的JSON中解析板卡信息
+      const jsonFormatCards = deviceGroups.testMachine
+        .filter(item => {
+          try {
+            const config = JSON.parse(item.configuration || '{}');
+            return config.cards && Array.isArray(config.cards);
+          } catch (e) {
+            return false;
+          }
+        })
+        .flatMap(item => {
+          try {
+            const config = JSON.parse(item.configuration);
+            return config.cards.map(cardInfo => {
+              // 从API中获取真实的板卡数据
+              const realCard = availableCardTypes.find(card => card.id === cardInfo.id);
+              return {
+                id: cardInfo.id,
+                part_number: cardInfo.part_number,
+                board_name: cardInfo.board_name,
+                // 使用API中的真实数据
+                unit_price: realCard ? realCard.unit_price : 0,
+                quantity: cardInfo.quantity || 1,
+                machine_id: machineId
+              };
+            });
+          } catch (e) {
+            return [];
+          }
+        });
+
       // 旧版本：从configuration解析板卡信息，但使用API中的真实数据
       const oldFormatCards = deviceGroups.testMachine
-        .filter(item => !item.card_info && item.configuration && item.configuration.includes('板卡:'))
+        .filter(item => {
+          try {
+            JSON.parse(item.configuration || '{}');
+            return false; // 如果是JSON格式，不用旧格式解析
+          } catch (e) {
+            return !item.card_info && item.configuration && item.configuration.includes('板卡:');
+          }
+        })
         .map(item => {
           const config = item.configuration || '';
           const boardNameMatch = config.match(/板卡:\s*([^,]+)/);
@@ -774,9 +813,12 @@ const useQuoteEditMode = () => {
           };
         });
 
-      // 合并所有格式的板卡信息
-      if (detailedFormatCards.length > 0) {
-        // 使用详细格式板卡（最新格式，优先级最高）
+      // 合并所有格式的板卡信息（优先级：JSON > detailed > new > old）
+      if (jsonFormatCards.length > 0) {
+        // 使用JSON格式板卡（最新格式，优先级最高）
+        config.testMachineCards = jsonFormatCards;
+      } else if (detailedFormatCards.length > 0) {
+        // 使用详细格式板卡
         config.testMachineCards = detailedFormatCards;
       } else if (newFormatCards.length > 0 || oldFormatCards.length > 0) {
         // 使用card_info或configuration格式
@@ -792,13 +834,15 @@ const useQuoteEditMode = () => {
           machine_id: machineId
         }));
       }
+
     }
 
     // 解析分选机和板卡信息（类似逻辑）
     if (deviceGroups.handler.length > 0) {
       const firstItem = deviceGroups.handler[0];
       const machineName = firstItem.machine_model || firstItem.item_name;
-      const machineId = findMachineIdByName(machineName, '分选机');
+      // 优先使用数据库中的 machine_id，如果没有则尝试通过名称查找
+      const machineId = firstItem.machine_id || findMachineIdByName(machineName, '分选机');
 
 
       if (machineId) {
@@ -818,6 +862,35 @@ const useQuoteEditMode = () => {
           };
         }
       }
+
+      // JSON格式：从configuration字段中解析板卡信息
+      const jsonFormatCards = deviceGroups.handler
+        .filter(item => {
+          try {
+            const config = JSON.parse(item.configuration || '{}');
+            return config.cards && Array.isArray(config.cards);
+          } catch (e) {
+            return false;
+          }
+        })
+        .flatMap(item => {
+          try {
+            const config = JSON.parse(item.configuration);
+            return config.cards.map(cardInfo => {
+              const realCard = availableCardTypes.find(card => card.id === cardInfo.id);
+              return {
+                id: cardInfo.id,
+                part_number: cardInfo.part_number,
+                board_name: cardInfo.board_name,
+                unit_price: realCard ? realCard.unit_price : 0,
+                quantity: cardInfo.quantity || 1,
+                machine_id: machineId
+              };
+            });
+          } catch (e) {
+            return [];
+          }
+        });
 
       // 详细板卡格式：item_name格式为"机器名 - 板卡名"
       const detailedFormatCards = deviceGroups.handler
@@ -871,12 +944,9 @@ const useQuoteEditMode = () => {
           };
         });
 
-      if (detailedFormatCards.length > 0) {
-        config.handlerCards = detailedFormatCards;
-      } else if (newFormatCards.length > 0) {
-        config.handlerCards = newFormatCards;
-      } else {
-        config.handlerCards = deviceGroups.handler.map(item => {
+      const oldFormatCards = deviceGroups.handler
+        .filter(item => !item.item_name?.includes(' - ') && !item.card_info)
+        .map(item => {
           // 尝试从API中找到匹配的板卡
           const realCard = availableCardTypes.find(card =>
             card.machine_id === machineId && (
@@ -894,6 +964,16 @@ const useQuoteEditMode = () => {
             machine_id: machineId
           };
         });
+
+      // 优先使用JSON格式，其次是详细格式，然后是新格式，最后是旧格式
+      if (jsonFormatCards.length > 0) {
+        config.handlerCards = jsonFormatCards;
+      } else if (detailedFormatCards.length > 0) {
+        config.handlerCards = detailedFormatCards;
+      } else if (newFormatCards.length > 0) {
+        config.handlerCards = newFormatCards;
+      } else {
+        config.handlerCards = oldFormatCards;
       }
 
     }
@@ -902,7 +982,8 @@ const useQuoteEditMode = () => {
     if (deviceGroups.prober.length > 0) {
       const firstItem = deviceGroups.prober[0];
       const machineName = firstItem.machine_model || firstItem.item_name;
-      const machineId = findMachineIdByName(machineName, '探针台');
+      // 优先使用数据库中的 machine_id，如果没有则尝试通过名称查找
+      const machineId = firstItem.machine_id || findMachineIdByName(machineName, '探针台');
 
 
       if (machineId) {
@@ -922,6 +1003,35 @@ const useQuoteEditMode = () => {
           };
         }
       }
+
+      // JSON格式：从configuration字段中解析板卡信息
+      const jsonFormatCards = deviceGroups.prober
+        .filter(item => {
+          try {
+            const config = JSON.parse(item.configuration || '{}');
+            return config.cards && Array.isArray(config.cards);
+          } catch (e) {
+            return false;
+          }
+        })
+        .flatMap(item => {
+          try {
+            const config = JSON.parse(item.configuration);
+            return config.cards.map(cardInfo => {
+              const realCard = availableCardTypes.find(card => card.id === cardInfo.id);
+              return {
+                id: cardInfo.id,
+                part_number: cardInfo.part_number,
+                board_name: cardInfo.board_name,
+                unit_price: realCard ? realCard.unit_price : 0,
+                quantity: cardInfo.quantity || 1,
+                machine_id: machineId
+              };
+            });
+          } catch (e) {
+            return [];
+          }
+        });
 
       // 详细板卡格式：item_name格式为"机器名 - 板卡名"
       const detailedFormatCards = deviceGroups.prober
@@ -975,12 +1085,9 @@ const useQuoteEditMode = () => {
           };
         });
 
-      if (detailedFormatCards.length > 0) {
-        config.proberCards = detailedFormatCards;
-      } else if (newFormatCards.length > 0) {
-        config.proberCards = newFormatCards;
-      } else {
-        config.proberCards = deviceGroups.prober.map(item => {
+      const oldFormatCards = deviceGroups.prober
+        .filter(item => !item.item_name?.includes(' - ') && !item.card_info)
+        .map(item => {
           // 尝试从API中找到匹配的板卡
           const realCard = availableCardTypes.find(card =>
             card.machine_id === machineId && (
@@ -998,6 +1105,16 @@ const useQuoteEditMode = () => {
             machine_id: machineId
           };
         });
+
+      // 优先使用JSON格式，其次是详细格式，然后是新格式，最后是旧格式
+      if (jsonFormatCards.length > 0) {
+        config.proberCards = jsonFormatCards;
+      } else if (detailedFormatCards.length > 0) {
+        config.proberCards = detailedFormatCards;
+      } else if (newFormatCards.length > 0) {
+        config.proberCards = newFormatCards;
+      } else {
+        config.proberCards = oldFormatCards;
       }
 
     }
@@ -1005,12 +1122,11 @@ const useQuoteEditMode = () => {
     // 解析辅助设备 - 统一使用API数据源
     config.auxDevices = deviceGroups.auxDevices.map(item => {
       const machineName = item.machine_model || item.item_name;
-      const machineId = findMachineIdByName(machineName, item.machine_type);
+      // 优先使用数据库中的 machine_id，如果没有则尝试通过名称查找
+      const machineId = item.machine_id || findMachineIdByName(machineName, item.machine_type);
 
       // 从availableMachines中获取真实的机器数据
       const realMachine = availableMachines.find(machine => machine.id === machineId);
-
-      console.log(`辅助设备数据调试: name=${machineName}, machineId=${machineId}, realMachine=`, realMachine);
 
       // 统一使用API中的数据，尝试多种可能的字段名
       let hourlyRate = 0;

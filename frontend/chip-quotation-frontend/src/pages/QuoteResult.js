@@ -406,28 +406,40 @@ const QuoteResult = () => {
       };
       
       console.log('修复后的数据:', JSON.stringify(fixedQuoteData, null, 2));
-      
-      // 创建报价单
-      const createdQuote = await QuoteApiService.createQuote(fixedQuoteData);
-      
-      message.success(`报价单创建成功！报价单号：${createdQuote.quote_number}`);
+
+      // 检查是否是编辑模式
+      const isEditMode = quoteData.isEditMode && quoteData.editingQuoteId;
+      let resultQuote;
+
+      if (isEditMode) {
+        // 编辑模式：更新现有报价单
+        console.log('更新报价单，ID:', quoteData.editingQuoteId);
+        resultQuote = await QuoteApiService.updateQuote(quoteData.editingQuoteId, fixedQuoteData);
+        message.success(`报价单更新成功！报价单号：${resultQuote.quote_number}`);
+      } else {
+        // 新建模式：创建新报价单
+        resultQuote = await QuoteApiService.createQuote(fixedQuoteData);
+        message.success(`报价单创建成功！报价单号：${resultQuote.quote_number}`);
+      }
+
       setIsQuoteConfirmed(true);
-      
-      // 更新报价数据，添加创建的报价单信息
+
+      // 更新报价数据，添加创建/更新的报价单信息
       setQuoteData(prev => ({
         ...prev,
-        quoteId: createdQuote.id,
-        quoteNumber: createdQuote.quote_number,
-        quoteStatus: createdQuote.status,
+        quoteId: resultQuote.id,
+        quoteNumber: resultQuote.quote_number,
+        quoteStatus: resultQuote.status,
         dbRecord: true
       }));
-      
-      console.log('报价单创建成功:', createdQuote);
+
+      console.log(`报价单${isEditMode ? '更新' : '创建'}成功:`, resultQuote);
       
     } catch (error) {
-      console.error('创建报价单详细错误:', error);
-      
-      let errorMessage = '创建报价单失败，请稍后重试';
+      const isEditMode = quoteData.isEditMode && quoteData.editingQuoteId;
+      console.error(`${isEditMode ? '更新' : '创建'}报价单详细错误:`, error);
+
+      let errorMessage = `${isEditMode ? '更新' : '创建'}报价单失败，请稍后重试`;
       
       if (error.response) {
         console.error('错误响应:', error.response.status, error.response.data);

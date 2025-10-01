@@ -32,6 +32,9 @@ const EngineeringQuote = () => {
   // 编辑模式管理
   const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
 
+  // 编辑模式数据加载标志（确保只加载一次）
+  const [editDataLoaded, setEditDataLoaded] = useState(false);
+
   // 移除步骤管理，统一为单页面模式
   const [testMachine, setTestMachine] = useState(null);
   const [handler, setHandler] = useState(null);
@@ -242,9 +245,10 @@ const EngineeringQuote = () => {
     };
   }, []);
 
-  // 编辑模式数据加载
+  // 编辑模式数据加载（只执行一次）
   useEffect(() => {
-    if (isEditMode && editingQuote && !editLoading && cardTypes.length > 0 && machines.length > 0) {
+    // 只在编辑模式下，且数据未加载过时执行
+    if (isEditMode && editingQuote && !editLoading && !editDataLoaded && cardTypes.length > 0 && machines.length > 0) {
       // 合并所有机器数据供ID匹配使用
       const allMachines = [...machines, ...handlers, ...probers, ...auxMachines];
       const formData = convertQuoteToFormData(editingQuote, 'engineering', cardTypes, allMachines);
@@ -298,9 +302,12 @@ const EngineeringQuote = () => {
             .map(person => person.type);
           setSelectedPersonnel(selectedPersonnelTypes);
         }
+
+        // 标记数据已加载
+        setEditDataLoaded(true);
       }
     }
-  }, [isEditMode, editingQuote, editLoading, convertQuoteToFormData, cardTypes, machines, handlers, probers, auxMachines]);
+  }, [isEditMode, editingQuote, editLoading, editDataLoaded, cardTypes, machines, handlers, probers, auxMachines]);
 
   // 移除步骤定义，统一为单页面模式
 
@@ -359,51 +366,93 @@ const EngineeringQuote = () => {
     // 测试机机时费（含工程系数）
     if (testMachine && testMachineCards.length > 0) {
       const testMachineRate = calculateTestMachineFee() * engineeringRate;
+
+      // 将板卡信息序列化到configuration字段中，用于编辑时恢复
+      const cardsInfo = testMachineCards.map(card => ({
+        id: card.id,
+        board_name: card.board_name,
+        part_number: card.part_number,
+        quantity: card.quantity || 1
+      }));
+
       items.push({
         item_name: testMachine.name,
         item_description: `机器 - 测试机`,
         machine_type: '测试机',
         supplier: typeof testMachine.supplier === 'object' ? testMachine.supplier.name : testMachine.supplier || '',
         machine_model: testMachine.name,
-        configuration: `设备类型: 测试机, 设备型号: ${testMachine.name}`,
+        configuration: JSON.stringify({
+          device_type: '测试机',
+          device_model: testMachine.name,
+          cards: cardsInfo
+        }),
         quantity: 1,
         unit: '小时',
         unit_price: testMachineRate,
-        total_price: testMachineRate
+        total_price: testMachineRate,
+        machine_id: testMachine.id
       });
     }
     
     // 分选机机时费（含工程系数）
     if (handler && handlerCards.length > 0) {
       const handlerRate = calculateHandlerFee() * engineeringRate;
+
+      // 将板卡信息序列化到configuration字段中，用于编辑时恢复
+      const cardsInfo = handlerCards.map(card => ({
+        id: card.id,
+        board_name: card.board_name,
+        part_number: card.part_number,
+        quantity: card.quantity || 1
+      }));
+
       items.push({
         item_name: handler.name,
         item_description: `机器 - 分选机`,
         machine_type: '分选机',
         supplier: typeof handler.supplier === 'object' ? handler.supplier.name : handler.supplier || '',
         machine_model: handler.name,
-        configuration: `设备类型: 分选机, 设备型号: ${handler.name}`,
+        configuration: JSON.stringify({
+          device_type: '分选机',
+          device_model: handler.name,
+          cards: cardsInfo
+        }),
         quantity: 1,
         unit: '小时',
         unit_price: handlerRate,
-        total_price: handlerRate
+        total_price: handlerRate,
+        machine_id: handler.id
       });
     }
     
     // 探针台机时费（含工程系数）
     if (prober && proberCards.length > 0) {
       const proberRate = calculateProberFee() * engineeringRate;
+
+      // 将板卡信息序列化到configuration字段中，用于编辑时恢复
+      const cardsInfo = proberCards.map(card => ({
+        id: card.id,
+        board_name: card.board_name,
+        part_number: card.part_number,
+        quantity: card.quantity || 1
+      }));
+
       items.push({
         item_name: prober.name,
         item_description: `机器 - 探针台`,
         machine_type: '探针台',
         supplier: typeof prober.supplier === 'object' ? prober.supplier.name : prober.supplier || '',
         machine_model: prober.name,
-        configuration: `设备类型: 探针台, 设备型号: ${prober.name}`,
+        configuration: JSON.stringify({
+          device_type: '探针台',
+          device_model: prober.name,
+          cards: cardsInfo
+        }),
         quantity: 1,
         unit: '小时',
         unit_price: proberRate,
-        total_price: proberRate
+        total_price: proberRate,
+        machine_id: prober.id
       });
     }
     
@@ -421,7 +470,8 @@ const EngineeringQuote = () => {
           quantity: 1,
           unit: '小时',
           unit_price: deviceRate,
-          total_price: deviceRate
+          total_price: deviceRate,
+          machine_id: device.id
         });
       });
     }
@@ -493,7 +543,10 @@ const EngineeringQuote = () => {
       cardTypes,
       totalAmount,
       quoteItems,
-      // 添加数据库创建数据，供确认报价按钮使用
+      // 编辑模式标识
+      isEditMode: isEditMode,
+      editingQuoteId: isEditMode && editingQuote ? editingQuote.id : null,
+      // 添加数据库创建/更新数据，供确认报价按钮使用
       quoteCreateData: {
         title: title,
         quote_type: 'engineering',
@@ -511,7 +564,7 @@ const EngineeringQuote = () => {
         items: quoteItems
       }
     };
-    
+
     sessionStorage.setItem('quoteData', JSON.stringify(quoteData));
     navigate('/quote-result');
   };
@@ -601,14 +654,9 @@ const EngineeringQuote = () => {
   const calculateTestMachineFee = () => {
     if (!testMachine || testMachineCards.length === 0) return 0;
 
-    console.log('测试机价格计算调试:');
-    console.log('testMachine:', testMachine);
-    console.log('testMachineCards:', testMachineCards);
-
     const totalCost = testMachineCards.reduce((total, card) => {
       // 统一的计算逻辑：所有数据都来自同样的API源
       let adjustedPrice = card.unit_price / 10000;
-      console.log(`板卡 ${card.part_number}: unit_price=${card.unit_price}, adjustedPrice=${adjustedPrice}`);
 
       // 根据报价币种和机器币种进行转换
       if (quoteCurrency === 'USD') {
@@ -623,7 +671,6 @@ const EngineeringQuote = () => {
       }
 
       const finalPrice = adjustedPrice * testMachine.discount_rate * (card.quantity || 1);
-      console.log(`最终价格: ${adjustedPrice} * ${testMachine.discount_rate} * ${card.quantity} = ${finalPrice}`);
       return total + finalPrice;
     }, 0);
 
@@ -849,15 +896,31 @@ const EngineeringQuote = () => {
       });
     }
     
-    columns.push({ 
-      title: 'Quantity', 
-      render: (_, record) => (
-        <InputNumber 
-          min={1} 
-          defaultValue={1} 
-          onChange={(value) => handleCardQuantityChange(machineType, record.id, value)}
-        />
-      ) 
+    columns.push({
+      title: 'Quantity',
+      render: (_, record) => {
+        // 获取对应machineType的已选卡片数组
+        let selectedCards = [];
+        if (machineType === 'testMachine') {
+          selectedCards = testMachineCards;
+        } else if (machineType === 'handler') {
+          selectedCards = handlerCards;
+        } else if (machineType === 'prober') {
+          selectedCards = proberCards;
+        }
+
+        // 查找当前板卡在已选列表中的数量
+        const selectedCard = selectedCards.find(card => card.id === record.id);
+        const quantity = selectedCard ? selectedCard.quantity : 1;
+
+        return (
+          <InputNumber
+            min={1}
+            value={quantity}
+            onChange={(value) => handleCardQuantityChange(machineType, record.id, value)}
+          />
+        );
+      }
     });
     
     return columns;
