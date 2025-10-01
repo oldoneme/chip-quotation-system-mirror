@@ -1211,18 +1211,30 @@ const useQuoteEditMode = () => {
 
     // 解析每个报价项，从configuration JSON中提取设备信息
     items.forEach(item => {
-      if (!item.configuration) return;
+      let configData = null;
+      let deviceType = null;
+      let testType = null;
 
-      let configData;
-      try {
-        configData = JSON.parse(item.configuration);
-      } catch (e) {
-        console.warn('无法解析configuration JSON:', item.configuration);
-        return;
+      // 尝试解析 configuration（新格式）
+      if (item.configuration) {
+        try {
+          configData = JSON.parse(item.configuration);
+          deviceType = configData.device_type;
+          testType = configData.test_type;
+        } catch (e) {
+          console.warn('无法解析configuration JSON:', item.configuration);
+        }
       }
 
-      const deviceType = configData.device_type;
-      const testType = configData.test_type;
+      // 如果没有 configuration，尝试从其他字段推断（旧格式）
+      if (!deviceType) {
+        deviceType = item.machine_type || '';
+        // 从 item_description 推断测试类型
+        if (item.item_description) {
+          if (item.item_description.includes('FT')) testType = 'FT';
+          else if (item.item_description.includes('CP')) testType = 'CP';
+        }
+      }
 
       // 解析FT测试机
       if (testType === 'FT' && deviceType === '测试机') {
