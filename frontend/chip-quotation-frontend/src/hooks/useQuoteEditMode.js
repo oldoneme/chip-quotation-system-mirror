@@ -1328,12 +1328,24 @@ const useQuoteEditMode = () => {
       }
 
       // 解析辅助设备
-      if (deviceType === '辅助设备' || item.category_type === 'auxiliary_device') {
+      if (deviceType === '辅助设备' || item.category_type === 'auxiliary_device' || item.category_type === 'auxiliary' || item.machine_type === '辅助设备') {
         const machineId = item.machine_id;
-        const fullMachine = availableMachines.find(m => m.id === machineId);
 
-        if (fullMachine && !config.auxDevices.find(d => d.id === machineId)) {
-          config.auxDevices.push(fullMachine);
+        if (machineId) {
+          // 有 machine_id 的情况（新格式）
+          const fullMachine = availableMachines.find(m => m.id === machineId);
+          if (fullMachine && !config.auxDevices.find(d => d.id === machineId)) {
+            config.auxDevices.push(fullMachine);
+          }
+        } else {
+          // 旧格式：没有 machine_id，尝试通过名称匹配
+          const deviceName = item.item_name || configData?.device_model || item.machine_model;
+          if (deviceName) {
+            const fullMachine = availableMachines.find(m => m.name === deviceName);
+            if (fullMachine && !config.auxDevices.find(d => d.id === fullMachine.id)) {
+              config.auxDevices.push(fullMachine);
+            }
+          }
         }
       }
     });

@@ -972,11 +972,17 @@ const MassProductionQuote = () => {
                   ? device.supplier?.name || ''
                   : device.supplier || '',
                 machine_model: device.model || device.name || '',
+                configuration: JSON.stringify({
+                  device_type: '辅助设备',
+                  device_model: device.name,
+                  device_category: device.category || device.machine_type || 'other'
+                }),
                 quantity: 1,
                 unit: '小时',
                 unit_price: ceiledFee,
                 total_price: ceiledFee,
-                category_type: 'auxiliary'
+                machine_id: device.id,
+                category_type: 'auxiliary_device'
               });
             }
           }
