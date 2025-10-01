@@ -18,6 +18,8 @@ import {
   getAuxiliaryEquipment
 } from '../services/auxiliaryEquipment';
 import { ceilByCurrency, formatQuotePrice } from '../utils';
+import useQuoteEditMode from '../hooks/useQuoteEditMode';
+import { QuoteApiService } from '../services/quoteApi';
 import '../App.css';
 
 const { Option } = Select;
@@ -28,9 +30,15 @@ const MassProductionQuote = () => {
   const location = useLocation();
   const { state } = location;
   const { user } = useAuth();
+
+  // 编辑模式相关状态
+  const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
+
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const [editMessageShown, setEditMessageShown] = useState(false);
   
   // 机器数据
   const [machines, setMachines] = useState([]);      // 测试机
@@ -139,6 +147,40 @@ const MassProductionQuote = () => {
       isMounted = false;
     };
   }, []);
+
+  // 编辑模式数据预填充
+  useEffect(() => {
+    if (!isMounted) {
+      setIsMounted(true);
+    }
+
+    if (isEditMode && editingQuote && !editLoading && isMounted) {
+      console.log('MassProductionQuote 编辑模式：预填充数据', editingQuote);
+      const convertedFormData = convertQuoteToFormData(editingQuote, 'mass_production');
+      if (convertedFormData) {
+        // 设置基础信息
+        if (convertedFormData.customerInfo) {
+          setCustomerInfo(convertedFormData.customerInfo);
+        }
+        if (convertedFormData.projectInfo) {
+          setProjectInfo(convertedFormData.projectInfo);
+        }
+
+        // 只在第一次显示消息
+        if (!editMessageShown) {
+          message.info(`正在编辑报价单: ${editingQuote.quote_number || editingQuote.id || '未知'}`);
+          setEditMessageShown(true);
+        }
+      }
+    }
+  }, [isEditMode, editingQuote, editLoading, isMounted, editMessageShown]);
+
+  // 重置编辑消息标志
+  useEffect(() => {
+    if (!isEditMode) {
+      setEditMessageShown(false);
+    }
+  }, [isEditMode]);
 
   // 格式化价格显示（包含币种符号）
   const formatPrice = (number) => {
@@ -567,7 +609,7 @@ const MassProductionQuote = () => {
     return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     const nextStepValue = currentStep + 1;
     
     // 保存当前状态到sessionStorage
@@ -833,9 +875,28 @@ const MassProductionQuote = () => {
         generatedAt: new Date().toISOString(),
         quoteCreateData // 添加数据库创建数据
       };
-      
-      // 通过location.state传递数据到结果页面
-      navigate('/quote-result', { state: { ...quoteData, fromQuotePage: true } });
+
+      if (isEditMode && editingQuote) {
+        // 编辑模式：调用API更新报价
+        try {
+          const updatedQuote = await QuoteApiService.updateQuote(editingQuote.id, quoteCreateData);
+          message.success('量产机时报价更新成功！');
+
+          // 编辑成功后跳转到报价详情页面
+          navigate(`/quote-detail/${editingQuote.quote_number}`, {
+            state: {
+              message: '报价单更新成功',
+              updatedQuote: updatedQuote
+            }
+          });
+        } catch (error) {
+          console.error('更新量产机时报价失败:', error);
+          message.error('更新报价单失败，请重试');
+        }
+      } else {
+        // 新建模式：通过location.state传递数据到结果页面
+        navigate('/quote-result', { state: { ...quoteData, fromQuotePage: true } });
+      }
     }
   };
   

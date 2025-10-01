@@ -1,17 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Table, InputNumber } from 'antd';
+import { Table, InputNumber, message } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
 import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
+import useQuoteEditMode from '../hooks/useQuoteEditMode';
+import { QuoteApiService } from '../services/quoteApi';
 import '../App.css';
 
 const InquiryQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+
+  // 编辑模式相关状态
+  const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -53,6 +58,8 @@ const InquiryQuote = () => {
   const [cardTypes, setCardTypes] = useState([]);
   const [persistedCardQuantities, setPersistedCardQuantities] = useState({});
   const [isMounted, setIsMounted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editMessageShown, setEditMessageShown] = useState(false);
 
   const machineCategories = [
     { value: 'tester', label: '测试机' },
@@ -119,7 +126,6 @@ const InquiryQuote = () => {
           if (savedState) {
             try {
               const parsedState = JSON.parse(savedState);
-              console.log('从 sessionStorage 恢复询价报价状态:', parsedState);
               setFormData(parsedState.formData);
               setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
             } catch (error) {
@@ -128,7 +134,6 @@ const InquiryQuote = () => {
           }
         } else {
           sessionStorage.removeItem('inquiryQuoteState');
-          console.log('开始全新询价报价流程');
         }
         
       } catch (error) {
@@ -151,7 +156,28 @@ const InquiryQuote = () => {
       sessionStorage.setItem('inquiryQuoteState', JSON.stringify(stateToSave));
     }
   }, [formData, persistedCardQuantities, isMounted, location.state?.fromResultPage]);
-  
+
+  // 编辑模式数据预填充
+  useEffect(() => {
+    if (isEditMode && editingQuote && !editLoading && isMounted) {
+      const convertedFormData = convertQuoteToFormData(editingQuote, 'inquiry');
+      if (convertedFormData) {
+        setFormData(convertedFormData);
+        // 只在第一次显示消息
+        if (!editMessageShown) {
+          message.info(`正在编辑报价单: ${editingQuote.quote_number || editingQuote.id || '未知'}`);
+          setEditMessageShown(true);
+        }
+      }
+    }
+  }, [isEditMode, editingQuote, editLoading, isMounted, editMessageShown]);
+
+  // 重置编辑消息标志
+  useEffect(() => {
+    if (!isEditMode) {
+      setEditMessageShown(false);
+    }
+  }, [isEditMode]);
 
   // 获取机器类型名称的辅助函数
   const getMachineTypeName = (machine) => {
@@ -448,47 +474,22 @@ const InquiryQuote = () => {
     return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
   };
 
-  const handleSubmit = () => {
-    // 映射测试类型值到显示名称
-    const testTypeMap = {
-      'CP': 'CP测试',
-      'FT': 'FT测试', 
-      'mixed': '混合测试'
-    };
-    const testTypeDisplay = testTypeMap[formData.projectInfo.testType] || '混合测试';
-    
-    const totalRate = formData.machines.reduce((sum, machine) => sum + machine.hourlyRate, 0);
-    
-    const quoteData = {
-      type: '询价报价',
-      number: generateTempQuoteNumber(formData.projectInfo.quoteUnit),
-      date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      customerInfo: formData.customerInfo,
-      projectInfo: formData.projectInfo,
-      machines: formData.machines,
-      totalHourlyRate: totalRate,
-      inquiryFactor: formData.inquiryFactor,
-      currency: formData.currency,
-      exchangeRate: formData.exchangeRate,
-      remarks: formData.remarks,
-      generatedAt: new Date().toISOString(),
-      items: [
-        {
-          category: '询价设备配置',
-          items: formData.machines.map(machine => ({
-            name: `${machine.model || '未选择'} (${machineCategories.find(c => c.value === machine.category)?.label || machine.category})`,
-            specification: `机时费率: ${formatHourlyPrice(machine.hourlyRate)}/小时`,
-            quantity: 1,
-            unit: '台',
-            unitPrice: machine.hourlyRate,
-            totalPrice: machine.hourlyRate
-          }))
-        }
-      ],
-      totalAmount: totalRate,
-      quoteCurrency: formData.currency,
-      // 添加报价单数据结构，供结果页面确认时使用
-      quoteCreateData: {
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+
+    try {
+      // 映射测试类型值到显示名称
+      const testTypeMap = {
+        'CP': 'CP测试',
+        'FT': 'FT测试',
+        'mixed': '混合测试'
+      };
+      const testTypeDisplay = testTypeMap[formData.projectInfo.testType] || '混合测试';
+
+      const totalRate = formData.machines.reduce((sum, machine) => sum + machine.hourlyRate, 0);
+
+      // 准备API数据
+      const apiData = {
         title: `${formData.customerInfo.companyName} - ${formData.projectInfo.projectName || '询价项目'}`,
         quote_type: 'inquiry',
         customer_name: formData.customerInfo.companyName,
@@ -506,7 +507,7 @@ const InquiryQuote = () => {
         notes: formData.remarks || '',
         items: formData.machines.map(machine => {
           const categoryLabel = machineCategories.find(c => c.value === machine.category)?.label || machine.category;
-          
+
           return {
             item_name: testTypeDisplay,
             item_description: `设备: ${machine.model || '未选择'} (${categoryLabel}), 机时费率: ${formatHourlyPrice(machine.hourlyRate)}/小时, 询价系数: ${formData.inquiryFactor}`,
@@ -520,10 +521,65 @@ const InquiryQuote = () => {
             machine_id: machine.machineData?.id || null
           };
         })
-      }
-    };
+      };
 
-    navigate('/quote-result', { state: quoteData });
+      let response;
+
+      if (isEditMode && editingQuote) {
+        // 编辑模式：更新现有报价
+        response = await QuoteApiService.updateQuote(editingQuote.id, apiData);
+
+        // 编辑成功后跳转到报价详情页面
+        navigate(`/quote-detail/${editingQuote.quote_number}`, {
+          state: {
+            message: '报价单更新成功',
+            updatedQuote: response
+          }
+        });
+      } else {
+        // 新建模式：创建新报价或跳转到结果页面
+        // 准备结果页面数据（保持原有逻辑）
+        const quoteData = {
+          type: '询价报价',
+          number: generateTempQuoteNumber(formData.projectInfo.quoteUnit),
+          date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          customerInfo: formData.customerInfo,
+          projectInfo: formData.projectInfo,
+          machines: formData.machines,
+          totalHourlyRate: totalRate,
+          inquiryFactor: formData.inquiryFactor,
+          currency: formData.currency,
+          exchangeRate: formData.exchangeRate,
+          remarks: formData.remarks,
+          generatedAt: new Date().toISOString(),
+          items: [
+            {
+              category: '询价设备配置',
+              items: formData.machines.map(machine => ({
+                name: `${machine.model || '未选择'} (${machineCategories.find(c => c.value === machine.category)?.label || machine.category})`,
+                specification: `机时费率: ${formatHourlyPrice(machine.hourlyRate)}/小时`,
+                quantity: 1,
+                unit: '台',
+                unitPrice: machine.hourlyRate,
+                totalPrice: machine.hourlyRate
+              }))
+            }
+          ],
+          totalAmount: totalRate,
+          quoteCurrency: formData.currency,
+          // 添加报价单数据结构，供结果页面确认时使用
+          quoteCreateData: apiData
+        };
+
+        navigate('/quote-result', { state: quoteData });
+      }
+
+    } catch (error) {
+      console.error('提交报价失败:', error);
+      alert('提交失败，请检查网络连接或稍后重试');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleBack = () => {
@@ -538,9 +594,9 @@ const InquiryQuote = () => {
 
   return (
     <div className="quote-container">
-      <PageTitle 
-        title="询价报价" 
-        subtitle="快速获取参考价格，非正式报价" 
+      <PageTitle
+        title={isEditMode ? "编辑询价报价" : "询价报价"}
+        subtitle={isEditMode ? `编辑报价单 ${editingQuote?.quote_number || editingQuote?.id || ''}` : "快速获取参考价格，非正式报价"}
       />
 
       <div className="form-section">
@@ -878,8 +934,8 @@ const InquiryQuote = () => {
         <SecondaryButton onClick={handleBack}>
           返回
         </SecondaryButton>
-        <PrimaryButton onClick={handleSubmit}>
-          生成询价单
+        <PrimaryButton onClick={handleSubmit} disabled={isSubmitting}>
+          {isSubmitting ? '提交中...' : (isEditMode ? '更新询价单' : '生成询价单')}
         </PrimaryButton>
       </div>
     </div>

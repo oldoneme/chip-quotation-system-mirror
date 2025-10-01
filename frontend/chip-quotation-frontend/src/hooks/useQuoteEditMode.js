@@ -21,7 +21,6 @@ const useQuoteEditMode = () => {
 
         // 优先使用已传递的editingQuote数据
         if (location.state?.editingQuote) {
-          console.log('编辑模式：使用已传递的报价数据', location.state.editingQuote);
           setEditingQuote(location.state.editingQuote);
           setLoading(false);
         } else if (location.state?.quoteId) {
@@ -29,7 +28,6 @@ const useQuoteEditMode = () => {
           setLoading(true);
           try {
             const quoteData = await QuoteApiService.getQuoteDetailById(location.state.quoteId);
-            console.log('编辑模式：从API获取报价数据', quoteData);
             setEditingQuote(quoteData);
           } catch (error) {
             console.error('获取报价数据失败:', error);
@@ -50,7 +48,6 @@ const useQuoteEditMode = () => {
 
         try {
           const quoteData = await QuoteApiService.getQuoteDetailById(editQuoteId);
-          console.log('编辑模式：通过URL参数获取报价数据', quoteData);
           setEditingQuote(quoteData);
         } catch (error) {
           console.error('获取报价数据失败:', error);
@@ -121,25 +118,23 @@ const useQuoteEditMode = () => {
    * 将后端报价数据转换为前端表单数据格式
    * @param {Object} quote - 后端报价数据或前端展示数据
    * @param {string} quoteType - 报价类型 (tooling, inquiry, engineering, etc.)
+   * @param {Array} availableCardTypes - 可用的板卡类型数据（用于ID匹配）
+   * @param {Array} availableMachines - 可用的机器数据（用于获取完整机器属性）
    * @returns {Object} 前端表单数据格式
    */
-  const convertQuoteToFormData = (quote, quoteType) => {
+  const convertQuoteToFormData = (quote, quoteType, availableCardTypes = [], availableMachines = []) => {
     if (!quote) return null;
 
-    console.log('🔄 开始数据转换:', { quoteType, quote });
 
     // 检测数据格式：后端原始格式 vs 前端展示格式
     const isRawFormat = quote.customer_name !== undefined; // 后端格式有 customer_name
     const isDisplayFormat = quote.customer !== undefined && quote.customer_name === undefined; // 前端格式有 customer 但没有 customer_name
 
-    console.log('🔍 数据格式检测:', { isRawFormat, isDisplayFormat });
 
     // 统一数据格式 - 将前端展示格式转换为后端原始格式（如果需要）
     let normalizedQuote = quote;
     if (isDisplayFormat) {
-      console.log('🔄 转换前端展示格式为后端原始格式');
       normalizedQuote = convertDisplayFormatToRawFormat(quote);
-      console.log('✅ 格式转换完成:', normalizedQuote);
     }
 
     // 基础客户信息转换
@@ -159,16 +154,21 @@ const useQuoteEditMode = () => {
       remarks: extractRemarksFromNotes(normalizedQuote.notes)
     };
 
-    console.log('📋 基础表单数据:', baseFormData);
 
     // 根据报价类型进行特殊转换
     switch (quoteType) {
       case 'tooling':
-        return convertToolingQuoteToFormData(normalizedQuote, baseFormData);
+        return convertToolingQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
       case 'inquiry':
-        return convertInquiryQuoteToFormData(normalizedQuote, baseFormData);
+        return convertInquiryQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
       case 'engineering':
-        return convertEngineeringQuoteToFormData(normalizedQuote, baseFormData);
+        return convertEngineeringQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes, availableMachines);
+      case 'mass_production':
+        return convertMassProductionQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
+      case 'process':
+        return convertProcessQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
+      case 'comprehensive':
+        return convertComprehensiveQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
       default:
         return baseFormData;
     }
@@ -177,7 +177,7 @@ const useQuoteEditMode = () => {
   /**
    * 询价报价数据转换
    */
-  const convertInquiryQuoteToFormData = (quote, baseFormData) => {
+  const convertInquiryQuoteToFormData = (quote, baseFormData, availableCardTypes = []) => {
     const machines = [];
 
     // 解析询价报价中的机器配置
@@ -223,11 +223,74 @@ const useQuoteEditMode = () => {
   };
 
   /**
+   * 量产机时报价数据转换
+   */
+  const convertMassProductionQuoteToFormData = (quote, baseFormData, availableCardTypes = []) => {
+
+    return {
+      ...baseFormData,
+      projectInfo: {
+        ...baseFormData.projectInfo,
+        chipPackage: extractChipPackageFromDescription(quote.description),
+        testType: 'mass_production',
+        urgency: extractUrgencyFromNotes(quote.notes)
+      },
+      remarks: extractRemarksFromNotes(quote.notes)
+    };
+  };
+
+  /**
+   * 量产工序报价数据转换
+   */
+  const convertProcessQuoteToFormData = (quote, baseFormData, availableCardTypes = []) => {
+
+    return {
+      ...baseFormData,
+      projectInfo: {
+        ...baseFormData.projectInfo,
+        chipPackage: extractChipPackageFromDescription(quote.description),
+        testType: 'process',
+        urgency: extractUrgencyFromNotes(quote.notes)
+      },
+      remarks: extractRemarksFromNotes(quote.notes)
+    };
+  };
+
+  /**
+   * 综合报价数据转换
+   */
+  const convertComprehensiveQuoteToFormData = (quote, baseFormData, availableCardTypes = []) => {
+
+    return {
+      ...baseFormData,
+      projectInfo: {
+        ...baseFormData.projectInfo,
+        chipPackage: extractChipPackageFromDescription(quote.description),
+        testType: 'comprehensive',
+        urgency: extractUrgencyFromNotes(quote.notes)
+      },
+      remarks: extractRemarksFromNotes(quote.notes)
+    };
+  };
+
+  /**
    * 工程机时报价数据转换
    */
-  const convertEngineeringQuoteToFormData = (quote, baseFormData) => {
-    // 工程机时报价的数据结构较复杂，需要解析多种设备类型和人员配置
-    // 这里提供基础转换，具体实现需要根据实际数据结构调整
+  const convertEngineeringQuoteToFormData = (quote, baseFormData, availableCardTypes = [], availableMachines = []) => {
+
+    // 解析工程系数
+    const engineeringRate = extractEngineeringRateFromDescription(quote.description);
+
+    // 解析币种和汇率
+    const currency = quote.currency || 'CNY';
+    const exchangeRate = extractExchangeRateFromNotes(quote.notes);
+
+    // 解析紧急程度
+    const urgency = extractUrgencyFromNotes(quote.notes);
+
+    // 从items中解析设备和人员配置
+    const deviceConfig = parseEngineeringDevicesFromItems(quote.items, availableCardTypes, availableMachines);
+    const personnelConfig = parseEngineeringPersonnelFromItems(quote.items);
 
     return {
       ...baseFormData,
@@ -235,10 +298,20 @@ const useQuoteEditMode = () => {
         ...baseFormData.projectInfo,
         chipPackage: extractChipPackageFromDescription(quote.description),
         testType: 'engineering',
-        urgency: 'normal'
+        urgency: urgency
       },
-      // TODO: 根据实际需求实现工程机时报价的详细转换逻辑
-      // 包括：设备选择、板卡配置、人员配置、辅助设备等
+      // 工程机时报价特有字段
+      engineeringRate: engineeringRate,
+      quoteCurrency: currency,
+      quoteExchangeRate: exchangeRate,
+
+      // 设备配置（根据解析的数据设置）
+      deviceConfig: deviceConfig,
+      personnelConfig: personnelConfig,
+
+      // 注意：实际的状态设置需要在EngineeringQuote组件中完成
+      // 因为该组件有复杂的状态管理结构
+
       remarks: extractRemarksFromNotes(quote.notes)
     };
   };
@@ -246,10 +319,7 @@ const useQuoteEditMode = () => {
   /**
    * 工装夹具报价数据转换
    */
-  const convertToolingQuoteToFormData = (quote, baseFormData) => {
-    console.log('🔧 开始工装夹具报价数据转换');
-    console.log('🔧 输入报价数据:', quote);
-    console.log('🔧 基础表单数据:', baseFormData);
+  const convertToolingQuoteToFormData = (quote, baseFormData, availableCardTypes = []) => {
 
     const toolingItems = [];
     const engineeringFees = {
@@ -264,12 +334,9 @@ const useQuoteEditMode = () => {
       firstArticleInspection: 0
     };
 
-    console.log('🔧 报价项目数组:', quote.items);
-    console.log('🔧 项目数量:', quote.items?.length || 0);
 
     // 解析报价项目
     quote.items?.forEach((item, index) => {
-      console.log(`🔧 处理项目 ${index + 1}:`, item);
 
       // 根据item_description或item_name来判断类型（因为category_type可能为空）
       const itemName = item.item_name || '';
@@ -287,7 +354,6 @@ const useQuoteEditMode = () => {
           unitPrice: item.unit_price || 0,
           totalPrice: item.total_price || 0
         });
-        console.log(`   ✅ 添加到工装项目:`, toolingItems[toolingItems.length - 1]);
       }
       // 工程费用
       else if (itemDesc.includes('工程开发服务费') ||
@@ -295,7 +361,6 @@ const useQuoteEditMode = () => {
         const feeKey = mapEngineeringFeeNameToKey(itemName);
         if (feeKey && engineeringFees.hasOwnProperty(feeKey)) {
           engineeringFees[feeKey] = item.unit_price || 0;
-          console.log(`   ✅ 添加到工程费用: ${feeKey} = ${item.unit_price}`);
         }
       }
       // 量产准备费用
@@ -304,10 +369,8 @@ const useQuoteEditMode = () => {
         const setupKey = mapProductionSetupNameToKey(itemName);
         if (setupKey && productionSetup.hasOwnProperty(setupKey)) {
           productionSetup[setupKey] = item.unit_price || 0;
-          console.log(`   ✅ 添加到量产准备: ${setupKey} = ${item.unit_price}`);
         }
       } else {
-        console.log(`   ⚠️ 未识别的项目类型: ${itemName} - ${itemDesc}`);
       }
     });
 
@@ -338,10 +401,6 @@ const useQuoteEditMode = () => {
       deliveryTime: extractDeliveryTimeFromNotes(quote.notes)
     };
 
-    console.log('🔧 工装夹具最终转换结果:', result);
-    console.log('🔧 工装项目数量:', result.toolingItems.length);
-    console.log('🔧 工程费用:', result.engineeringFees);
-    console.log('🔧 量产准备:', result.productionSetup);
 
     return result;
   };
@@ -463,6 +522,570 @@ const useQuoteEditMode = () => {
       }
     }
     return 1.5;
+  };
+
+  /**
+   * 工程机时报价相关的辅助函数
+   */
+
+  /**
+   * 从描述中提取工程系数
+   */
+  const extractEngineeringRateFromDescription = (description) => {
+    if (!description) return 1.2;
+
+    const match = description.match(/工程系数[：:]\s*([0-9.]+)/);
+    if (match) {
+      return parseFloat(match[1]) || 1.2;
+    }
+    return 1.2;
+  };
+
+  /**
+   * 从备注中提取汇率
+   */
+  const extractExchangeRateFromNotes = (notes) => {
+    if (!notes) return 7.2;
+
+    const match = notes.match(/汇率[：:]\s*([0-9.]+)/);
+    if (match) {
+      return parseFloat(match[1]) || 7.2;
+    }
+    return 7.2;
+  };
+
+  /**
+   * 从备注中提取紧急程度
+   */
+  const extractUrgencyFromNotes = (notes) => {
+    if (!notes) return 'normal';
+
+    if (notes.includes('紧急')) {
+      return 'urgent';
+    }
+    return 'normal';
+  };
+
+  /**
+   * 根据设备名称查找设备ID的辅助函数
+   * 需要与当前可用的设备列表匹配
+   */
+  const findMachineIdByName = (machineName, machineType) => {
+    // 设备名称到ID的映射（基于当前数据库的实际数据）
+    const machineMapping = {
+      'ETS-88': 7,
+      'JHT6080': 14,
+      'AP3000': 15,
+      'JS3000': 5,
+      'J750': 1,
+      'T800': 16,
+      'Acco STS8200': 17,
+      'QT8100': 18
+    };
+
+    return machineMapping[machineName] || null;
+  };
+
+  /**
+   * 根据板卡名称或Part Number查找真实的cardType ID
+   */
+  const findCardTypeIdByName = (cardName, partNumber, machineId, availableCardTypes) => {
+    if (!availableCardTypes || availableCardTypes.length === 0) {
+      return null;
+    }
+
+    // 先过滤出该机器的所有板卡
+    const machineCards = availableCardTypes.filter(card => card.machine_id === machineId);
+
+    // 尝试精确匹配part_number
+    let match = machineCards.find(card =>
+      card.part_number === partNumber || card.part_number === cardName
+    );
+
+    if (match) {
+      return match.id;
+    }
+
+    // 尝试匹配board_name
+    match = machineCards.find(card =>
+      card.board_name === cardName || card.board_name === partNumber
+    );
+
+    if (match) {
+      return match.id;
+    }
+
+    // 模糊匹配（包含关系）
+    match = machineCards.find(card =>
+      card.part_number?.includes(partNumber) ||
+      card.board_name?.includes(cardName) ||
+      partNumber?.includes(card.part_number) ||
+      cardName?.includes(card.board_name)
+    );
+
+    return match ? match.id : null;
+  };
+
+  /**
+   * 从报价项目中解析工程设备配置
+   */
+  const parseEngineeringDevicesFromItems = (items, availableCardTypes = [], availableMachines = []) => {
+    const config = {
+      testMachine: null,
+      handler: null,
+      prober: null,
+      auxDevices: [],
+      testMachineCards: [],
+      handlerCards: [],
+      proberCards: []
+    };
+
+    if (!items || items.length === 0) return config;
+
+    // 按设备类型分组items，收集设备信息和板卡信息
+    const deviceGroups = {
+      testMachine: [],
+      handler: [],
+      prober: [],
+      auxDevices: []
+    };
+
+    items.forEach(item => {
+      const machineType = item.machine_type || '';
+      const itemName = item.item_name || '';
+      const itemDesc = item.item_description || '';
+
+      // 按机器类型分类
+      if (machineType.includes('测试机') || itemName.includes('测试机') || itemDesc.includes('测试机')) {
+        deviceGroups.testMachine.push(item);
+      } else if (machineType.includes('分选机') || itemName.includes('分选机') || itemDesc.includes('分选机')) {
+        deviceGroups.handler.push(item);
+      } else if (machineType.includes('探针台') || itemName.includes('探针台') || itemDesc.includes('探针台')) {
+        deviceGroups.prober.push(item);
+      } else if (machineType.includes('辅助') || itemDesc.includes('辅助设备') || machineType === 'AOI') {
+        deviceGroups.auxDevices.push(item);
+      }
+    });
+
+    // 解析测试机和板卡信息
+    if (deviceGroups.testMachine.length > 0) {
+      const firstItem = deviceGroups.testMachine[0];
+      const machineName = firstItem.machine_model || firstItem.item_name;
+      const machineId = findMachineIdByName(machineName, '测试机');
+
+      if (machineId) {
+        // 查找完整的机器数据
+        const fullMachine = availableMachines.find(machine => machine.id === machineId);
+        if (fullMachine) {
+          config.testMachine = fullMachine;
+        } else {
+          // 如果找不到完整数据，使用基本结构但添加必要属性
+          config.testMachine = {
+            id: machineId,
+            name: machineName,
+            supplier: firstItem.supplier || '',
+            exchange_rate: 1.0,
+            discount_rate: 1.0,
+            currency: 'CNY'
+          };
+        }
+      }
+
+      // 详细板卡格式：item_name格式为"机器名 - 板卡名"（最新格式）
+      const detailedFormatCards = deviceGroups.testMachine
+        .filter(item => item.item_name && item.item_name.includes(' - '))
+        .map(item => {
+          const boardName = item.item_name.split(' - ')[1] || item.item_name;
+
+          // 从item_description中提取part_number（format: "测试机板卡 - SYS0088-DUAL-EV"）
+          let partNumber = boardName;
+          if (item.item_description && item.item_description.includes(' - ')) {
+            partNumber = item.item_description.split(' - ')[1] || boardName;
+          }
+
+          // 也可以从configuration中提取Part Number
+          if (item.configuration && item.configuration.includes('Part Number:')) {
+            const configMatch = item.configuration.match(/Part Number:\s*([^,]+)/);
+            if (configMatch) {
+              partNumber = configMatch[1].trim();
+            }
+          }
+
+          const realCardId = findCardTypeIdByName(boardName, partNumber, machineId, availableCardTypes);
+
+          // 从availableCardTypes中获取真实的板卡数据，而不是使用报价中的数据
+          const realCard = availableCardTypes.find(card => card.id === realCardId);
+
+          const cardData = {
+            id: realCardId || `temp_${item.id}`, // 使用真实ID或临时ID
+            part_number: partNumber,
+            board_name: boardName,
+            // 使用API中的真实数据，不是报价中保存的数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.quantity || 1,
+            machine_id: machineId,
+            original_item_id: item.id // 保留原始ID用于调试
+          };
+
+          return cardData;
+        });
+
+
+      // 新版本：从card_info获取板卡信息，但使用API中的真实数据
+      const newFormatCards = deviceGroups.testMachine
+        .filter(item => item.card_info)
+        .map(item => {
+          // 从API中获取真实的板卡数据
+          const realCard = availableCardTypes.find(card => card.id === item.card_info.id);
+          return {
+            id: item.card_info.id,
+            part_number: item.card_info.part_number,
+            board_name: item.card_info.board_name,
+            // 使用API中的真实数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.card_info.quantity || 1,
+            machine_id: item.machine_id
+          };
+        });
+
+      // 旧版本：从configuration解析板卡信息，但使用API中的真实数据
+      const oldFormatCards = deviceGroups.testMachine
+        .filter(item => !item.card_info && item.configuration && item.configuration.includes('板卡:'))
+        .map(item => {
+          const config = item.configuration || '';
+          const boardNameMatch = config.match(/板卡:\s*([^,]+)/);
+          const partNumberMatch = config.match(/Part Number:\s*([^,]+)/);
+
+          const boardName = boardNameMatch ? boardNameMatch[1] : item.item_name;
+          const partNumber = partNumberMatch ? partNumberMatch[1] : item.item_name;
+
+          // 查找真实的板卡ID和数据
+          const realCardId = findCardTypeIdByName(boardName, partNumber, machineId, availableCardTypes);
+          const realCard = availableCardTypes.find(card => card.id === realCardId);
+
+          return {
+            id: realCardId || Math.random(), // 使用真实ID或临时ID
+            part_number: partNumber,
+            board_name: boardName,
+            // 使用API中的真实数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.quantity || 1,
+            machine_id: item.machine_id || 1
+          };
+        });
+
+      // 合并所有格式的板卡信息
+      if (detailedFormatCards.length > 0) {
+        // 使用详细格式板卡（最新格式，优先级最高）
+        config.testMachineCards = detailedFormatCards;
+      } else if (newFormatCards.length > 0 || oldFormatCards.length > 0) {
+        // 使用card_info或configuration格式
+        config.testMachineCards = [...newFormatCards, ...oldFormatCards];
+      } else {
+        // 如果没有任何板卡信息，创建基本的设备项
+        config.testMachineCards = deviceGroups.testMachine.map(item => ({
+          id: Math.random(),
+          part_number: item.item_name,
+          board_name: item.item_name,
+          unit_price: item.unit_price || 0,
+          quantity: item.quantity || 1,
+          machine_id: machineId
+        }));
+      }
+    }
+
+    // 解析分选机和板卡信息（类似逻辑）
+    if (deviceGroups.handler.length > 0) {
+      const firstItem = deviceGroups.handler[0];
+      const machineName = firstItem.machine_model || firstItem.item_name;
+      const machineId = findMachineIdByName(machineName, '分选机');
+
+
+      if (machineId) {
+        // 查找完整的机器数据
+        const fullMachine = availableMachines.find(machine => machine.id === machineId);
+        if (fullMachine) {
+          config.handler = fullMachine;
+        } else {
+          // 如果找不到完整数据，使用基本结构但添加必要属性
+          config.handler = {
+            id: machineId,
+            name: machineName,
+            supplier: firstItem.supplier || '',
+            exchange_rate: 1.0,
+            discount_rate: 1.0,
+            currency: 'CNY'
+          };
+        }
+      }
+
+      // 详细板卡格式：item_name格式为"机器名 - 板卡名"
+      const detailedFormatCards = deviceGroups.handler
+        .filter(item => item.item_name && item.item_name.includes(' - '))
+        .map(item => {
+          const boardName = item.item_name.split(' - ')[1] || item.item_name;
+
+          // 从item_description中提取part_number（format: "分选机板卡 - SYS0088-DUAL-EV"）
+          let partNumber = boardName;
+          if (item.item_description && item.item_description.includes(' - ')) {
+            partNumber = item.item_description.split(' - ')[1] || boardName;
+          }
+
+          // 也可以从configuration中提取Part Number
+          if (item.configuration && item.configuration.includes('Part Number:')) {
+            const configMatch = item.configuration.match(/Part Number:\s*([^,]+)/);
+            if (configMatch) {
+              partNumber = configMatch[1].trim();
+            }
+          }
+
+          const realCardId = findCardTypeIdByName(boardName, partNumber, machineId, availableCardTypes);
+          // 从availableCardTypes中获取真实的板卡数据
+          const realCard = availableCardTypes.find(card => card.id === realCardId);
+
+          return {
+            id: realCardId || `temp_${item.id}`,
+            part_number: partNumber,
+            board_name: boardName,
+            // 使用API中的真实数据，不是报价中保存的数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.quantity || 1,
+            machine_id: machineId,
+            original_item_id: item.id
+          };
+        });
+
+      const newFormatCards = deviceGroups.handler
+        .filter(item => item.card_info)
+        .map(item => {
+          // 从API中获取真实的板卡数据
+          const realCard = availableCardTypes.find(card => card.id === item.card_info.id);
+          return {
+            id: item.card_info.id,
+            part_number: item.card_info.part_number,
+            board_name: item.card_info.board_name,
+            // 使用API中的真实数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.card_info.quantity || 1,
+            machine_id: item.machine_id
+          };
+        });
+
+      if (detailedFormatCards.length > 0) {
+        config.handlerCards = detailedFormatCards;
+      } else if (newFormatCards.length > 0) {
+        config.handlerCards = newFormatCards;
+      } else {
+        config.handlerCards = deviceGroups.handler.map(item => {
+          // 尝试从API中找到匹配的板卡
+          const realCard = availableCardTypes.find(card =>
+            card.machine_id === machineId && (
+              card.board_name === item.item_name ||
+              card.part_number === item.item_name
+            )
+          );
+          return {
+            id: realCard ? realCard.id : Math.random(),
+            part_number: item.item_name,
+            board_name: item.item_name,
+            // 使用API中的真实数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.quantity || 1,
+            machine_id: machineId
+          };
+        });
+      }
+
+    }
+
+    // 解析探针台和板卡信息（类似逻辑）
+    if (deviceGroups.prober.length > 0) {
+      const firstItem = deviceGroups.prober[0];
+      const machineName = firstItem.machine_model || firstItem.item_name;
+      const machineId = findMachineIdByName(machineName, '探针台');
+
+
+      if (machineId) {
+        // 查找完整的机器数据
+        const fullMachine = availableMachines.find(machine => machine.id === machineId);
+        if (fullMachine) {
+          config.prober = fullMachine;
+        } else {
+          // 如果找不到完整数据，使用基本结构但添加必要属性
+          config.prober = {
+            id: machineId,
+            name: machineName,
+            supplier: firstItem.supplier || '',
+            exchange_rate: 1.0,
+            discount_rate: 1.0,
+            currency: 'CNY'
+          };
+        }
+      }
+
+      // 详细板卡格式：item_name格式为"机器名 - 板卡名"
+      const detailedFormatCards = deviceGroups.prober
+        .filter(item => item.item_name && item.item_name.includes(' - '))
+        .map(item => {
+          const boardName = item.item_name.split(' - ')[1] || item.item_name;
+
+          // 从item_description中提取part_number（format: "探针台板卡 - SYS0088-DUAL-EV"）
+          let partNumber = boardName;
+          if (item.item_description && item.item_description.includes(' - ')) {
+            partNumber = item.item_description.split(' - ')[1] || boardName;
+          }
+
+          // 也可以从configuration中提取Part Number
+          if (item.configuration && item.configuration.includes('Part Number:')) {
+            const configMatch = item.configuration.match(/Part Number:\s*([^,]+)/);
+            if (configMatch) {
+              partNumber = configMatch[1].trim();
+            }
+          }
+
+          const realCardId = findCardTypeIdByName(boardName, partNumber, machineId, availableCardTypes);
+          // 从availableCardTypes中获取真实的板卡数据
+          const realCard = availableCardTypes.find(card => card.id === realCardId);
+
+          return {
+            id: realCardId || `temp_${item.id}`,
+            part_number: partNumber,
+            board_name: boardName,
+            // 使用API中的真实数据，不是报价中保存的数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.quantity || 1,
+            machine_id: machineId,
+            original_item_id: item.id
+          };
+        });
+
+      const newFormatCards = deviceGroups.prober
+        .filter(item => item.card_info)
+        .map(item => {
+          // 从API中获取真实的板卡数据
+          const realCard = availableCardTypes.find(card => card.id === item.card_info.id);
+          return {
+            id: item.card_info.id,
+            part_number: item.card_info.part_number,
+            board_name: item.card_info.board_name,
+            // 使用API中的真实数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.card_info.quantity || 1,
+            machine_id: item.machine_id
+          };
+        });
+
+      if (detailedFormatCards.length > 0) {
+        config.proberCards = detailedFormatCards;
+      } else if (newFormatCards.length > 0) {
+        config.proberCards = newFormatCards;
+      } else {
+        config.proberCards = deviceGroups.prober.map(item => {
+          // 尝试从API中找到匹配的板卡
+          const realCard = availableCardTypes.find(card =>
+            card.machine_id === machineId && (
+              card.board_name === item.item_name ||
+              card.part_number === item.item_name
+            )
+          );
+          return {
+            id: realCard ? realCard.id : Math.random(),
+            part_number: item.item_name,
+            board_name: item.item_name,
+            // 使用API中的真实数据
+            unit_price: realCard ? realCard.unit_price : 0,
+            quantity: item.quantity || 1,
+            machine_id: machineId
+          };
+        });
+      }
+
+    }
+
+    // 解析辅助设备 - 统一使用API数据源
+    config.auxDevices = deviceGroups.auxDevices.map(item => {
+      const machineName = item.machine_model || item.item_name;
+      const machineId = findMachineIdByName(machineName, item.machine_type);
+
+      // 从availableMachines中获取真实的机器数据
+      const realMachine = availableMachines.find(machine => machine.id === machineId);
+
+      console.log(`辅助设备数据调试: name=${machineName}, machineId=${machineId}, realMachine=`, realMachine);
+
+      // 统一使用API中的数据，尝试多种可能的字段名
+      let hourlyRate = 0;
+      let exchangeRate = 1.0;
+      let discountRate = 1.0;
+      let currency = 'CNY';
+
+      if (realMachine) {
+        hourlyRate = realMachine.hourly_rate || realMachine.hourlyRate || realMachine.rate || 0;
+        exchangeRate = realMachine.exchange_rate || 1.0;
+        discountRate = realMachine.discount_rate || 1.0;
+        currency = realMachine.currency || 'CNY';
+      }
+
+      return {
+        id: machineId || Math.random(),
+        name: machineName,
+        type: item.machine_type,
+        // 设置两种字段名格式以确保兼容性
+        hourlyRate: hourlyRate,
+        hourly_rate: hourlyRate,
+        // 计算所需的费率和币种信息
+        exchange_rate: exchangeRate,
+        discount_rate: discountRate,
+        currency: currency,
+        // 确保包含EngineeringQuote.js期望的字段
+        supplier: item.supplier ? { machine_type: { name: item.machine_type } } : null,
+        machine_type: item.machine_type,
+        model: machineName
+      };
+    });
+
+    return config;
+  };
+
+  /**
+   * 从报价项目中解析工程人员配置
+   */
+  const parseEngineeringPersonnelFromItems = (items) => {
+    const config = {
+      personnel: []
+    };
+
+    if (!items || items.length === 0) return config;
+
+    items.forEach(item => {
+      const itemName = item.item_name || '';
+      const itemDesc = item.item_description || '';
+      const machineType = item.machine_type || '';
+
+      // 解析人员相关项目
+      if (itemName.includes('工程师') || itemName.includes('技术员') || itemName.includes('操作员') ||
+          itemDesc.includes('工程师') || itemDesc.includes('技术员') || itemDesc.includes('操作员') ||
+          machineType.includes('人员') || machineType.includes('工程师')) {
+
+        let personnelType = '';
+        if (itemName.includes('工程师') || itemDesc.includes('工程师')) {
+          personnelType = '工程师';
+        } else if (itemName.includes('技术员') || itemDesc.includes('技术员')) {
+          personnelType = '技术员';
+        } else if (itemName.includes('操作员') || itemDesc.includes('操作员')) {
+          personnelType = '操作员';
+        } else {
+          personnelType = '工程师'; // 默认
+        }
+
+        config.personnel.push({
+          type: personnelType,
+          rate: item.unit_price || 0,
+          selected: true
+        });
+      }
+    });
+
+    return config;
   };
 
   return {

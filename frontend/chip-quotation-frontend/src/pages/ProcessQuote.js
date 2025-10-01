@@ -6,17 +6,23 @@ import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
 import { ceilByCurrency, formatQuotePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
+import useQuoteEditMode from '../hooks/useQuoteEditMode';
+import { QuoteApiService } from '../services/quoteApi';
 import '../App.css';
 
 const ProcessQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  
+
+  // 编辑模式相关状态
+  const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
+
   const [machines, setMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
+  const [editMessageShown, setEditMessageShown] = useState(false);
 
   const [formData, setFormData] = useState({
     customerInfo: {

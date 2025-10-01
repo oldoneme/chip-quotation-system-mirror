@@ -474,10 +474,15 @@ async def get_quote(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """根据ID获取报价单详情"""
+    """根据ID或报价单号获取报价单详情"""
     try:
         service = QuoteService(db)
-        quote = service.get_quote_by_id(quote_id)
+
+        # 智能检测：如果是纯数字，按ID查询；否则按报价单号查询
+        if quote_id.isdigit():
+            quote = service.get_quote_by_id(int(quote_id))
+        else:
+            quote = service.get_quote_by_number(quote_id)
 
         if not quote:
             raise HTTPException(
