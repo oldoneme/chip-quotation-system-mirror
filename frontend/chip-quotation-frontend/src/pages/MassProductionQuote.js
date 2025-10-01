@@ -163,8 +163,15 @@ const MassProductionQuote = () => {
     if (isEditMode && editingQuote && !editLoading && !editDataLoaded && cardTypes.length > 0 && machines.length > 0) {
       console.log('MassProductionQuote 编辑模式：开始预填充数据', editingQuote);
 
-      // 合并所有机器数据供ID匹配使用
-      const allMachines = [...machines, ...handlers, ...probers, ...auxDevices.others];
+      // 合并所有机器数据供ID匹配使用（包括所有类型的辅助设备）
+      const allMachines = [
+        ...machines,
+        ...handlers,
+        ...probers,
+        ...auxDevices.handlers,
+        ...auxDevices.probers,
+        ...auxDevices.others
+      ];
       const formData = convertQuoteToFormData(editingQuote, 'mass_production', cardTypes, allMachines);
 
       if (formData) {
