@@ -247,6 +247,11 @@ const EngineeringQuote = () => {
 
   // 编辑模式数据加载（只执行一次）
   useEffect(() => {
+    // 如果是从结果页返回，跳过这个数据加载（数据已经在sessionStorage中）
+    if (location.state?.fromResultPage) {
+      return;
+    }
+
     // 只在编辑模式下，且数据未加载过时执行
     if (isEditMode && editingQuote && !editLoading && !editDataLoaded && cardTypes.length > 0 && machines.length > 0) {
       // 合并所有机器数据供ID匹配使用
@@ -360,18 +365,19 @@ const EngineeringQuote = () => {
   // 生成工程机时报价项目数据 - 直接使用页面"费用明细"中显示的费率
   const generateEngineeringQuoteItems = () => {
     const items = [];
-    
+
     // === 机器设备部分：直接使用页面费用明细中的含工程系数费率 ===
-    
+
     // 测试机机时费（含工程系数）
-    if (testMachine && testMachineCards.length > 0) {
+    if (testMachine && testMachine.name && testMachineCards.length > 0) {
       const testMachineRate = calculateTestMachineFee() * engineeringRate;
+      const ceiledRate = ceilByCurrency(testMachineRate, quoteCurrency);
 
       // 将板卡信息序列化到configuration字段中，用于编辑时恢复
       const cardsInfo = testMachineCards.map(card => ({
         id: card.id,
-        board_name: card.board_name,
-        part_number: card.part_number,
+        board_name: card.board_name || '',
+        part_number: card.part_number || '',
         quantity: card.quantity || 1
       }));
 
@@ -379,7 +385,7 @@ const EngineeringQuote = () => {
         item_name: testMachine.name,
         item_description: `机器 - 测试机`,
         machine_type: '测试机',
-        supplier: typeof testMachine.supplier === 'object' ? testMachine.supplier.name : testMachine.supplier || '',
+        supplier: typeof testMachine.supplier === 'object' ? testMachine.supplier?.name || '' : testMachine.supplier || '',
         machine_model: testMachine.name,
         configuration: JSON.stringify({
           device_type: '测试机',
@@ -388,21 +394,22 @@ const EngineeringQuote = () => {
         }),
         quantity: 1,
         unit: '小时',
-        unit_price: testMachineRate,
-        total_price: testMachineRate,
+        unit_price: ceiledRate,
+        total_price: ceiledRate,
         machine_id: testMachine.id
       });
     }
     
     // 分选机机时费（含工程系数）
-    if (handler && handlerCards.length > 0) {
+    if (handler && handler.name && handlerCards.length > 0) {
       const handlerRate = calculateHandlerFee() * engineeringRate;
+      const ceiledRate = ceilByCurrency(handlerRate, quoteCurrency);
 
       // 将板卡信息序列化到configuration字段中，用于编辑时恢复
       const cardsInfo = handlerCards.map(card => ({
         id: card.id,
-        board_name: card.board_name,
-        part_number: card.part_number,
+        board_name: card.board_name || '',
+        part_number: card.part_number || '',
         quantity: card.quantity || 1
       }));
 
@@ -410,7 +417,7 @@ const EngineeringQuote = () => {
         item_name: handler.name,
         item_description: `机器 - 分选机`,
         machine_type: '分选机',
-        supplier: typeof handler.supplier === 'object' ? handler.supplier.name : handler.supplier || '',
+        supplier: typeof handler.supplier === 'object' ? handler.supplier?.name || '' : handler.supplier || '',
         machine_model: handler.name,
         configuration: JSON.stringify({
           device_type: '分选机',
@@ -419,21 +426,22 @@ const EngineeringQuote = () => {
         }),
         quantity: 1,
         unit: '小时',
-        unit_price: handlerRate,
-        total_price: handlerRate,
+        unit_price: ceiledRate,
+        total_price: ceiledRate,
         machine_id: handler.id
       });
     }
     
     // 探针台机时费（含工程系数）
-    if (prober && proberCards.length > 0) {
+    if (prober && prober.name && proberCards.length > 0) {
       const proberRate = calculateProberFee() * engineeringRate;
+      const ceiledRate = ceilByCurrency(proberRate, quoteCurrency);
 
       // 将板卡信息序列化到configuration字段中，用于编辑时恢复
       const cardsInfo = proberCards.map(card => ({
         id: card.id,
-        board_name: card.board_name,
-        part_number: card.part_number,
+        board_name: card.board_name || '',
+        part_number: card.part_number || '',
         quantity: card.quantity || 1
       }));
 
@@ -441,7 +449,7 @@ const EngineeringQuote = () => {
         item_name: prober.name,
         item_description: `机器 - 探针台`,
         machine_type: '探针台',
-        supplier: typeof prober.supplier === 'object' ? prober.supplier.name : prober.supplier || '',
+        supplier: typeof prober.supplier === 'object' ? prober.supplier?.name || '' : prober.supplier || '',
         machine_model: prober.name,
         configuration: JSON.stringify({
           device_type: '探针台',
@@ -450,8 +458,8 @@ const EngineeringQuote = () => {
         }),
         quantity: 1,
         unit: '小时',
-        unit_price: proberRate,
-        total_price: proberRate,
+        unit_price: ceiledRate,
+        total_price: ceiledRate,
         machine_id: prober.id
       });
     }
@@ -459,30 +467,36 @@ const EngineeringQuote = () => {
     // 辅助设备：直接使用页面费用明细中的费率
     if (selectedAuxDevices && selectedAuxDevices.length > 0) {
       selectedAuxDevices.forEach(device => {
+        if (!device || !device.name) {
+          console.error('无效的辅助设备数据:', device);
+          return;
+        }
         const deviceRate = calculateAuxDeviceHourlyRate(device);
+        const ceiledRate = ceilByCurrency(deviceRate, quoteCurrency);
         items.push({
           item_name: device.name,
           item_description: `机器 - 辅助设备`,
           machine_type: device.supplier?.machine_type?.name || '辅助设备',
-          supplier: typeof device.supplier === 'object' ? device.supplier.name : device.supplier || '',
+          supplier: typeof device.supplier === 'object' ? device.supplier?.name || '' : device.supplier || '',
           machine_model: device.name,
           configuration: `设备类型: 辅助设备, 设备型号: ${device.name}`,
           quantity: 1,
           unit: '小时',
-          unit_price: deviceRate,
-          total_price: deviceRate,
+          unit_price: ceiledRate,
+          total_price: ceiledRate,
           machine_id: device.id
         });
       });
     }
     
     // === 人员部分：直接使用页面费用明细中的费率 ===
-    
+
     if (selectedPersonnel && selectedPersonnel.length > 0) {
       selectedPersonnel.forEach(personnelType => {
         // 直接使用页面计算函数得到的费率
         const hourlyRate = calculatePersonnelFeeForQuote(personnelType);
-        
+        const ceiledRate = ceilByCurrency(hourlyRate, quoteCurrency);
+
         items.push({
           item_name: personnelType,
           item_description: `人员 - ${personnelType}`,
@@ -492,8 +506,8 @@ const EngineeringQuote = () => {
           configuration: `人员类别: ${personnelType}`,
           quantity: 1,
           unit: '小时',
-          unit_price: hourlyRate,
-          total_price: hourlyRate
+          unit_price: ceiledRate,
+          total_price: ceiledRate
         });
       });
     }
@@ -546,6 +560,7 @@ const EngineeringQuote = () => {
       // 编辑模式标识
       isEditMode: isEditMode,
       editingQuoteId: isEditMode && editingQuote ? editingQuote.id : null,
+      quoteNumber: isEditMode && editingQuote ? editingQuote.quote_number : null,
       // 添加数据库创建/更新数据，供确认报价按钮使用
       quoteCreateData: {
         title: title,

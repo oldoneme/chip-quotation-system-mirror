@@ -189,8 +189,6 @@ const QuoteResult = () => {
     
     const quoteCurrency = quoteData.currency || 'CNY';
     const quoteExchangeRate = quoteData.exchangeRate || 7.2;
-    console.log(`QuoteResult calculateProcessCardCostForDevice ${deviceName} - quoteCurrency:`, quoteCurrency);
-    console.log(`QuoteResult calculateProcessCardCostForDevice ${deviceName} - quoteExchangeRate:`, quoteExchangeRate);
     
     let cardCost = 0;
     Object.entries(cardQuantities).forEach(([cardId, quantity]) => {
@@ -387,8 +385,6 @@ const QuoteResult = () => {
       // 动态导入API服务
       const QuoteApiService = (await import('../services/quoteApi')).default;
       
-      console.log('准备创建报价单，数据:', finalQuoteData);
-      console.log('Items字段详情:', JSON.stringify(finalQuoteData.items, null, 2));
       
       // 修复数据格式问题
       const fixedQuoteData = {
@@ -405,15 +401,12 @@ const QuoteResult = () => {
         }))
       };
       
-      console.log('修复后的数据:', JSON.stringify(fixedQuoteData, null, 2));
-
       // 检查是否是编辑模式
       const isEditMode = quoteData.isEditMode && quoteData.editingQuoteId;
       let resultQuote;
 
       if (isEditMode) {
         // 编辑模式：更新现有报价单
-        console.log('更新报价单，ID:', quoteData.editingQuoteId);
         resultQuote = await QuoteApiService.updateQuote(quoteData.editingQuoteId, fixedQuoteData);
         message.success(`报价单更新成功！报价单号：${resultQuote.quote_number}`);
       } else {
@@ -433,8 +426,6 @@ const QuoteResult = () => {
         dbRecord: true
       }));
 
-      console.log(`报价单${isEditMode ? '更新' : '创建'}成功:`, resultQuote);
-      
     } catch (error) {
       const isEditMode = quoteData.isEditMode && quoteData.editingQuoteId;
       console.error(`${isEditMode ? '更新' : '创建'}报价单详细错误:`, error);
@@ -501,7 +492,6 @@ const QuoteResult = () => {
       if (device.supplier || device.machine_type) {
         // 查找该机器的板卡
         const machineCards = quoteData.cardTypes.filter(card => card.machine_id === device.id);
-        console.log(`报价结果-计算设备 ${device.name} 的费用，板卡数量: ${machineCards.length}`, machineCards);
         return total + machineCards.reduce((sum, card) => {
           let adjustedPrice = card.unit_price / 10000;
           
@@ -518,7 +508,6 @@ const QuoteResult = () => {
           }
           
           const cardCost = adjustedPrice * device.discount_rate * (card.quantity || 1);
-          console.log(`板卡 ${card.board_name} 费用: ${cardCost}`);
           return sum + cardCost;
         }, 0);
       } else {
@@ -707,13 +696,6 @@ const QuoteResult = () => {
           )}
           
           {/* 工装夹具报价显示 */}
-          {console.log('DEBUG: Checking tooling quote condition', {
-            hasQuoteData: !!quoteData,
-            type: quoteData?.type,
-            quote_type: quoteData?.quote_type,
-            condition1: quoteData?.type === '工装夹具报价',
-            condition2: quoteData?.quote_type === 'tooling'
-          })}
           {(quoteData && (quoteData.type === '工装夹具报价' || quoteData.quote_type === 'tooling')) && (
             <>
               <div style={{ marginBottom: 20 }}>
@@ -1570,7 +1552,7 @@ const QuoteResult = () => {
                 } 
               });
             } else if (quoteData && quoteData.type === '工程报价') {
-              // 工程报价：真正的上一步，回到步骤1并保留所有数据
+              // 工程报价：真正的上一步，回到编辑页面并保留所有数据（包括编辑模式信息）
               const previousStepData = {
                 currentStep: 1, // 返回到步骤1（人员和辅助设备选择）
                 testMachine: quoteData.testMachine,
@@ -1585,13 +1567,23 @@ const QuoteResult = () => {
                 quoteCurrency: quoteData.quoteCurrency || 'CNY',
                 quoteExchangeRate: quoteData.quoteExchangeRate || 7.2,
                 persistedCardQuantities: quoteData.persistedCardQuantities || {},
+                // 保留编辑模式信息
+                isEditMode: quoteData.isEditMode || false,
+                editingQuoteId: quoteData.editingQuoteId || null,
+                editingQuoteNumber: quoteData.quoteNumber || null,  // 保存报价单号
+                // 保留客户信息和项目信息
+                customerInfo: quoteData.customerInfo || {},
+                projectInfo: quoteData.projectInfo || {},
                 fromResultPage: true
               };
               sessionStorage.setItem('quoteData', JSON.stringify(previousStepData));
-              navigate('/engineering-quote', { 
-                state: { 
-                  fromResultPage: true
-                } 
+              navigate('/engineering-quote', {
+                state: {
+                  fromResultPage: true,
+                  isEditing: quoteData.isEditMode || false,  // 使用isEditing以匹配hook
+                  quoteId: quoteData.editingQuoteId || null,
+                  quoteNumber: quoteData.quoteNumber || null  // 传递报价单号
+                }
               });
             } else {
               // 量产报价：真正的上一步，回到步骤1并保留所有数据

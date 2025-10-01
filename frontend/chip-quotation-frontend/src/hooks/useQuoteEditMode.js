@@ -19,8 +19,17 @@ const useQuoteEditMode = () => {
       if (location.state?.isEditing) {
         setIsEditMode(true);
 
+        // 如果是从结果页返回，不重新获取数据，数据已经在sessionStorage中
+        if (location.state?.fromResultPage && location.state?.quoteId) {
+          // 创建一个基本的editingQuote对象，仅用于标识编辑模式
+          setEditingQuote({
+            id: location.state.quoteId,
+            quote_number: location.state.quoteNumber || location.state.quoteId
+          });
+          setLoading(false);
+        }
         // 优先使用已传递的editingQuote数据
-        if (location.state?.editingQuote) {
+        else if (location.state?.editingQuote) {
           setEditingQuote(location.state.editingQuote);
           setLoading(false);
         } else if (location.state?.quoteId) {
