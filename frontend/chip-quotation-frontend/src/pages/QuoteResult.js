@@ -1590,29 +1590,39 @@ const QuoteResult = () => {
               const previousStepData = {
                 currentStep: 1, // 返回到步骤1（辅助设备选择）
                 selectedTypes: quoteData.selectedTypes || ['ft', 'cp'],
-                ftData: quoteData.ftData || { 
-                  testMachine: null, 
-                  handler: null, 
-                  testMachineCards: [], 
-                  handlerCards: [] 
+                ftData: quoteData.ftData || {
+                  testMachine: null,
+                  handler: null,
+                  testMachineCards: [],
+                  handlerCards: []
                 },
-                cpData: quoteData.cpData || { 
-                  testMachine: null, 
-                  prober: null, 
-                  testMachineCards: [], 
-                  proberCards: [] 
+                cpData: quoteData.cpData || {
+                  testMachine: null,
+                  prober: null,
+                  testMachineCards: [],
+                  proberCards: []
                 },
                 selectedAuxDevices: quoteData.selectedAuxDevices || [],
                 persistedCardQuantities: quoteData.persistedCardQuantities || {},
                 quoteCurrency: quoteData.quoteCurrency || 'CNY',
                 quoteExchangeRate: quoteData.quoteExchangeRate || 7.2,
+                // 保留客户信息和项目信息
+                customerInfo: quoteData.customerInfo || {},
+                projectInfo: quoteData.projectInfo || {},
+                // 保留编辑模式信息
+                isEditMode: quoteData.isEditMode || false,
+                editingQuoteId: quoteData.editingQuoteId || null,
+                editingQuoteNumber: quoteData.quoteNumber || null,
                 fromResultPage: true
               };
               sessionStorage.setItem('massProductionQuoteState', JSON.stringify(previousStepData));
-              navigate('/mass-production-quote', { 
-                state: { 
-                  fromResultPage: true
-                } 
+              navigate('/mass-production-quote', {
+                state: {
+                  fromResultPage: true,
+                  isEditing: quoteData.isEditMode || false,
+                  quoteId: quoteData.editingQuoteId || null,
+                  quoteNumber: quoteData.quoteNumber || null
+                }
               });
             }
           }}>
