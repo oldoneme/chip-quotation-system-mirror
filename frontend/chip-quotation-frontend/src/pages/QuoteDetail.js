@@ -1417,7 +1417,7 @@ const QuoteDetail = () => {
                           }
 
                           // 应用折扣率和数量
-                          const hourlyCost = adjustedPrice * (machine.discount_rate || 1.0) * cardInfo.quantity;
+                          const hourlyCost = adjustedPrice * machine.discount_rate * (cardInfo.quantity || 1);
                           totalHourlyCost += hourlyCost;
                         }
                       });
