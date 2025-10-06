@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
 import { getMachines } from '../services/machines';
+import { getCardTypes } from '../services/cardTypes';
 import '../styles/QuoteManagement.css';
 
 const { confirm } = Modal;
@@ -20,6 +21,7 @@ const QuoteManagement = () => {
   const [quotes, setQuotes] = useState([]);
   const [isMobile, setIsMobile] = useState(false);
   const [machines, setMachines] = useState([]);
+  const [cardTypes, setCardTypes] = useState([]);
 
   // 统计数据
   const [statistics, setStatistics] = useState({
@@ -92,16 +94,20 @@ const QuoteManagement = () => {
   useEffect(() => {
     fetchQuotes();
     fetchStatistics();
-    // 加载设备数据（用于工序报价显示机时费率）
-    const loadMachines = async () => {
+    // 加载设备和板卡数据（用于工序报价显示机时费率）
+    const loadData = async () => {
       try {
-        const machinesData = await getMachines();
+        const [machinesData, cardTypesData] = await Promise.all([
+          getMachines(),
+          getCardTypes()
+        ]);
         setMachines(machinesData);
+        setCardTypes(cardTypesData);
       } catch (error) {
-        console.error('获取设备数据失败:', error);
+        console.error('获取设备/板卡数据失败:', error);
       }
     };
-    loadMachines();
+    loadData();
   }, []);
 
   const getStatusTag = (status, approvalStatus) => {
@@ -897,13 +903,36 @@ const QuoteManagement = () => {
             // 提取UPH
             uph = config.uph || null;
 
-            // 计算机时费率（基于测试机）
-            if (config.test_machine && config.test_machine.id && machines.length > 0) {
+            // 计算机时费率（基于所选板卡）
+            if (config.test_machine && config.test_machine.cards && machines.length > 0 && cardTypes.length > 0) {
               const machine = machines.find(m => m.id === config.test_machine.id);
-              if (machine && machine.base_hourly_rate) {
-                const rate = machine.base_hourly_rate;
+              if (machine) {
+                let totalHourlyCost = 0;
+
+                // 遍历所有板卡计算总费用
+                config.test_machine.cards.forEach(cardInfo => {
+                  const card = cardTypes.find(c => c.id === cardInfo.id);
+                  if (card && cardInfo.quantity > 0) {
+                    // 板卡单价 / 10000
+                    let adjustedPrice = (card.unit_price || 0) / 10000;
+
+                    // 汇率转换
+                    if (record.currency === 'USD') {
+                      if (machine.currency === 'CNY' || machine.currency === 'RMB') {
+                        adjustedPrice = adjustedPrice / (record.exchange_rate || 7.2);
+                      }
+                    } else {
+                      adjustedPrice = adjustedPrice * (machine.exchange_rate || 1.0);
+                    }
+
+                    // 应用折扣率和数量
+                    const hourlyCost = adjustedPrice * (machine.discount_rate || 1.0) * cardInfo.quantity;
+                    totalHourlyCost += hourlyCost;
+                  }
+                });
+
                 const currencySymbol = record.currency === 'USD' ? '$' : '¥';
-                hourlyRate = `${currencySymbol}${rate.toFixed(2)}/小时`;
+                hourlyRate = `${currencySymbol}${totalHourlyCost.toFixed(2)}/小时`;
               }
             }
           } catch (e) {

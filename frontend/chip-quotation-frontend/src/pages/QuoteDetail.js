@@ -20,6 +20,7 @@ import SubmitApprovalModal from '../components/SubmitApprovalModal';
 import { useAuth } from '../contexts/AuthContext';
 import { getColumnsForPDF } from '../utils/columnConfigurations';
 import { getMachines } from '../services/machines';
+import { getCardTypes } from '../services/cardTypes';
 import '../styles/QuoteDetail.css';
 
 const { confirm } = Modal;
@@ -36,6 +37,7 @@ const QuoteDetail = () => {
   const [approvers, setApprovers] = useState([]);
   const [submitApprovalModalVisible, setSubmitApprovalModalVisible] = useState(false);
   const [machines, setMachines] = useState([]);
+  const [cardTypes, setCardTypes] = useState([]);
 
   // 解析URL上的JWT参数
   const urlJwt = useMemo(() => {
@@ -60,17 +62,21 @@ const QuoteDetail = () => {
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
-  // 加载设备数据（用于工序报价显示机时费率）
+  // 加载设备和板卡数据（用于工序报价显示机时费率）
   useEffect(() => {
-    const loadMachines = async () => {
+    const loadData = async () => {
       try {
-        const machinesData = await getMachines();
+        const [machinesData, cardTypesData] = await Promise.all([
+          getMachines(),
+          getCardTypes()
+        ]);
         setMachines(machinesData);
+        setCardTypes(cardTypesData);
       } catch (error) {
-        console.error('获取设备数据失败:', error);
+        console.error('获取设备/板卡数据失败:', error);
       }
     };
-    loadMachines();
+    loadData();
   }, []);
 
   useEffect(() => {
@@ -1388,13 +1394,36 @@ const QuoteDetail = () => {
                   // 提取UPH
                   uph = config.uph || null;
 
-                  // 计算机时费率（基于测试机）
-                  if (config.test_machine && config.test_machine.id && machines.length > 0) {
+                  // 计算机时费率（基于所选板卡）
+                  if (config.test_machine && config.test_machine.cards && machines.length > 0 && cardTypes.length > 0) {
                     const machine = machines.find(m => m.id === config.test_machine.id);
-                    if (machine && machine.base_hourly_rate) {
-                      const rate = machine.base_hourly_rate;
+                    if (machine) {
+                      let totalHourlyCost = 0;
+
+                      // 遍历所有板卡计算总费用
+                      config.test_machine.cards.forEach(cardInfo => {
+                        const card = cardTypes.find(c => c.id === cardInfo.id);
+                        if (card && cardInfo.quantity > 0) {
+                          // 板卡单价 / 10000
+                          let adjustedPrice = (card.unit_price || 0) / 10000;
+
+                          // 汇率转换
+                          if (quote.currency === 'USD') {
+                            if (machine.currency === 'CNY' || machine.currency === 'RMB') {
+                              adjustedPrice = adjustedPrice / (quote.exchange_rate || 7.2);
+                            }
+                          } else {
+                            adjustedPrice = adjustedPrice * (machine.exchange_rate || 1.0);
+                          }
+
+                          // 应用折扣率和数量
+                          const hourlyCost = adjustedPrice * (machine.discount_rate || 1.0) * cardInfo.quantity;
+                          totalHourlyCost += hourlyCost;
+                        }
+                      });
+
                       const currencySymbol = quote.currency === 'USD' ? '$' : '¥';
-                      hourlyRate = `${currencySymbol}${rate.toFixed(2)}/小时`;
+                      hourlyRate = `${currencySymbol}${totalHourlyCost.toFixed(2)}/小时`;
                     }
                   }
                 } catch (e) {
