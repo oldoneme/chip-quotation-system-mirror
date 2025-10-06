@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Checkbox, Card, Button, Table, InputNumber, message } from 'antd';
+import { Checkbox, Card, Button, Table, InputNumber } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
@@ -16,7 +16,7 @@ const ProcessQuote = () => {
   const { user } = useAuth();
 
   // 编辑模式相关状态
-  const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
+  const { isEditMode, editingQuote, convertQuoteToFormData } = useQuoteEditMode();
 
   const [machines, setMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
@@ -145,7 +145,12 @@ const ProcessQuote = () => {
 
   // 编辑模式：预填充报价数据
   useEffect(() => {
-    if (isEditMode && editingQuote && machines.length > 0 && cardTypes.length > 0) {
+    if (isEditMode && editingQuote && machines.length > 0 && cardTypes.length > 0 && !editMessageShown) {
+      console.log('工序报价编辑模式：开始预填充数据');
+      console.log('editingQuote:', editingQuote);
+      console.log('machines count:', machines.length);
+      console.log('cardTypes count:', cardTypes.length);
+
       // 使用转换函数将报价数据转换为表单数据
       const convertedFormData = convertQuoteToFormData(
         editingQuote,
@@ -154,14 +159,18 @@ const ProcessQuote = () => {
         machines
       );
 
+      console.log('转换后的表单数据:', convertedFormData);
+
       if (convertedFormData) {
         setFormData(prev => ({
           ...prev,
           ...convertedFormData
         }));
+        setEditMessageShown(true); // 标记已加载，防止重复
       }
     }
-  }, [isEditMode, editingQuote, machines, cardTypes, convertQuoteToFormData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, editingQuote, machines, cardTypes, editMessageShown]);
 
   // 处理测试类型变化
   const handleProductionTypeChange = (checkedValues) => {
