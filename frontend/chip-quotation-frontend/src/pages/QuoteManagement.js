@@ -240,14 +240,20 @@ const QuoteManagement = () => {
   };
 
   const handleEdit = async (record) => {
-    // 根据报价类型跳转到对应的编辑页面
+    // 根据报价类型跳转到对应的编辑页面（支持中英文类型）
     const quoteTypeToPath = {
       'inquiry': '/inquiry-quote',
+      '询价报价': '/inquiry-quote',
       'tooling': '/tooling-quote',
+      '工装夹具报价': '/tooling-quote',
       'engineering': '/engineering-quote',
+      '工程报价': '/engineering-quote',
       'mass_production': '/mass-production-quote',
+      '量产报价': '/mass-production-quote',
       'process': '/process-quote',
-      'comprehensive': '/comprehensive-quote'
+      '工序报价': '/process-quote',
+      'comprehensive': '/comprehensive-quote',
+      '综合报价': '/comprehensive-quote'
     };
 
     const editPath = quoteTypeToPath[record.quote_type];
