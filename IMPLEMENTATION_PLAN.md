@@ -31,7 +31,7 @@
 - [x] InquiryQuote（询价报价）✅ 完全实现
 - [x] EngineeringQuote（工程机时报价）✅ 完全实现（含统一新建/编辑、板卡JSON存储、价格取整优化）
 - [x] MassProductionQuote（量产机时报价）✅ 完全实现（应用工程报价5大优化模式：JSON序列化、价格取整、单页面、无分页、完整编辑预填充）
-- [ ] ProcessQuote（量产工序报价）- 待实现
+- [ ] ProcessQuote（量产工序报价）🔄 计划已制定，待实施（参考工程+量产报价8大优化模式）
 - [ ] ComprehensiveQuote（综合报价）- 待实现
 - [ ] 删除临时QuoteEdit页面
 - [ ] 端到端测试
