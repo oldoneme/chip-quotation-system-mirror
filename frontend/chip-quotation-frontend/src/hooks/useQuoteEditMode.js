@@ -262,12 +262,17 @@ const useQuoteEditMode = () => {
    * 量产工序报价数据转换
    */
   const convertProcessQuoteToFormData = (quote, baseFormData, availableCardTypes = [], availableMachines = []) => {
+    console.log('convertProcessQuoteToFormData called');
+    console.log('quote.items:', quote.items);
+    console.log('availableMachines count:', availableMachines.length);
+
     // 解析币种和汇率
     const currency = quote.currency || 'CNY';
     const exchangeRate = quote.exchange_rate || 7.2;
 
     // 从items中解析多工序配置
     const processConfig = parseProcessQuoteDevicesFromItems(quote.items, availableCardTypes, availableMachines);
+    console.log('processConfig:', processConfig);
 
     return {
       ...baseFormData,
@@ -1439,12 +1444,82 @@ const useQuoteEditMode = () => {
         }
       }
 
-      // 如果没有 configuration，尝试从其他字段推断（旧格式）
+      // 如果没有 configuration JSON，尝试从其他字段推断（旧格式）
       if (!processType && item.item_name) {
-        // 从 item_name 提取工序类型，例如 "CP工序 - CP1测试" -> "CP1测试"
-        const match = item.item_name.match(/(?:CP|FT)工序\s*-\s*(.+)/);
+        // 旧格式1: "CP工序 - CP1测试" -> "CP1测试"
+        let match = item.item_name.match(/(?:CP|FT)工序\s*-\s*(.+)/);
         if (match) {
           processType = match[1];
+        } else {
+          // 旧格式2: "CP-CP1测试" -> "CP1测试"
+          match = item.item_name.match(/^(?:CP|FT)-(.+)/);
+          if (match) {
+            processType = match[1];
+          }
+        }
+
+        // 如果是旧格式，尝试解析旧的configuration文本字段
+        // 格式: "测试机:ETS-88, 探针台:AP3000, UPH:10"
+        if (processType && item.configuration && typeof item.configuration === 'string') {
+          try {
+            const oldConfig = {};
+            const parts = item.configuration.split(',').map(p => p.trim());
+            parts.forEach(part => {
+              const [key, value] = part.split(':').map(s => s.trim());
+              if (key === '测试机') oldConfig.testMachine = value;
+              else if (key === '探针台') oldConfig.prober = value;
+              else if (key === '分选机') oldConfig.handler = value;
+              else if (key === 'UPH') oldConfig.uph = parseInt(value) || 1000;
+            });
+
+            // 将旧格式转换为新格式结构
+            configData = {
+              process_type: processType,
+              uph: oldConfig.uph || 1000
+            };
+
+            // 解析测试机
+            if (oldConfig.testMachine) {
+              const testMachine = availableMachines.find(m => m.name === oldConfig.testMachine);
+              if (testMachine) {
+                configData.test_machine = {
+                  id: testMachine.id,
+                  name: testMachine.name,
+                  cards: []
+                };
+              } else {
+                configData.test_machine = { id: null, name: oldConfig.testMachine, cards: [] };
+              }
+            }
+
+            // 解析探针台/分选机
+            if (oldConfig.prober) {
+              const prober = availableMachines.find(m => m.name === oldConfig.prober);
+              if (prober) {
+                configData.prober = {
+                  id: prober.id,
+                  name: prober.name,
+                  cards: []
+                };
+              } else {
+                configData.prober = { id: null, name: oldConfig.prober, cards: [] };
+              }
+            }
+            if (oldConfig.handler) {
+              const handler = availableMachines.find(m => m.name === oldConfig.handler);
+              if (handler) {
+                configData.handler = {
+                  id: handler.id,
+                  name: handler.name,
+                  cards: []
+                };
+              } else {
+                configData.handler = { id: null, name: oldConfig.handler, cards: [] };
+              }
+            }
+          } catch (e) {
+            console.warn('无法解析旧格式configuration文本:', item.configuration, e);
+          }
         }
       }
 
