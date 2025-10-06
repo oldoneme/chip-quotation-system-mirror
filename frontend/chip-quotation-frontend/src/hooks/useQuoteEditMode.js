@@ -1526,9 +1526,10 @@ const useQuoteEditMode = () => {
         return; // 跳过无法识别的项
       }
 
-      // 判断是CP还是FT工序
-      const isCPProcess = processType.includes('CP') || item.machine_type?.includes('CP');
-      const isFTProcess = processType.includes('FT') || item.machine_type?.includes('FT');
+      // 判断是CP还是FT工序（根据item_name判断，而不是processType）
+      const itemName = item.item_name || '';
+      const isCPProcess = itemName.includes('CP工序') || itemName.startsWith('CP-');
+      const isFTProcess = itemName.includes('FT工序') || itemName.startsWith('FT-');
 
       if (isCPProcess) {
         if (!config.selectedTypes.includes('cp')) {
@@ -1546,7 +1547,7 @@ const useQuoteEditMode = () => {
           proberData: null,
           proberCardQuantities: {},
           uph: configData?.uph || 1000,
-          unitCost: item.unit_price || 0
+          unitCost: 0  // 编辑时人工成本重置为0，让用户重新输入
         };
 
         // 解析测试机信息
@@ -1612,7 +1613,7 @@ const useQuoteEditMode = () => {
           handlerData: null,
           handlerCardQuantities: {},
           uph: configData?.uph || 1000,
-          unitCost: item.unit_price || 0
+          unitCost: 0  // 编辑时人工成本重置为0，让用户重新输入
         };
 
         // 解析测试机信息

@@ -903,34 +903,70 @@ const QuoteManagement = () => {
             // 提取UPH
             uph = config.uph || null;
 
-            // 计算机时费率（基于所选板卡）
-            if (config.test_machine && config.test_machine.cards && machines.length > 0 && cardTypes.length > 0) {
-              const machine = machines.find(m => m.id === config.test_machine.id);
-              if (machine) {
-                let totalHourlyCost = 0;
+            // 辅助函数：计算设备的板卡费用
+            const calculateDeviceCost = (deviceConfig) => {
+              if (!deviceConfig || !deviceConfig.cards || deviceConfig.cards.length === 0) {
+                return 0;
+              }
 
-                // 遍历所有板卡计算总费用
-                config.test_machine.cards.forEach(cardInfo => {
-                  const card = cardTypes.find(c => c.id === cardInfo.id);
-                  if (card && cardInfo.quantity > 0) {
-                    // 板卡单价 / 10000
-                    let adjustedPrice = (card.unit_price || 0) / 10000;
+              const machine = machines.find(m => m.id === deviceConfig.id);
+              if (!machine) {
+                return 0;
+              }
 
-                    // 汇率转换
-                    if (record.currency === 'USD') {
-                      if (machine.currency === 'CNY' || machine.currency === 'RMB') {
-                        adjustedPrice = adjustedPrice / (record.exchange_rate || 7.2);
-                      }
-                    } else {
-                      adjustedPrice = adjustedPrice * (machine.exchange_rate || 1.0);
+              let deviceCost = 0;
+              deviceConfig.cards.forEach(cardInfo => {
+                const card = cardTypes.find(c => c.id === cardInfo.id);
+                if (card && cardInfo.quantity > 0) {
+                  // 板卡单价 / 10000
+                  let adjustedPrice = (card.unit_price || 0) / 10000;
+
+                  // 汇率转换
+                  if (record.currency === 'USD') {
+                    if (machine.currency === 'CNY' || machine.currency === 'RMB') {
+                      adjustedPrice = adjustedPrice / (record.exchange_rate || 7.2);
                     }
-
-                    // 应用折扣率和数量
-                    const hourlyCost = adjustedPrice * machine.discount_rate * (cardInfo.quantity || 1);
-                    totalHourlyCost += hourlyCost;
+                  } else {
+                    if (!machine.exchange_rate) {
+                      console.error(`设备 ${machine.name} 缺少 exchange_rate`);
+                      return;
+                    }
+                    adjustedPrice = adjustedPrice * machine.exchange_rate;
                   }
-                });
 
+                  // 应用折扣率和数量
+                  if (!machine.discount_rate) {
+                    console.error(`设备 ${machine.name} 缺少 discount_rate`);
+                    return;
+                  }
+                  const hourlyCost = adjustedPrice * machine.discount_rate * (cardInfo.quantity || 1);
+                  deviceCost += hourlyCost;
+                }
+              });
+
+              return deviceCost;
+            };
+
+            // 计算机时费率（基于所选板卡）
+            if (machines.length > 0 && cardTypes.length > 0) {
+              let totalHourlyCost = 0;
+
+              // 计算测试机费用
+              if (config.test_machine) {
+                totalHourlyCost += calculateDeviceCost(config.test_machine);
+              }
+
+              // 计算探针台费用（CP工序）
+              if (config.prober) {
+                totalHourlyCost += calculateDeviceCost(config.prober);
+              }
+
+              // 计算分选机费用（FT工序）
+              if (config.handler) {
+                totalHourlyCost += calculateDeviceCost(config.handler);
+              }
+
+              if (totalHourlyCost > 0) {
                 const currencySymbol = record.currency === 'USD' ? '$' : '¥';
                 hourlyRate = `${currencySymbol}${totalHourlyCost.toFixed(2)}/小时`;
               }

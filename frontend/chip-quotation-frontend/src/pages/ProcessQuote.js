@@ -359,11 +359,19 @@ const ProcessQuote = () => {
           // USD机器：不做汇率转换，直接使用unit_price
         } else {
           // 报价币种是CNY，保持原逻辑
-          adjustedPrice = adjustedPrice * (machineData.exchange_rate || 1.0);
+          if (!machineData.exchange_rate) {
+            console.error('机器缺少exchange_rate:', machineData);
+            return 0;
+          }
+          adjustedPrice = adjustedPrice * machineData.exchange_rate;
         }
 
         // 应用折扣率和数量，然后除以UPH得到单颗成本
-        const hourlyCost = adjustedPrice * (machineData.discount_rate || 1.0) * quantity;
+        if (!machineData.discount_rate) {
+          console.error('机器缺少discount_rate:', machineData);
+          return 0;
+        }
+        const hourlyCost = adjustedPrice * machineData.discount_rate * quantity;
 
         if (process.uph > 0) {
           const unitCost = hourlyCost / process.uph;
@@ -375,32 +383,26 @@ const ProcessQuote = () => {
     return totalCost;
   };
 
-  // 计算总成本（人工成本 + 双设备机器成本）
+  // 计算总成本（设备成本）
   const calculateTotalUnitCost = () => {
     let total = 0;
-    
+
     if (formData.selectedTypes.includes('cp')) {
       total += formData.cpProcesses.reduce((sum, process) => {
-        const laborCost = process.unitCost || 0; // 人工成本
-        // 双设备机器成本：测试机 + 探针台
         const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
         const proberCost = calculateProcessMachineCostForDevice(process, 'prober');
-        const totalMachineCost = testMachineCost + proberCost;
-        return sum + laborCost + totalMachineCost;
+        return sum + testMachineCost + proberCost;
       }, 0);
     }
-    
+
     if (formData.selectedTypes.includes('ft')) {
       total += formData.ftProcesses.reduce((sum, process) => {
-        const laborCost = process.unitCost || 0; // 人工成本
-        // 双设备机器成本：测试机 + 分选机
         const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
         const handlerCost = calculateProcessMachineCostForDevice(process, 'handler');
-        const totalMachineCost = testMachineCost + handlerCost;
-        return sum + laborCost + totalMachineCost;
+        return sum + testMachineCost + handlerCost;
       }, 0);
     }
-    
+
     // 根据货币类型向上取整
     return ceilByCurrency(total, formData.currency);
   };
@@ -456,11 +458,10 @@ const ProcessQuote = () => {
     if (formData.selectedTypes.includes('cp')) {
       formData.cpProcesses.forEach((process, index) => {
         if (process.testMachine || process.prober) {
-          // 计算工序单颗成本（人工成本 + 设备成本）
-          const laborCost = process.unitCost || 0; // 人工成本
+          // 计算工序单颗成本（设备成本）
           const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
           const proberCost = calculateProcessMachineCostForDevice(process, 'prober');
-          const totalUnitCost = laborCost + testMachineCost + proberCost;
+          const totalUnitCost = testMachineCost + proberCost;
           // 保留4位小数
           const unitCost = parseFloat(formatUnitPrice(totalUnitCost).replace(/[￥$,]/g, ''));
 
@@ -477,20 +478,27 @@ const ProcessQuote = () => {
               name: process.prober,
               cards: getCardsInfo(process.proberCardQuantities)
             } : null,
-            uph: process.uph,
-            unit_cost: unitCost
+            uph: process.uph
           };
+
+          // 构建设备类型和型号
+          const deviceType = (process.testMachine && process.prober)
+            ? '测试机/探针台'
+            : (process.testMachine ? '测试机' : (process.prober ? '探针台' : '-'));
+          const deviceModel = (process.testMachine && process.prober)
+            ? `${process.testMachine}/${process.prober}`
+            : (process.testMachine || process.prober || '-');
 
           items.push({
             item_name: `CP工序 - ${process.name}`,
             item_description: `${process.name} (UPH: ${process.uph})`,
-            machine_type: 'CP工序',
+            machine_type: deviceType,
             supplier: process.testMachineData?.supplier
               ? (typeof process.testMachineData.supplier === 'object'
                   ? process.testMachineData.supplier.name
                   : process.testMachineData.supplier)
               : '',
-            machine_model: process.testMachine || '',
+            machine_model: deviceModel,
             configuration: JSON.stringify(configuration),
             quantity: 1,
             unit: '颗',
@@ -507,11 +515,10 @@ const ProcessQuote = () => {
     if (formData.selectedTypes.includes('ft')) {
       formData.ftProcesses.forEach((process, index) => {
         if (process.testMachine || process.handler) {
-          // 计算工序单颗成本（人工成本 + 设备成本）
-          const laborCost = process.unitCost || 0; // 人工成本
+          // 计算工序单颗成本（设备成本）
           const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
           const handlerCost = calculateProcessMachineCostForDevice(process, 'handler');
-          const totalUnitCost = laborCost + testMachineCost + handlerCost;
+          const totalUnitCost = testMachineCost + handlerCost;
           // 保留4位小数
           const unitCost = parseFloat(formatUnitPrice(totalUnitCost).replace(/[￥$,]/g, ''));
 
@@ -528,20 +535,27 @@ const ProcessQuote = () => {
               name: process.handler,
               cards: getCardsInfo(process.handlerCardQuantities)
             } : null,
-            uph: process.uph,
-            unit_cost: unitCost
+            uph: process.uph
           };
+
+          // 构建设备类型和型号
+          const deviceType = (process.testMachine && process.handler)
+            ? '测试机/分选机'
+            : (process.testMachine ? '测试机' : (process.handler ? '分选机' : '-'));
+          const deviceModel = (process.testMachine && process.handler)
+            ? `${process.testMachine}/${process.handler}`
+            : (process.testMachine || process.handler || '-');
 
           items.push({
             item_name: `FT工序 - ${process.name}`,
             item_description: `${process.name} (UPH: ${process.uph})`,
-            machine_type: 'FT工序',
+            machine_type: deviceType,
             supplier: process.testMachineData?.supplier
               ? (typeof process.testMachineData.supplier === 'object'
                   ? process.testMachineData.supplier.name
                   : process.testMachineData.supplier)
               : '',
-            machine_model: process.testMachine || '',
+            machine_model: deviceModel,
             configuration: JSON.stringify(configuration),
             quantity: 1,
             unit: '颗',
@@ -562,8 +576,12 @@ const ProcessQuote = () => {
     // 生成报价项（包含JSON序列化的工序配置）
     const quoteItems = generateProcessQuoteItems();
 
+    // 构建报价标题
+    const title = `${formData.projectInfo.projectName || '工序报价'} - ${formData.customerInfo.companyName}`;
+
     // 准备数据库创建/更新数据
     const quoteCreateData = {
+      title,
       quote_type: '工序报价',
       customer_name: formData.customerInfo.companyName,
       contact_person: formData.customerInfo.contactPerson,
@@ -777,22 +795,19 @@ const ProcessQuote = () => {
       title: '单颗费用',
       dataIndex: 'unitCost',
       render: (unitCost, record) => {
-        const laborCost = unitCost || 0;
         const isTest = isTestProcess(record.name);
-        
+
         if (isTest) {
           // 测试工序：计算双设备成本
           const testMachineCost = calculateProcessMachineCostForDevice(record, 'testMachine');
           const secondDeviceCost = calculateProcessMachineCostForDevice(record, type === 'cp' ? 'prober' : 'handler');
-          const totalMachineCost = testMachineCost + secondDeviceCost;
-          const totalCost = laborCost + totalMachineCost;
-          
+          const totalCost = testMachineCost + secondDeviceCost;
+
           return (
             <div>
               <div>{formatUnitPrice(totalCost)}</div>
-              {totalMachineCost > 0 && (
+              {totalCost > 0 && (
                 <div style={{ fontSize: '11px', color: '#666' }}>
-                  人工: {formatUnitPrice(laborCost)}<br/>
                   {testMachineCost > 0 && <>测试机: {formatUnitPrice(testMachineCost)}<br/></>}
                   {secondDeviceCost > 0 && <>{type === 'cp' ? '探针台' : '分选机'}: {formatUnitPrice(secondDeviceCost)}</>}
                 </div>
@@ -802,14 +817,12 @@ const ProcessQuote = () => {
         } else {
           // 非测试工序：计算单设备成本
           const machineCost = calculateProcessMachineCostForDevice(record, 'testMachine');
-          const totalCost = laborCost + machineCost;
-          
+
           return (
             <div>
-              <div>{formatUnitPrice(totalCost)}</div>
+              <div>{formatUnitPrice(machineCost)}</div>
               {machineCost > 0 && (
                 <div style={{ fontSize: '11px', color: '#666' }}>
-                  人工: {formatUnitPrice(laborCost)}<br/>
                   设备: {formatUnitPrice(machineCost)}
                 </div>
               )}
