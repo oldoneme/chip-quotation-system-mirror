@@ -145,6 +145,29 @@ const ProcessQuote = () => {
     }
   }, [formData, isMounted, loading]);
 
+  // 编辑模式：预填充报价数据
+  useEffect(() => {
+    if (isEditMode && editingQuote && machines.length > 0 && cardTypes.length > 0) {
+      console.log('工序报价编辑模式：预填充数据', editingQuote);
+
+      // 使用转换函数将报价数据转换为表单数据
+      const convertedFormData = convertQuoteToFormData(
+        editingQuote,
+        'process',
+        cardTypes,
+        machines
+      );
+
+      if (convertedFormData) {
+        console.log('转换后的表单数据:', convertedFormData);
+        setFormData(prev => ({
+          ...prev,
+          ...convertedFormData
+        }));
+      }
+    }
+  }, [isEditMode, editingQuote, machines, cardTypes, convertQuoteToFormData]);
+
   // 处理测试类型变化
   const handleProductionTypeChange = (checkedValues) => {
     setFormData(prev => ({

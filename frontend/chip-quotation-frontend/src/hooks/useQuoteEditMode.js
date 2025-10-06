@@ -175,7 +175,7 @@ const useQuoteEditMode = () => {
       case 'mass_production':
         return convertMassProductionQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes, availableMachines);
       case 'process':
-        return convertProcessQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
+        return convertProcessQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes, availableMachines);
       case 'comprehensive':
         return convertComprehensiveQuoteToFormData(normalizedQuote, baseFormData, availableCardTypes);
       default:
@@ -261,15 +261,58 @@ const useQuoteEditMode = () => {
   /**
    * 量产工序报价数据转换
    */
-  const convertProcessQuoteToFormData = (quote, baseFormData, availableCardTypes = []) => {
+  const convertProcessQuoteToFormData = (quote, baseFormData, availableCardTypes = [], availableMachines = []) => {
+    // 解析币种和汇率
+    const currency = quote.currency || 'CNY';
+    const exchangeRate = quote.exchange_rate || 7.2;
+
+    // 从items中解析多工序配置
+    const processConfig = parseProcessQuoteDevicesFromItems(quote.items, availableCardTypes, availableMachines);
 
     return {
       ...baseFormData,
       projectInfo: {
         ...baseFormData.projectInfo,
         chipPackage: extractChipPackageFromDescription(quote.description),
-        testType: 'process',
+        testType: extractTestTypeFromItems(quote.items) || 'process',
         urgency: extractUrgencyFromNotes(quote.notes)
+      },
+      // 工序报价特有字段
+      selectedTypes: processConfig.selectedTypes,
+      cpProcesses: processConfig.cpProcesses.length > 0 ? processConfig.cpProcesses : [
+        {
+          id: 1,
+          name: 'CP1测试',
+          testMachine: '',
+          testMachineData: null,
+          testMachineCardQuantities: {},
+          prober: '',
+          proberData: null,
+          proberCardQuantities: {},
+          uph: 1000,
+          unitCost: 0
+        }
+      ],
+      ftProcesses: processConfig.ftProcesses.length > 0 ? processConfig.ftProcesses : [
+        {
+          id: 1,
+          name: 'FT1测试',
+          testMachine: '',
+          testMachineData: null,
+          testMachineCardQuantities: {},
+          handler: '',
+          handlerData: null,
+          handlerCardQuantities: {},
+          uph: 1000,
+          unitCost: 0
+        }
+      ],
+      currency: currency,
+      exchangeRate: exchangeRate,
+      pricing: {
+        laborCostPerHour: 0,
+        overheadRate: 0,
+        profitMargin: 0
       },
       remarks: extractRemarksFromNotes(quote.notes)
     };
@@ -1359,6 +1402,190 @@ const useQuoteEditMode = () => {
             }
           }
         }
+      }
+    });
+
+    return config;
+  };
+
+  /**
+   * 解析工序报价的多工序配置
+   * @param {Array} items - 报价项数组
+   * @param {Array} availableCardTypes - 可用板卡类型
+   * @param {Array} availableMachines - 可用设备（包含测试机、探针台、分选机）
+   * @returns {Object} - 包含cpProcesses和ftProcesses数组的配置对象
+   */
+  const parseProcessQuoteDevicesFromItems = (items, availableCardTypes = [], availableMachines = []) => {
+    const config = {
+      selectedTypes: [],
+      cpProcesses: [],
+      ftProcesses: []
+    };
+
+    if (!items || items.length === 0) return config;
+
+    // 解析每个报价项，从configuration JSON中提取工序信息
+    items.forEach((item, index) => {
+      let configData = null;
+      let processType = null;
+
+      // 尝试解析 configuration（新格式）
+      if (item.configuration) {
+        try {
+          configData = JSON.parse(item.configuration);
+          processType = configData.process_type;
+        } catch (e) {
+          console.warn('无法解析工序configuration JSON:', item.configuration);
+        }
+      }
+
+      // 如果没有 configuration，尝试从其他字段推断（旧格式）
+      if (!processType && item.item_name) {
+        // 从 item_name 提取工序类型，例如 "CP工序 - CP1测试" -> "CP1测试"
+        const match = item.item_name.match(/(?:CP|FT)工序\s*-\s*(.+)/);
+        if (match) {
+          processType = match[1];
+        }
+      }
+
+      if (!processType) return; // 跳过无法识别的项
+
+      // 判断是CP还是FT工序
+      const isCPProcess = processType.includes('CP') || item.machine_type?.includes('CP');
+      const isFTProcess = processType.includes('FT') || item.machine_type?.includes('FT');
+
+      if (isCPProcess) {
+        if (!config.selectedTypes.includes('cp')) {
+          config.selectedTypes.push('cp');
+        }
+
+        // 构建CP工序对象
+        const process = {
+          id: config.cpProcesses.length + 1,
+          name: processType,
+          testMachine: '',
+          testMachineData: null,
+          testMachineCardQuantities: {},
+          prober: '',
+          proberData: null,
+          proberCardQuantities: {},
+          uph: configData?.uph || 1000,
+          unitCost: item.unit_price || 0
+        };
+
+        // 解析测试机信息
+        if (configData?.test_machine) {
+          const testMachineId = configData.test_machine.id;
+          const fullMachine = availableMachines.find(m => m.id === testMachineId);
+          if (fullMachine) {
+            process.testMachine = fullMachine.name;
+            process.testMachineData = fullMachine;
+          } else {
+            // 使用 machine_id 查找
+            const machineById = availableMachines.find(m => m.id === item.machine_id);
+            if (machineById) {
+              process.testMachine = machineById.name;
+              process.testMachineData = machineById;
+            } else {
+              // 最后使用名称匹配
+              process.testMachine = configData.test_machine.name || item.machine_model || '';
+            }
+          }
+
+          // 解析测试机板卡
+          if (configData.test_machine.cards && Array.isArray(configData.test_machine.cards)) {
+            configData.test_machine.cards.forEach(cardInfo => {
+              process.testMachineCardQuantities[cardInfo.id] = cardInfo.quantity || 1;
+            });
+          }
+        }
+
+        // 解析探针台信息
+        if (configData?.prober) {
+          const proberId = configData.prober.id;
+          const fullProber = availableMachines.find(m => m.id === proberId);
+          if (fullProber) {
+            process.prober = fullProber.name;
+            process.proberData = fullProber;
+          } else {
+            process.prober = configData.prober.name || '';
+          }
+
+          // 解析探针台板卡
+          if (configData.prober.cards && Array.isArray(configData.prober.cards)) {
+            configData.prober.cards.forEach(cardInfo => {
+              process.proberCardQuantities[cardInfo.id] = cardInfo.quantity || 1;
+            });
+          }
+        }
+
+        config.cpProcesses.push(process);
+      } else if (isFTProcess) {
+        if (!config.selectedTypes.includes('ft')) {
+          config.selectedTypes.push('ft');
+        }
+
+        // 构建FT工序对象
+        const process = {
+          id: config.ftProcesses.length + 1,
+          name: processType,
+          testMachine: '',
+          testMachineData: null,
+          testMachineCardQuantities: {},
+          handler: '',
+          handlerData: null,
+          handlerCardQuantities: {},
+          uph: configData?.uph || 1000,
+          unitCost: item.unit_price || 0
+        };
+
+        // 解析测试机信息
+        if (configData?.test_machine) {
+          const testMachineId = configData.test_machine.id;
+          const fullMachine = availableMachines.find(m => m.id === testMachineId);
+          if (fullMachine) {
+            process.testMachine = fullMachine.name;
+            process.testMachineData = fullMachine;
+          } else {
+            // 使用 machine_id 查找
+            const machineById = availableMachines.find(m => m.id === item.machine_id);
+            if (machineById) {
+              process.testMachine = machineById.name;
+              process.testMachineData = machineById;
+            } else {
+              // 最后使用名称匹配
+              process.testMachine = configData.test_machine.name || item.machine_model || '';
+            }
+          }
+
+          // 解析测试机板卡
+          if (configData.test_machine.cards && Array.isArray(configData.test_machine.cards)) {
+            configData.test_machine.cards.forEach(cardInfo => {
+              process.testMachineCardQuantities[cardInfo.id] = cardInfo.quantity || 1;
+            });
+          }
+        }
+
+        // 解析分选机信息
+        if (configData?.handler) {
+          const handlerId = configData.handler.id;
+          const fullHandler = availableMachines.find(m => m.id === handlerId);
+          if (fullHandler) {
+            process.handler = fullHandler.name;
+            process.handlerData = fullHandler;
+          } else {
+            process.handler = configData.handler.name || '';
+          }
+
+          // 解析分选机板卡
+          if (configData.handler.cards && Array.isArray(configData.handler.cards)) {
+            configData.handler.cards.forEach(cardInfo => {
+              process.handlerCardQuantities[cardInfo.id] = cardInfo.quantity || 1;
+            });
+          }
+        }
+
+        config.ftProcesses.push(process);
       }
     });
 
