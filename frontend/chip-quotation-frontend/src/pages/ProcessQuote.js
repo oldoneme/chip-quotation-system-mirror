@@ -146,11 +146,6 @@ const ProcessQuote = () => {
   // 编辑模式：预填充报价数据
   useEffect(() => {
     if (isEditMode && editingQuote && machines.length > 0 && cardTypes.length > 0 && !editMessageShown) {
-      console.log('工序报价编辑模式：开始预填充数据');
-      console.log('editingQuote:', editingQuote);
-      console.log('machines count:', machines.length);
-      console.log('cardTypes count:', cardTypes.length);
-
       // 使用转换函数将报价数据转换为表单数据
       const convertedFormData = convertQuoteToFormData(
         editingQuote,
@@ -158,8 +153,6 @@ const ProcessQuote = () => {
         cardTypes,
         machines
       );
-
-      console.log('转换后的表单数据:', convertedFormData);
 
       if (convertedFormData) {
         setFormData(prev => ({

@@ -262,21 +262,12 @@ const useQuoteEditMode = () => {
    * 量产工序报价数据转换
    */
   const convertProcessQuoteToFormData = (quote, baseFormData, availableCardTypes = [], availableMachines = []) => {
-    console.log('=== convertProcessQuoteToFormData 开始 ===');
-    console.log('quote.items:', quote.items);
-    console.log('availableCardTypes count:', availableCardTypes.length);
-    console.log('availableMachines count:', availableMachines.length);
-
     // 解析币种和汇率
     const currency = quote.currency || 'CNY';
     const exchangeRate = quote.exchange_rate || 7.2;
 
     // 从items中解析多工序配置
     const processConfig = parseProcessQuoteDevicesFromItems(quote.items, availableCardTypes, availableMachines);
-    console.log('解析后的 processConfig:', processConfig);
-    console.log('processConfig.selectedTypes:', processConfig.selectedTypes);
-    console.log('processConfig.cpProcesses:', processConfig.cpProcesses);
-    console.log('processConfig.ftProcesses:', processConfig.ftProcesses);
 
     const result = {
       ...baseFormData,
@@ -326,8 +317,6 @@ const useQuoteEditMode = () => {
       remarks: extractRemarksFromNotes(quote.notes)
     };
 
-    console.log('=== convertProcessQuoteToFormData 完成 ===');
-    console.log('返回的result:', JSON.stringify(result, null, 2));
     return result;
   };
 
@@ -1429,10 +1418,6 @@ const useQuoteEditMode = () => {
    * @returns {Object} - 包含cpProcesses和ftProcesses数组的配置对象
    */
   const parseProcessQuoteDevicesFromItems = (items, availableCardTypes = [], availableMachines = []) => {
-    console.log('=== parseProcessQuoteDevicesFromItems 开始 ===');
-    console.log('items:', items);
-    console.log('availableMachines:', availableMachines);
-
     const config = {
       selectedTypes: [],
       cpProcesses: [],
@@ -1440,16 +1425,11 @@ const useQuoteEditMode = () => {
     };
 
     if (!items || items.length === 0) {
-      console.log('items为空，返回空配置');
       return config;
     }
 
     // 解析每个报价项，从configuration JSON中提取工序信息
-    items.forEach((item, index) => {
-      console.log(`\n--- 处理 item ${index + 1}: ${item.item_name} ---`);
-      console.log('item.configuration:', item.configuration);
-      console.log('item.configuration type:', typeof item.configuration);
-
+    items.forEach((item) => {
       let configData = null;
       let processType = null;
 
@@ -1458,47 +1438,38 @@ const useQuoteEditMode = () => {
         try {
           configData = JSON.parse(item.configuration);
           processType = configData.process_type;
-          console.log('成功解析JSON配置，processType:', processType);
         } catch (e) {
-          console.log('JSON解析失败，尝试旧格式解析');
           console.warn('无法解析工序configuration JSON:', item.configuration);
         }
       }
 
       // 如果没有 configuration JSON，尝试从其他字段推断（旧格式）
       if (!processType && item.item_name) {
-        console.log('尝试从item_name提取processType:', item.item_name);
         // 旧格式1: "CP工序 - CP1测试" -> "CP1测试"
         let match = item.item_name.match(/(?:CP|FT)工序\s*-\s*(.+)/);
         if (match) {
           processType = match[1];
-          console.log('匹配格式1成功，processType:', processType);
         } else {
           // 旧格式2: "CP-CP1测试" -> "CP1测试"
           match = item.item_name.match(/^(?:CP|FT)-(.+)/);
           if (match) {
             processType = match[1];
-            console.log('匹配格式2成功，processType:', processType);
           }
         }
 
         // 如果是旧格式，尝试解析旧的configuration文本字段
         // 格式: "测试机:ETS-88, 探针台:AP3000, UPH:10"
         if (processType && item.configuration && typeof item.configuration === 'string') {
-          console.log('开始解析旧格式configuration文本');
           try {
             const oldConfig = {};
             const parts = item.configuration.split(',').map(p => p.trim());
-            console.log('分割后的parts:', parts);
             parts.forEach(part => {
               const [key, value] = part.split(':').map(s => s.trim());
-              console.log(`解析键值对: ${key} = ${value}`);
               if (key === '测试机') oldConfig.testMachine = value;
               else if (key === '探针台') oldConfig.prober = value;
               else if (key === '分选机') oldConfig.handler = value;
               else if (key === 'UPH') oldConfig.uph = parseInt(value) || 1000;
             });
-            console.log('解析得到的oldConfig:', oldConfig);
 
             // 将旧格式转换为新格式结构
             configData = {
@@ -1552,20 +1523,14 @@ const useQuoteEditMode = () => {
       }
 
       if (!processType) {
-        console.log('processType为空，跳过此项');
         return; // 跳过无法识别的项
       }
-
-      console.log('最终的processType:', processType);
-      console.log('最终的configData:', configData);
 
       // 判断是CP还是FT工序
       const isCPProcess = processType.includes('CP') || item.machine_type?.includes('CP');
       const isFTProcess = processType.includes('FT') || item.machine_type?.includes('FT');
-      console.log('isCPProcess:', isCPProcess, 'isFTProcess:', isFTProcess);
 
       if (isCPProcess) {
-        console.log('开始构建CP工序对象');
         if (!config.selectedTypes.includes('cp')) {
           config.selectedTypes.push('cp');
         }
@@ -1583,7 +1548,6 @@ const useQuoteEditMode = () => {
           uph: configData?.uph || 1000,
           unitCost: item.unit_price || 0
         };
-        console.log('初始CP工序对象:', process);
 
         // 解析测试机信息
         if (configData?.test_machine) {
@@ -1631,10 +1595,8 @@ const useQuoteEditMode = () => {
           }
         }
 
-        console.log('最终CP工序对象:', process);
         config.cpProcesses.push(process);
       } else if (isFTProcess) {
-        console.log('开始构建FT工序对象');
         if (!config.selectedTypes.includes('ft')) {
           config.selectedTypes.push('ft');
         }
@@ -1699,16 +1661,10 @@ const useQuoteEditMode = () => {
           }
         }
 
-        console.log('最终FT工序对象:', process);
         config.ftProcesses.push(process);
       }
     });
 
-    console.log('=== parseProcessQuoteDevicesFromItems 完成 ===');
-    console.log('最终config:', config);
-    console.log('selectedTypes:', config.selectedTypes);
-    console.log('cpProcesses详情:', JSON.stringify(config.cpProcesses, null, 2));
-    console.log('ftProcesses详情:', JSON.stringify(config.ftProcesses, null, 2));
     return config;
   };
 
