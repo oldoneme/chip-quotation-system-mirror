@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Table, Card, Button, Space, Tag, Row, Col, Statistic, message, Modal, List, Dropdown
 } from 'antd';
-import { 
+import {
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined,
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
   MoreOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
+import { getMachines } from '../services/machines';
 import '../styles/QuoteManagement.css';
 
 const { confirm } = Modal;
@@ -18,7 +19,8 @@ const QuoteManagement = () => {
   const [loading, setLoading] = useState(false);
   const [quotes, setQuotes] = useState([]);
   const [isMobile, setIsMobile] = useState(false);
-  
+  const [machines, setMachines] = useState([]);
+
   // 统计数据
   const [statistics, setStatistics] = useState({
     total: 0,
@@ -90,6 +92,16 @@ const QuoteManagement = () => {
   useEffect(() => {
     fetchQuotes();
     fetchStatistics();
+    // 加载设备数据（用于工序报价显示机时费率）
+    const loadMachines = async () => {
+      try {
+        const machinesData = await getMachines();
+        setMachines(machinesData);
+      } catch (error) {
+        console.error('获取设备数据失败:', error);
+      }
+    };
+    loadMachines();
   }, []);
 
   const getStatusTag = (status, approvalStatus) => {
@@ -871,6 +883,41 @@ const QuoteManagement = () => {
 
     // 量产工序报价使用表格显示，分CP和FT两类
     if (record.type === '量产工序报价' || record.type === '工序报价' || record.quote_type === 'process') {
+      // 解析工序配置，从configuration JSON中提取UPH和机时费率
+      const parseProcessItem = (item) => {
+        let uph = null;
+        let hourlyRate = null;
+
+        if (item.configuration) {
+          try {
+            const config = typeof item.configuration === 'string'
+              ? JSON.parse(item.configuration)
+              : item.configuration;
+
+            // 提取UPH
+            uph = config.uph || null;
+
+            // 计算机时费率（基于测试机）
+            if (config.test_machine && config.test_machine.id && machines.length > 0) {
+              const machine = machines.find(m => m.id === config.test_machine.id);
+              if (machine && machine.base_hourly_rate) {
+                const rate = machine.base_hourly_rate;
+                const currencySymbol = record.currency === 'USD' ? '$' : '¥';
+                hourlyRate = `${currencySymbol}${rate.toFixed(2)}/小时`;
+              }
+            }
+          } catch (e) {
+            console.warn('无法解析工序配置:', e);
+          }
+        }
+
+        return {
+          ...item,
+          uph: uph,
+          hourly_rate: hourlyRate || '-'
+        };
+      };
+
       const processDetailColumns = [
         {
           title: '工序名称',
@@ -894,7 +941,7 @@ const QuoteManagement = () => {
           title: '机时费率',
           dataIndex: 'hourly_rate',
           key: 'hourly_rate',
-          render: (rate) => rate || '¥0.00/小时'
+          render: (rate) => rate || '-'
         },
         {
           title: 'UPH',
@@ -910,20 +957,24 @@ const QuoteManagement = () => {
         }
       ];
 
-      // 分离CP和FT工序
-      const cpProcesses = record.quoteDetails.filter(item => {
-        const name = item.item_name || '';
-        const description = item.item_description || '';
-        const machineType = item.machine_type || '';
-        return name.includes('CP') || description.includes('CP') || machineType.includes('CP');
-      });
+      // 分离CP和FT工序，并解析配置
+      const cpProcesses = record.quoteDetails
+        .filter(item => {
+          const name = item.item_name || '';
+          const description = item.item_description || '';
+          const machineType = item.machine_type || '';
+          return name.includes('CP') || description.includes('CP') || machineType.includes('CP');
+        })
+        .map(parseProcessItem);
 
-      const ftProcesses = record.quoteDetails.filter(item => {
-        const name = item.item_name || '';
-        const description = item.item_description || '';
-        const machineType = item.machine_type || '';
-        return name.includes('FT') || description.includes('FT') || machineType.includes('FT');
-      });
+      const ftProcesses = record.quoteDetails
+        .filter(item => {
+          const name = item.item_name || '';
+          const description = item.item_description || '';
+          const machineType = item.machine_type || '';
+          return name.includes('FT') || description.includes('FT') || machineType.includes('FT');
+        })
+        .map(parseProcessItem);
 
       return (
         <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
