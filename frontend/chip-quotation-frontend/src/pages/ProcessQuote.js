@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Checkbox, Card, Button, Table, InputNumber } from 'antd';
+import { Checkbox, Card, Button, Table, InputNumber, message } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
@@ -422,7 +422,7 @@ const ProcessQuote = () => {
   const generateTempQuoteNumber = (quoteUnit) => {
     const unitMapping = {
       "昆山芯信安": "KS",
-      "苏州芯昱安": "SZ", 
+      "苏州芯昱安": "SZ",
       "上海芯睿安": "SH",
       "珠海芯创安": "ZH"
     };
@@ -432,25 +432,185 @@ const ProcessQuote = () => {
     return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
   };
 
+  // 生成工序报价项（应用板卡JSON序列化模式）
+  const generateProcessQuoteItems = () => {
+    const items = [];
+
+    // 辅助函数：获取板卡信息数组
+    const getCardsInfo = (cardQuantities) => {
+      if (!cardQuantities || Object.keys(cardQuantities).length === 0) return [];
+      return Object.entries(cardQuantities).map(([cardId, quantity]) => {
+        const card = cardTypes.find(c => c.id === parseInt(cardId));
+        return {
+          id: parseInt(cardId),
+          board_name: card?.board_name || '',
+          part_number: card?.part_number || '',
+          quantity: quantity || 1
+        };
+      });
+    };
+
+    // 1. 处理CP工序
+    if (formData.selectedTypes.includes('cp')) {
+      formData.cpProcesses.forEach((process, index) => {
+        if (process.testMachine || process.prober) {
+          // 计算工序单颗成本（保留4位小数）
+          const unitCost = parseFloat(formatUnitPrice(process.unitCost).replace(/[￥$,]/g, ''));
+
+          // 准备工序配置JSON
+          const configuration = {
+            process_type: process.name,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            prober: process.proberData ? {
+              id: process.proberData.id,
+              name: process.prober,
+              cards: getCardsInfo(process.proberCardQuantities)
+            } : null,
+            uph: process.uph,
+            unit_cost: unitCost
+          };
+
+          items.push({
+            item_name: `CP工序 - ${process.name}`,
+            item_description: `${process.name} (UPH: ${process.uph})`,
+            machine_type: 'CP工序',
+            supplier: process.testMachineData?.supplier
+              ? (typeof process.testMachineData.supplier === 'object'
+                  ? process.testMachineData.supplier.name
+                  : process.testMachineData.supplier)
+              : '',
+            machine_model: process.testMachine || '',
+            configuration: JSON.stringify(configuration),
+            quantity: 1,
+            unit: '颗',
+            unit_price: unitCost,
+            total_price: unitCost, // 工序报价单颗成本即总价
+            machine_id: process.testMachineData?.id || null,
+            category_type: 'process'
+          });
+        }
+      });
+    }
+
+    // 2. 处理FT工序
+    if (formData.selectedTypes.includes('ft')) {
+      formData.ftProcesses.forEach((process, index) => {
+        if (process.testMachine || process.handler) {
+          // 计算工序单颗成本（保留4位小数）
+          const unitCost = parseFloat(formatUnitPrice(process.unitCost).replace(/[￥$,]/g, ''));
+
+          // 准备工序配置JSON
+          const configuration = {
+            process_type: process.name,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            handler: process.handlerData ? {
+              id: process.handlerData.id,
+              name: process.handler,
+              cards: getCardsInfo(process.handlerCardQuantities)
+            } : null,
+            uph: process.uph,
+            unit_cost: unitCost
+          };
+
+          items.push({
+            item_name: `FT工序 - ${process.name}`,
+            item_description: `${process.name} (UPH: ${process.uph})`,
+            machine_type: 'FT工序',
+            supplier: process.testMachineData?.supplier
+              ? (typeof process.testMachineData.supplier === 'object'
+                  ? process.testMachineData.supplier.name
+                  : process.testMachineData.supplier)
+              : '',
+            machine_model: process.testMachine || '',
+            configuration: JSON.stringify(configuration),
+            quantity: 1,
+            unit: '颗',
+            unit_price: unitCost,
+            total_price: unitCost, // 工序报价单颗成本即总价
+            machine_id: process.testMachineData?.id || null,
+            category_type: 'process'
+          });
+        }
+      });
+    }
+
+    return items;
+  };
+
   // 提交处理
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    // 生成报价项（包含JSON序列化的工序配置）
+    const quoteItems = generateProcessQuoteItems();
+
+    // 准备数据库创建/更新数据
+    const quoteCreateData = {
+      quote_type: '工序报价',
+      customer_name: formData.customerInfo.companyName,
+      contact_person: formData.customerInfo.contactPerson,
+      contact_phone: formData.customerInfo.phone || '',
+      contact_email: formData.customerInfo.email || '',
+      project_name: formData.projectInfo.projectName,
+      chip_package: formData.projectInfo.chipPackage || '',
+      test_type: formData.projectInfo.testType || '',
+      quote_unit: formData.projectInfo.quoteUnit,
+      currency: formData.currency,
+      exchange_rate: formData.exchangeRate,
+      total_amount: calculateTotalUnitCost(),
+      remarks: formData.remarks || '',
+      items: quoteItems
+    };
+
+    // 完成报价，将数据传递到结果页面
     const tempQuoteNumber = generateTempQuoteNumber(formData.projectInfo.quoteUnit);
     const quoteData = {
       type: '工序报价',
       number: tempQuoteNumber,
-      date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      date: new Date().toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }),
       ...formData,
-      cardTypes, // 传递板卡类型数据
+      cardTypes,
       totalUnitCost: calculateTotalUnitCost(),
       totalProjectCost: calculateTotalProjectCost(),
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
+      quoteCreateData,
+      // 编辑模式相关字段
+      isEditMode: isEditMode || false,
+      editingQuoteId: isEditMode && editingQuote ? editingQuote.id : null,
+      quoteNumber: isEditMode && editingQuote ? editingQuote.quote_number : null
     };
-    
-    console.log('ProcessQuote handleSubmit - quoteData:', quoteData);
-    console.log('ProcessQuote handleSubmit - currency:', quoteData.currency);
-    console.log('ProcessQuote handleSubmit - exchangeRate:', quoteData.exchangeRate);
 
-    navigate('/quote-result', { state: quoteData });
+    if (isEditMode && editingQuote) {
+      // 编辑模式：调用API更新报价
+      try {
+        const updatedQuote = await QuoteApiService.updateQuote(editingQuote.id, quoteCreateData);
+        // 编辑成功后跳转到报价详情页面
+        navigate(`/quote-detail/${editingQuote.quote_number}`, {
+          state: {
+            message: '报价单更新成功',
+            updatedQuote: updatedQuote
+          }
+        });
+      } catch (error) {
+        console.error('更新工序报价失败:', error);
+      }
+    } else {
+      // 新建模式：通过location.state传递数据到结果页面
+      navigate('/quote-result', { state: { ...quoteData, fromQuotePage: true } });
+    }
   };
 
   const handleBack = () => {
