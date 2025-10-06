@@ -463,8 +463,13 @@ const ProcessQuote = () => {
     if (formData.selectedTypes.includes('cp')) {
       formData.cpProcesses.forEach((process, index) => {
         if (process.testMachine || process.prober) {
-          // 计算工序单颗成本（保留4位小数）
-          const unitCost = parseFloat(formatUnitPrice(process.unitCost).replace(/[￥$,]/g, ''));
+          // 计算工序单颗成本（人工成本 + 设备成本）
+          const laborCost = process.unitCost || 0; // 人工成本
+          const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
+          const proberCost = calculateProcessMachineCostForDevice(process, 'prober');
+          const totalUnitCost = laborCost + testMachineCost + proberCost;
+          // 保留4位小数
+          const unitCost = parseFloat(formatUnitPrice(totalUnitCost).replace(/[￥$,]/g, ''));
 
           // 准备工序配置JSON
           const configuration = {
@@ -509,8 +514,13 @@ const ProcessQuote = () => {
     if (formData.selectedTypes.includes('ft')) {
       formData.ftProcesses.forEach((process, index) => {
         if (process.testMachine || process.handler) {
-          // 计算工序单颗成本（保留4位小数）
-          const unitCost = parseFloat(formatUnitPrice(process.unitCost).replace(/[￥$,]/g, ''));
+          // 计算工序单颗成本（人工成本 + 设备成本）
+          const laborCost = process.unitCost || 0; // 人工成本
+          const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
+          const handlerCost = calculateProcessMachineCostForDevice(process, 'handler');
+          const totalUnitCost = laborCost + testMachineCost + handlerCost;
+          // 保留4位小数
+          const unitCost = parseFloat(formatUnitPrice(totalUnitCost).replace(/[￥$,]/g, ''));
 
           // 准备工序配置JSON
           const configuration = {
