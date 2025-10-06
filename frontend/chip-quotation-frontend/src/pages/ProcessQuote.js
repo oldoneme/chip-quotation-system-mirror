@@ -637,15 +637,22 @@ const ProcessQuote = () => {
   };
 
   const handleBack = () => {
-    console.log('ProcessQuote handleBack called');
-    console.log('Current formData before back:', formData);
-    
+    // 保存工序数组到 sessionStorage（用于"上一步"功能）
+    const processData = {
+      selectedTypes: formData.selectedTypes,
+      cpProcesses: formData.cpProcesses,
+      ftProcesses: formData.ftProcesses,
+      currency: formData.currency,
+      exchangeRate: formData.exchangeRate
+    };
+    sessionStorage.setItem('processQuoteProcessData', JSON.stringify(processData));
+
     // 保持当前状态并返回报价类型选择页面
-    navigate('/quote-type-selection', { 
-      state: { 
+    navigate('/quote-type-selection', {
+      state: {
         preserveState: true,
-        pageType: 'process-quote' 
-      } 
+        pageType: 'process-quote'
+      }
     });
   };
 
@@ -987,9 +994,9 @@ const ProcessQuote = () => {
 
   return (
     <div className="quote-container">
-      <PageTitle 
-        title="量产工序报价" 
-        subtitle="基于生产工序的单颗芯片成本分析 (v2.0)" 
+      <PageTitle
+        title={isEditMode && editingQuote ? `编辑量产工序报价 - ${editingQuote.quote_number}` : "量产工序报价"}
+        subtitle="基于生产工序的单颗芯片成本分析 (v2.0)"
       />
 
       {/* 客户信息 */}
@@ -1256,10 +1263,10 @@ const ProcessQuote = () => {
 
       <div className="button-group">
         <SecondaryButton onClick={handleBack}>
-          返回
+          {isEditMode ? "上一步" : "返回"}
         </SecondaryButton>
         <PrimaryButton onClick={handleSubmit}>
-          生成工序报价单
+          {isEditMode ? "保存修改" : "生成工序报价单"}
         </PrimaryButton>
       </div>
     </div>
