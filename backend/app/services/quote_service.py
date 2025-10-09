@@ -544,9 +544,9 @@ class QuoteService:
         if not user or (quote.created_by != user_id and user.role not in ['admin', 'super_admin']):
             raise PermissionError("无权限编辑此报价单")
         
-        # 检查状态：只有草稿状态可以编辑
-        if quote.status != 'draft':
-            raise ValueError("只有草稿状态的报价单可以编辑")
+        # 检查状态：只有草稿和被驳回状态可以编辑
+        if quote.status not in ['draft', 'rejected']:
+            raise ValueError("只有草稿或被驳回状态的报价单可以编辑")
         
         # 更新报价单字段
         payload = quote_data.model_dump(exclude_unset=True)
