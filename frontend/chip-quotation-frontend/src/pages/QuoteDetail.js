@@ -50,6 +50,12 @@ const QuoteDetail = () => {
     return searchParams.get('__snapshot_token');
   }, [location.search]);
 
+  // 检测是否是PDF快照生成模式
+  const isSnapshotMode = useMemo(() => {
+    const searchParams = new URLSearchParams(location.search);
+    return searchParams.get('userid') === 'snapshot-bot';
+  }, [location.search]);
+
   // 检测移动端
   useEffect(() => {
     const checkIsMobile = () => {
@@ -1688,18 +1694,20 @@ const QuoteDetail = () => {
         )}
       </Card>
 
-      {/* 统一审批面板 */}
-      <UnifiedApprovalPanel
-        quote={quote}
-        currentUser={currentUser}
-        onApprovalStatusChange={(result) => {
-          console.log('审批状态变更:', result);
-          // 刷新报价详情
-          fetchQuoteDetail();
-        }}
-        layout={isMobile ? 'mobile' : 'desktop'}
-        showHistory={true}
-      />
+      {/* 统一审批面板 - PDF快照模式下不显示 */}
+      {!isSnapshotMode && (
+        <UnifiedApprovalPanel
+          quote={quote}
+          currentUser={currentUser}
+          onApprovalStatusChange={(result) => {
+            console.log('审批状态变更:', result);
+            // 刷新报价详情
+            fetchQuoteDetail();
+          }}
+          layout={isMobile ? 'mobile' : 'desktop'}
+          showHistory={true}
+        />
+      )}
 
       {/* 提交审批模态框 */}
       <SubmitApprovalModal
