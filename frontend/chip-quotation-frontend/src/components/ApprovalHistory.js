@@ -28,23 +28,32 @@ import moment from 'moment';
 const { Panel } = Collapse;
 const { Text, Paragraph } = Typography;
 
-const ApprovalHistory = ({ 
-  quoteId, 
+const ApprovalHistory = ({
+  quoteId,
+  history: externalHistory,
   onRefresh,
-  approvalService 
+  approvalService,
+  layout = 'desktop'
 }) => {
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const [expanded, setExpanded] = useState(true);
 
+  // 如果传递了外部的history，使用外部history；否则通过API获取
   useEffect(() => {
-    if (quoteId) {
+    if (externalHistory) {
+      setHistory(externalHistory);
+    } else if (quoteId && approvalService) {
       fetchApprovalHistory();
     }
-  }, [quoteId]);
+  }, [quoteId, externalHistory, approvalService]);
 
   // 获取审批历史
   const fetchApprovalHistory = async () => {
+    if (!approvalService) {
+      console.warn('未提供approvalService，无法获取审批历史');
+      return;
+    }
     setLoading(true);
     try {
       const response = await approvalService.getApprovalHistory(quoteId);
@@ -262,36 +271,14 @@ const ApprovalHistory = ({
     );
   };
 
-  return (
-    <Card 
-      title="审批历史"
-      extra={
-        <Space>
-          <Tooltip title="刷新审批历史">
-            <Button 
-              type="text" 
-              icon={<EyeOutlined />}
-              onClick={fetchApprovalHistory}
-              loading={loading}
-            />
-          </Tooltip>
-          <Button
-            type="text"
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? '收起' : '展开'}
-          </Button>
-        </Space>
-      }
-      style={{ marginTop: 16 }}
-    >
-      {expanded && (
-        <Spin spinning={loading}>
-          {renderTimelineView()}
-        </Spin>
-      )}
-    </Card>
+  // 渲染内容区域
+  const renderContent = () => (
+    <Spin spinning={loading}>
+      {renderTimelineView()}
+    </Spin>
   );
+
+  return renderContent();
 };
 
 export default ApprovalHistory;

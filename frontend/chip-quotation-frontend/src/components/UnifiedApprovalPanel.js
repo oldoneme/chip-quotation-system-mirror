@@ -69,9 +69,6 @@ const UnifiedApprovalPanel = ({
   useEffect(() => {
     if (quote?.id) {
       fetchApprovalStatus();
-      if (showHistory) {
-        fetchApprovalHistory();
-      }
     }
   }, [quote?.id, showHistory]);
 
@@ -127,9 +124,10 @@ const UnifiedApprovalPanel = ({
       const newPermissions = UnifiedApprovalApiV3.checkApprovalPermissions(status, currentUser);
       setPermissions(newPermissions);
 
-      // 如果不是静默刷新，更新历史记录
-      if (!silent && showHistory) {
-        fetchApprovalHistory();
+      // 处理审批历史 - V2 API已包含历史记录在状态响应中
+      if (showHistory && status?.approval_history) {
+        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(status.approval_history);
+        setApprovalHistory(formattedHistory);
       }
     } catch (error) {
       console.error('获取审批状态失败:', error);
@@ -139,17 +137,10 @@ const UnifiedApprovalPanel = ({
     }
   };
 
-  // 获取审批历史
+  // 获取审批历史 - 已废弃，直接从fetchApprovalStatus中处理
   const fetchApprovalHistory = async () => {
-    try {
-      // V2 API已包含历史记录在状态响应中
-      if (approvalStatus?.approval_history) {
-        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(approvalStatus.approval_history);
-        setApprovalHistory(formattedHistory);
-      }
-    } catch (error) {
-      console.error('获取审批历史失败:', error);
-    }
+    // 此函数已整合到fetchApprovalStatus中，保留仅为兼容性
+    console.log('fetchApprovalHistory: 审批历史已从fetchApprovalStatus中获取');
   };
 
   // 处理审批操作
