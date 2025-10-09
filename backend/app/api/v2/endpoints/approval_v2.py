@@ -182,7 +182,7 @@ async def get_approval_status(
             if record.approver_id:
                 approver = db.query(User).filter(User.id == record.approver_id).first()
                 if approver:
-                    approver_name = approver.username or approver.name or f"用户{approver.id}"
+                    approver_name = approver.name or approver.userid or f"用户{approver.id}"
 
             history_data.append({
                 "id": record.id,
