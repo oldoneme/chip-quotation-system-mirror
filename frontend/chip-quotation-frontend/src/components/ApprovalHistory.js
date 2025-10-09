@@ -146,7 +146,7 @@ const ApprovalHistory = ({
             </Text>
           </div>
           <Text type="secondary" style={{ fontSize: '12px' }}>
-            {moment(record.created_at).format('YYYY-MM-DD HH:mm')}
+            {moment(record.created_at).format('YYYY-MM-DD HH:mm:ss')}
           </Text>
         </div>
 
