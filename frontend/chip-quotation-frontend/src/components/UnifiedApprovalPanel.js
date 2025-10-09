@@ -408,6 +408,7 @@ const UnifiedApprovalPanel = ({
           title="审批历史"
           style={{ marginTop: 16 }}
           size={layout === 'mobile' ? 'small' : 'default'}
+          data-history-loaded={approvalHistory && approvalHistory.length > 0}
         >
           <ApprovalHistory
             quoteId={quote.quoteId || quote.id}

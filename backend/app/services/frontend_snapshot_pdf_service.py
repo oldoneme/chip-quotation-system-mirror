@@ -142,6 +142,17 @@ def generate_quote_pdf(
                 approval_ready = page.evaluate(
                     "!!document.querySelector('[data-approval-loaded=\"true\"]')"
                 )
+                # 检查审批历史是否加载完成（如果有历史记录）
+                # 注意：草稿状态可能没有历史，所以我们只检查是否有历史Card
+                history_card_exists = page.evaluate(
+                    "!!document.querySelector('[data-history-loaded]')"
+                )
+                # 如果有历史Card，等待它加载完成或确认为空
+                if history_card_exists:
+                    history_ready = page.evaluate(
+                        "document.querySelector('[data-history-loaded]').getAttribute('data-history-loaded') !== 'false'"
+                    )
+                    return base_ready and approval_ready and history_ready
                 return base_ready and approval_ready
             except Exception:
                 return False
