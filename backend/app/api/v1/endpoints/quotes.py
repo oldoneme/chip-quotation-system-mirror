@@ -329,6 +329,7 @@ async def get_quote_detail_by_id(
             "customer_phone": quote.customer_phone,
             "customer_email": quote.customer_email,
             "customer_address": quote.customer_address,
+            "quote_unit": quote.quote_unit,  # 添加报价单位字段
             "currency": quote.currency,
             "subtotal": quote.subtotal,
             "discount": quote.discount,

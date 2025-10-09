@@ -157,7 +157,16 @@ const ProcessQuote = () => {
       if (convertedFormData) {
         setFormData(prev => ({
           ...prev,
-          ...convertedFormData
+          ...convertedFormData,
+          // 确保嵌套对象正确合并
+          customerInfo: {
+            ...prev.customerInfo,
+            ...convertedFormData.customerInfo
+          },
+          projectInfo: {
+            ...prev.projectInfo,
+            ...convertedFormData.projectInfo
+          }
         }));
         setEditMessageShown(true); // 标记已加载，防止重复
       }
@@ -580,21 +589,26 @@ const ProcessQuote = () => {
     const title = `${formData.projectInfo.projectName || '工序报价'} - ${formData.customerInfo.companyName}`;
 
     // 准备数据库创建/更新数据
+    // 构建项目描述信息（用于存储在description字段，使用中文标点符号以匹配解析逻辑）
+    const projectDescription = [
+      formData.projectInfo.projectName && `项目：${formData.projectInfo.projectName}`,
+      formData.projectInfo.chipPackage && `芯片封装：${formData.projectInfo.chipPackage}`,
+      `测试类型：工序报价`
+    ].filter(Boolean).join('，');
+
     const quoteCreateData = {
       title,
       quote_type: '工序报价',
       customer_name: formData.customerInfo.companyName,
-      contact_person: formData.customerInfo.contactPerson,
-      contact_phone: formData.customerInfo.phone || '',
-      contact_email: formData.customerInfo.email || '',
-      project_name: formData.projectInfo.projectName,
-      chip_package: formData.projectInfo.chipPackage || '',
-      test_type: formData.projectInfo.testType || '',
+      customer_contact: formData.customerInfo.contactPerson,
+      customer_phone: formData.customerInfo.phone || '',
+      customer_email: formData.customerInfo.email || '',
       quote_unit: formData.projectInfo.quoteUnit,
       currency: formData.currency,
       exchange_rate: formData.exchangeRate,
       total_amount: calculateTotalUnitCost(),
-      remarks: formData.remarks || '',
+      description: projectDescription || '',
+      notes: formData.remarks || '',
       items: quoteItems
     };
 
@@ -1088,6 +1102,9 @@ const ProcessQuote = () => {
               value={formData.projectInfo.quoteUnit}
               onChange={(e) => handleInputChange('projectInfo', 'quoteUnit', e.target.value)}
               required
+              disabled={isEditMode}
+              style={isEditMode ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
+              title={isEditMode ? '编辑模式下不允许修改报价单位' : ''}
             >
               <option value="昆山芯信安">昆山芯信安</option>
               <option value="苏州芯昱安">苏州芯昱安</option>

@@ -499,8 +499,9 @@ const useQuoteEditMode = () => {
    */
   const extractProjectNameFromDescription = (description) => {
     if (!description) return '';
-    const match = description.match(/项目：([^，,]+)/);
-    return match ? match[1] : '';
+    // 支持多种格式：项目：xxx / 项目名称：xxx / 项目: xxx / 项目名称: xxx
+    const match = description.match(/(?:项目名称|项目)[：:]\s*([^;；，,]+)/);
+    return match ? match[1].trim() : '';
   };
 
   /**
@@ -508,8 +509,9 @@ const useQuoteEditMode = () => {
    */
   const extractChipPackageFromDescription = (description) => {
     if (!description) return '';
-    const match = description.match(/芯片封装：([^，,]+)/);
-    return match ? match[1] : '';
+    // 支持中文冒号和英文冒号，支持多种分隔符
+    const match = description.match(/芯片封装[：:]\s*([^;；，,]+)/);
+    return match ? match[1].trim() : '';
   };
 
   /**
@@ -517,8 +519,9 @@ const useQuoteEditMode = () => {
    */
   const extractTestTypeFromDescription = (description) => {
     if (!description) return '';
-    const match = description.match(/测试类型：([^，,]+)/);
-    return match ? match[1] : '';
+    // 支持中文冒号和英文冒号，支持多种分隔符
+    const match = description.match(/测试类型[：:]\s*([^;；，,]+)/);
+    return match ? match[1].trim() : '';
   };
 
   /**
@@ -565,9 +568,22 @@ const useQuoteEditMode = () => {
   const extractTestTypeFromItems = (items) => {
     if (!items || items.length === 0) return 'mixed';
 
-    const firstItem = items[0];
-    if (firstItem.item_name?.includes('CP')) return 'CP';
-    if (firstItem.item_name?.includes('FT')) return 'FT';
+    // 检查所有items，判断是否同时包含CP和FT工序
+    let hasCP = false;
+    let hasFT = false;
+
+    for (const item of items) {
+      if (item.item_name?.includes('CP')) hasCP = true;
+      if (item.item_name?.includes('FT')) hasFT = true;
+    }
+
+    // 如果同时有CP和FT，返回mixed
+    if (hasCP && hasFT) return 'mixed';
+    // 只有CP工序
+    if (hasCP) return 'CP';
+    // 只有FT工序
+    if (hasFT) return 'FT';
+    // 都没有，默认mixed
     return 'mixed';
   };
 
