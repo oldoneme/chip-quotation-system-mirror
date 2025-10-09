@@ -1095,15 +1095,19 @@ const MassProductionQuote = () => {
       });
     }
     
-    columns.push({ 
-      title: 'Quantity', 
-      render: (_, record) => (
-        <InputNumber 
-          min={1} 
-          defaultValue={1} 
-          onChange={(value) => handleCardQuantityChange(type, machineType, record.id, value)}
-        />
-      ) 
+    columns.push({
+      title: 'Quantity',
+      render: (_, record) => {
+        const cardKey = `${type}-${machineType}-${record.id}`;
+        const currentQuantity = persistedCardQuantities[cardKey] || 1;
+        return (
+          <InputNumber
+            min={1}
+            value={currentQuantity}
+            onChange={(value) => handleCardQuantityChange(type, machineType, record.id, value)}
+          />
+        );
+      }
     });
     
     return columns;
