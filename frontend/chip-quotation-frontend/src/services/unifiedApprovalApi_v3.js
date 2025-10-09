@@ -435,14 +435,9 @@ class UnifiedApprovalApiV3 {
       return [];
     }
 
+    // 保持API返回的原始字段名（下划线命名），只添加额外的computed字段
     return historyList.map(item => ({
-      id: item.id,
-      action: item.action,
-      status: item.status,
-      operator: item.operator || '系统',
-      comments: item.comments,
-      createdAt: item.created_at,
-      channel: item.channel || 'internal',
+      ...item,  // 保留所有原始字段
       actionText: this.getActionText(item.action),
       statusConfig: this.getApprovalStatusConfig(item.status)
     }));
