@@ -131,12 +131,18 @@ def generate_quote_pdf(
 
         def is_ready() -> bool:
             try:
-                return (
+                # 检查基础页面元素是否加载
+                base_ready = (
                     page.evaluate("!!document.querySelector('#quote-ready')")
                     or page.evaluate(
                         "!!document.querySelector('.ant-descriptions, .ant-card, .ant-table')"
                     )
                 )
+                # 检查审批状态是否加载完成
+                approval_ready = page.evaluate(
+                    "!!document.querySelector('[data-approval-loaded=\"true\"]')"
+                )
+                return base_ready and approval_ready
             except Exception:
                 return False
 

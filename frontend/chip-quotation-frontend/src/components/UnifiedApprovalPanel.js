@@ -397,6 +397,7 @@ const UnifiedApprovalPanel = ({
         title="审批状态"
         extra={renderActionButtons()}
         loading={!approvalStatus}
+        data-approval-loaded={!!approvalStatus}
       >
         {renderApprovalMethodInfo()}
         {renderStatusDetails()}
