@@ -47,12 +47,7 @@ const InquiryQuote = () => {
     remarks: ''
   });
 
-  const [availableMachines, setAvailableMachines] = useState({
-    tester: [],
-    handler: [],
-    sorter: []
-  });
-  
+  const [availableMachines, setAvailableMachines] = useState({});
   const [loading, setLoading] = useState(false);
   const [backendMachines, setBackendMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
@@ -60,12 +55,7 @@ const InquiryQuote = () => {
   const [isMounted, setIsMounted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMessageShown, setEditMessageShown] = useState(false);
-
-  const machineCategories = [
-    { value: 'tester', label: '测试机' },
-    { value: 'handler', label: '分选机' },
-    { value: 'sorter', label: '编带机' }
-  ];
+  const [machineTypes, setMachineTypes] = useState([]);
 
   const currencies = [
     { value: 'CNY', label: '人民币 (CNY)', symbol: '￥' },
@@ -77,45 +67,46 @@ const InquiryQuote = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [machinesData, cardTypesData] = await Promise.all([
+        const [machinesData, cardTypesData, hierarchicalData] = await Promise.all([
           getMachines(),
-          getCardTypes()
+          getCardTypes(),
+          fetch('/api/v1/hierarchical/machine-types').then(res => res.json())
         ]);
-        
+
         setBackendMachines(machinesData);
         setCardTypes(cardTypesData);
-        
-        // 按机器类型分类
-        const categorizedMachines = {
-          tester: [],
-          handler: [],
-          sorter: []
-        };
-        
+
+        // 从hierarchical API提取设备类型
+        const types = hierarchicalData.map(type => ({
+          id: type.id,
+          name: type.name
+        }));
+        setMachineTypes(types);
+
+        // 按机器类型ID分类设备
+        const categorizedMachines = {};
+
         machinesData.forEach(machine => {
-          const machineTypeName = getMachineTypeName(machine);
-          
-          if (machineTypeName.includes('测试机') || machineTypeName.includes('ATE')) {
-            categorizedMachines.tester.push({
-              model: machine.name,
-              id: machine.id,
-              data: machine
-            });
-          } else if (machineTypeName.includes('分选机') || machineTypeName.includes('Handler')) {
-            categorizedMachines.handler.push({
-              model: machine.name,
-              id: machine.id,
-              data: machine
-            });
-          } else if (machineTypeName.includes('编带') || machineTypeName.includes('Sorter')) {
-            categorizedMachines.sorter.push({
+          // 获取机器的类型ID
+          let machineTypeId = null;
+          if (machine.supplier && machine.supplier.machine_type) {
+            machineTypeId = machine.supplier.machine_type.id;
+          } else if (machine.supplier && machine.supplier.machine_type_id) {
+            machineTypeId = machine.supplier.machine_type_id;
+          }
+
+          if (machineTypeId) {
+            if (!categorizedMachines[machineTypeId]) {
+              categorizedMachines[machineTypeId] = [];
+            }
+            categorizedMachines[machineTypeId].push({
               model: machine.name,
               id: machine.id,
               data: machine
             });
           }
         });
-        
+
         setAvailableMachines(categorizedMachines);
         setIsMounted(true);
         
@@ -179,20 +170,10 @@ const InquiryQuote = () => {
     }
   }, [isEditMode]);
 
-  // 获取机器类型名称的辅助函数
-  const getMachineTypeName = (machine) => {
-    try {
-      if (machine.supplier && machine.supplier.machine_type) {
-        return machine.supplier.machine_type.name || '';
-      }
-      if (machine.supplier_machine_type_name) {
-        return machine.supplier_machine_type_name;
-      }
-      return '';
-    } catch (e) {
-      console.error('获取机器类型名称时出错:', e);
-      return '';
-    }
+  // 根据类型ID获取类型名称
+  const getMachineTypeName = (typeId) => {
+    const type = machineTypes.find(t => t.id === typeId);
+    return type ? type.name : '';
   };
 
   const addMachine = () => {
@@ -506,7 +487,7 @@ const InquiryQuote = () => {
         description: `芯片封装: ${formData.projectInfo.chipPackage}, 测试类型: ${testTypeDisplay}`,
         notes: formData.remarks || '',
         items: formData.machines.map(machine => {
-          const categoryLabel = machineCategories.find(c => c.value === machine.category)?.label || machine.category;
+          const categoryLabel = getMachineTypeName(machine.category) || '未知类型';
 
           return {
             item_name: testTypeDisplay,
@@ -556,7 +537,7 @@ const InquiryQuote = () => {
             {
               category: '询价设备配置',
               items: formData.machines.map(machine => ({
-                name: `${machine.model || '未选择'} (${machineCategories.find(c => c.value === machine.category)?.label || machine.category})`,
+                name: `${machine.model || '未选择'} (${getMachineTypeName(machine.category) || '未知类型'})`,
                 specification: `机时费率: ${formatHourlyPrice(machine.hourlyRate)}/小时`,
                 quantity: 1,
                 unit: '台',
@@ -736,9 +717,9 @@ const InquiryQuote = () => {
                   required
                 >
                   <option value="">请选择设备类型</option>
-                  {machineCategories.map(category => (
-                    <option key={category.value} value={category.value}>
-                      {category.label}
+                  {machineTypes.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
                     </option>
                   ))}
                 </select>

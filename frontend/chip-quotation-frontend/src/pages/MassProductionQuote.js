@@ -49,6 +49,8 @@ const MassProductionQuote = () => {
   const [probers, setProbers] = useState([]);        // 探针台
   const [auxDevices, setAuxDevices] = useState({ handlers: [], probers: [], others: [] }); // 辅助设备
   const [cardTypes, setCardTypes] = useState([]);    // 板卡类型
+  const [auxMachinesByType, setAuxMachinesByType] = useState({});  // 辅助设备按类型分组
+  const [auxMachineTypes, setAuxMachineTypes] = useState([]);      // 辅助设备类型列表
   
   // 选择状态
   const [selectedMachine, setSelectedMachine] = useState(null);
@@ -265,12 +267,58 @@ const MassProductionQuote = () => {
       const auxDevicesResponse = await getAuxiliaryEquipment();
       console.log('获取到的辅助设备数据:', auxDevicesResponse);
 
+      // 获取层级化的机器类型数据
+      const hierarchicalData = await fetch('/api/v1/hierarchical/machine-types').then(res => res.json());
+      console.log('获取到的层级化机器类型数据:', hierarchicalData);
+
       setCardTypes(cardTypesResponse);
       setAuxDevices({
         handlers: auxDevicesResponse.filter(device => device.type === 'handler'),
         probers: auxDevicesResponse.filter(device => device.type === 'prober'),
         others: auxDevicesResponse.filter(device => !device.type || (device.type !== 'handler' && device.type !== 'prober'))
       });
+
+      // 筛选出辅助设备类型(排除测试机、分选机、探针台)
+      const auxTypes = hierarchicalData.filter(type =>
+        type.name !== '测试机' &&
+        type.name !== '分选机' &&
+        type.name !== '探针台'
+      ).map(type => ({
+        id: type.id,
+        name: type.name
+      }));
+
+      setAuxMachineTypes(auxTypes);
+
+      // 将所有机器按类型分组(只包含辅助设备类型)
+      const groupedAuxMachines = {};
+      hierarchicalData.forEach(type => {
+        if (type.name !== '测试机' && type.name !== '分选机' && type.name !== '探针台') {
+          type.suppliers.forEach(supplier => {
+            if (supplier.machines && supplier.machines.length > 0) {
+              supplier.machines.forEach(machine => {
+                if (!groupedAuxMachines[type.id]) {
+                  groupedAuxMachines[type.id] = [];
+                }
+                // 确保包含supplier信息
+                groupedAuxMachines[type.id].push({
+                  ...machine,
+                  supplier: {
+                    ...supplier,
+                    machine_type: {
+                      id: type.id,
+                      name: type.name
+                    }
+                  }
+                });
+              });
+            }
+          });
+        }
+      });
+
+      console.log('辅助设备按类型分组:', groupedAuxMachines);
+      setAuxMachinesByType(groupedAuxMachines);
       
       // 从机器中筛选出不同类型的机器
       console.log('开始筛选不同类型机器...');
@@ -1707,75 +1755,101 @@ const MassProductionQuote = () => {
       {/* 辅助设备选择 - 单页面显示 */}
       <div>
         <h2 className="section-title">辅助设备选择</h2>
-          
+
           <Card title="辅助设备选择" style={{ marginBottom: 20 }}>
-            <Tabs 
-              defaultActiveKey="others"
-              items={[
-                ...(auxDevices.handlers && auxDevices.handlers.length > 0 ? [{
-                  key: 'handlers',
-                  label: '分选机类',
-                  children: (
-                    <Table 
-                      dataSource={auxDevices.handlers}
-                      rowKey="id"
-                      rowSelection={{
-                        type: 'checkbox',
-                        onChange: handleAuxDeviceSelect,
-                        selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                      }}
-                      columns={auxDeviceColumns}
-                      pagination={false}
-                    />
-                  )
-                }] : []),
-                ...(auxDevices.probers && auxDevices.probers.length > 0 ? [{
-                  key: 'probers',
-                  label: '探针台类',
-                  children: (
-                    <Table
-                      dataSource={auxDevices.probers}
-                      rowKey="id"
-                      rowSelection={{
-                        type: 'checkbox',
-                        onChange: handleAuxDeviceSelect,
-                        selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                      }}
-                      columns={auxDeviceColumns}
-                      pagination={false}
-                    />
-                  )
-                }] : []),
-                {
-                  key: 'others',
-                  label: '其他设备',
-                  children: (
-                    auxDevices.others && auxDevices.others.length > 0 ? (
-                      <Table 
-                        dataSource={auxDevices.others}
-                        rowKey="id"
-                        rowSelection={{
-                          type: 'checkbox',
-                          onChange: handleAuxDeviceSelect,
-                          selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                        }}
-                        columns={auxDeviceColumns}
-                        pagination={false}
-                      />
-                    ) : (
-                      <EmptyState 
-                        description="暂无可用的其他设备"
-                        size="small"
-                      />
-                    )
-                  )
-                }
-              ]}
-            />
-            
-            {selectedAuxDevices.length > 0 && (
-              <p style={{ marginTop: 10 }}><strong>辅助设备机时费: {formatPrice(calculateAuxDeviceFee())}</strong></p>
-            )}
+            <div style={{ marginBottom: 15 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                <h4>已选择的辅助设备</h4>
+                <Button
+                  type="primary"
+                  onClick={() => setSelectedAuxDevices([...selectedAuxDevices, { tempId: Date.now(), typeId: null, device: null }])}
+                >
+                  添加辅助设备
+                </Button>
+              </div>
+
+              {selectedAuxDevices.length > 0 ? (
+                selectedAuxDevices.map((auxDevice, index) => (
+                  <div
+                    key={auxDevice.tempId || auxDevice.id || index}
+                    style={{
+                      marginBottom: '15px',
+                      padding: '15px',
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '6px',
+                      backgroundColor: '#fafafa'
+                    }}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'start' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>设备类型</label>
+                        <Select
+                          style={{ width: '100%' }}
+                          placeholder="选择设备类型"
+                          value={auxDevice.typeId || (auxDevice.supplier?.machine_type?.id)}
+                          onChange={(typeId) => {
+                            const newAuxDevices = [...selectedAuxDevices];
+                            newAuxDevices[index] = { ...auxDevice, typeId, device: null };
+                            setSelectedAuxDevices(newAuxDevices);
+                          }}
+                        >
+                          {auxMachineTypes.map(type => (
+                            <Option key={type.id} value={type.id}>
+                              {type.name}
+                            </Option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>设备型号</label>
+                        <Select
+                          style={{ width: '100%' }}
+                          placeholder="选择设备型号"
+                          value={auxDevice.id || auxDevice.device?.id}
+                          disabled={!auxDevice.typeId && !(auxDevice.supplier?.machine_type?.id)}
+                          onChange={(deviceId) => {
+                            const currentTypeId = auxDevice.typeId || auxDevice.supplier?.machine_type?.id;
+                            const device = auxMachinesByType[currentTypeId]?.find(d => d.id === deviceId);
+                            if (device) {
+                              const newAuxDevices = [...selectedAuxDevices];
+                              newAuxDevices[index] = device;
+                              setSelectedAuxDevices(newAuxDevices);
+                            }
+                          }}
+                        >
+                          {(auxMachinesByType[auxDevice.typeId || auxDevice.supplier?.machine_type?.id] || []).map(device => (
+                            <Option key={device.id} value={device.id}>
+                              {device.name} ({device.currency}, 汇率: {device.exchange_rate || 1.0}, 折扣率: {device.discount_rate || 1.0})
+                            </Option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      <div style={{ paddingTop: '30px' }}>
+                        <Button
+                          danger
+                          onClick={() => {
+                            const newAuxDevices = selectedAuxDevices.filter((_, i) => i !== index);
+                            setSelectedAuxDevices(newAuxDevices);
+                          }}
+                        >
+                          删除
+                        </Button>
+                      </div>
+                    </div>
+
+                    {auxDevice.id && (
+                      <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#fff', borderRadius: '4px' }}>
+                        <strong>设备费率: {formatPrice(calculateAuxDeviceHourlyRate(auxDevice))}/小时</strong>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <EmptyState description="暂无选择的辅助设备，点击上方按钮添加" />
+              )}
+            </div>
           </Card>
           
           <Card title="费用明细" style={{ marginBottom: 20 }}>
@@ -1792,13 +1866,12 @@ const MassProductionQuote = () => {
                   <span style={{ fontWeight: 'bold', fontSize: '16px', color: '#52c41a' }}>{formatPrice(cpHourlyFee)}</span>
                 </div>
               )}
-              {selectedAuxDevices.length > 0 && (
+              {selectedAuxDevices.length > 0 && selectedAuxDevices.some(d => d.id) && (
                 <div style={{ marginTop: 15 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, fontWeight: 'bold', borderBottom: '1px solid #d9d9d9', paddingBottom: '5px' }}>
-                    <span>辅助设备费用:</span>
-                    <span>{formatPrice(auxDeviceFee)}/小时</span>
+                  <div style={{ fontWeight: 'bold', marginBottom: 10 }}>
+                    <span>辅助设备:</span>
                   </div>
-                  {selectedAuxDevices.map((device, index) => (
+                  {selectedAuxDevices.filter(d => d.id).map((device, index) => (
                     <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, paddingLeft: 20, color: '#666' }}>
                       <span>• {device.name}</span>
                       <span>{formatPrice(calculateAuxDeviceHourlyRate(device))}/小时</span>

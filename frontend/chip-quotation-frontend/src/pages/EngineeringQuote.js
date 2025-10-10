@@ -71,6 +71,8 @@ const EngineeringQuote = () => {
   const [handlers, setHandlers] = useState([]);        // 分选机
   const [probers, setProbers] = useState([]);          // 探针台
   const [auxMachines, setAuxMachines] = useState([]);  // 辅助设备（机器类型不属于测试机、分选机、探针台的机器）
+  const [auxMachinesByType, setAuxMachinesByType] = useState({});  // 按类型分组的辅助设备
+  const [auxMachineTypes, setAuxMachineTypes] = useState([]);  // 辅助设备类型列表
   const [cardTypes, setCardTypes] = useState([]);
   const [auxDevices, setAuxDevices] = useState({ handlers: [], probers: [] });
   const [personnelOptions] = useState([
@@ -97,12 +99,14 @@ const EngineeringQuote = () => {
           machinesData,
           configurationsData,
           cardTypesData,
-          auxEquipmentData
+          auxEquipmentData,
+          hierarchicalData
         ] = await Promise.all([
           getMachines(),
           getConfigurations(),
           getCardTypes(),
-          getAuxiliaryEquipment()
+          getAuxiliaryEquipment(),
+          fetch('/api/v1/hierarchical/machine-types').then(res => res.json())
         ]);
 
         if (isMounted) {
@@ -160,17 +164,47 @@ const EngineeringQuote = () => {
           // 筛选辅助设备（机器类型不属于测试机、分选机、探针台的机器）
           const auxMachines = machinesData.filter(machine => {
             const machineTypeName = getMachineTypeName(machine);
-            const isAuxMachine = machineTypeName !== '测试机' && 
-                                machineTypeName !== '分选机' && 
+            const isAuxMachine = machineTypeName !== '测试机' &&
+                                machineTypeName !== '分选机' &&
                                 machineTypeName !== '探针台';
             return isAuxMachine;
           });
-          
+
+          // 从hierarchical数据中提取辅助设备类型（不包括测试机、分选机、探针台）
+          const auxTypes = hierarchicalData.filter(type =>
+            type.name !== '测试机' &&
+            type.name !== '分选机' &&
+            type.name !== '探针台'
+          ).map(type => ({
+            id: type.id,
+            name: type.name
+          }));
+
+          // 按类型ID分组辅助设备
+          const groupedAuxMachines = {};
+          auxMachines.forEach(machine => {
+            let machineTypeId = null;
+            if (machine.supplier && machine.supplier.machine_type) {
+              machineTypeId = machine.supplier.machine_type.id;
+            } else if (machine.supplier && machine.supplier.machine_type_id) {
+              machineTypeId = machine.supplier.machine_type_id;
+            }
+
+            if (machineTypeId) {
+              if (!groupedAuxMachines[machineTypeId]) {
+                groupedAuxMachines[machineTypeId] = [];
+              }
+              groupedAuxMachines[machineTypeId].push(machine);
+            }
+          });
+
           if (isMounted) {
             setMachines(testMachines);      // 测试机
             setHandlers(handlerMachines);   // 分选机
             setProbers(proberMachines);     // 探针台
-            setAuxMachines(auxMachines);    // 辅助设备
+            setAuxMachines(auxMachines);    // 辅助设备（保留原数组用于兼容）
+            setAuxMachinesByType(groupedAuxMachines);  // 按类型分组的辅助设备
+            setAuxMachineTypes(auxTypes);   // 辅助设备类型列表
           }
           
         }
@@ -1379,27 +1413,106 @@ const EngineeringQuote = () => {
       </Card>
       
       <Card title="辅助设备选择" style={{ marginBottom: 20 }}>
-        {auxMachines.length > 0 ? (
-          <>
-            <Table 
-              dataSource={auxMachines}
-              rowKey="id"
-              rowSelection={{
-                type: 'checkbox',
-                onChange: handleAuxDeviceSelect,
-                selectedRowKeys: selectedAuxDevices.map(device => device.id)
-              }}
-              columns={auxMachineColumns}
-              pagination={false}
+        <div style={{ marginBottom: 15 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+            <h4>已选择的辅助设备</h4>
+            <Button
+              type="primary"
+              onClick={() => setSelectedAuxDevices([...selectedAuxDevices, { tempId: Date.now(), typeId: null, device: null }])}
+            >
+              添加辅助设备
+            </Button>
+          </div>
+
+          {selectedAuxDevices.length > 0 ? (
+            selectedAuxDevices.map((auxDevice, index) => (
+              <div key={auxDevice.tempId || auxDevice.id || index} style={{
+                padding: '15px',
+                marginBottom: '10px',
+                border: '1px solid #d9d9d9',
+                borderRadius: '6px',
+                backgroundColor: '#fafafa'
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'start' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>设备类型</label>
+                    <Select
+                      style={{ width: '100%' }}
+                      placeholder="请选择设备类型"
+                      value={auxDevice.typeId || (auxDevice.supplier?.machine_type?.id)}
+                      onChange={(typeId) => {
+                        const newAuxDevices = [...selectedAuxDevices];
+                        newAuxDevices[index] = { ...auxDevice, typeId, device: null };
+                        setSelectedAuxDevices(newAuxDevices);
+                      }}
+                    >
+                      {auxMachineTypes.map(type => (
+                        <Option key={type.id} value={type.id}>{type.name}</Option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>设备型号</label>
+                    <Select
+                      style={{ width: '100%' }}
+                      placeholder="请先选择设备类型"
+                      value={auxDevice.id || auxDevice.device?.id}
+                      disabled={!auxDevice.typeId && !(auxDevice.supplier?.machine_type?.id)}
+                      onChange={(deviceId) => {
+                        const currentTypeId = auxDevice.typeId || auxDevice.supplier?.machine_type?.id;
+                        const device = auxMachinesByType[currentTypeId]?.find(d => d.id === deviceId);
+                        if (device) {
+                          const newAuxDevices = [...selectedAuxDevices];
+                          newAuxDevices[index] = device;
+                          setSelectedAuxDevices(newAuxDevices);
+                        }
+                      }}
+                      showSearch
+                      optionFilterProp="children"
+                      filterOption={(input, option) =>
+                        option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                      }
+                    >
+                      {(auxMachinesByType[auxDevice.typeId || auxDevice.supplier?.machine_type?.id] || []).map(device => (
+                        <Option key={device.id} value={device.id}>
+                          {device.name} ({device.currency}, 汇率: {device.exchange_rate || 1.0}, 折扣率: {device.discount_rate || 1.0})
+                        </Option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div style={{ paddingTop: '30px' }}>
+                    <Button
+                      danger
+                      onClick={() => {
+                        const newAuxDevices = selectedAuxDevices.filter((_, i) => i !== index);
+                        setSelectedAuxDevices(newAuxDevices);
+                      }}
+                    >
+                      删除
+                    </Button>
+                  </div>
+                </div>
+
+                {auxDevice.id && (
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#fff', borderRadius: '4px' }}>
+                    <strong>设备费率: {formatHourlyPrice(calculateAuxDeviceHourlyRate(auxDevice))}/小时</strong>
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <EmptyState
+              description="暂无选择的辅助设备，点击上方按钮添加"
+              imageStyle={{ height: 40 }}
             />
-            <p style={{ marginTop: 10 }}><strong>辅助设备机时费: {formatHourlyPrice(calculateAuxDeviceFee())}</strong></p>
-          </>
-        ) : (
-          <EmptyState 
-            description="暂无可选择的辅助设备"
-            imageStyle={{ height: 40 }}
-          />
-        )}
+          )}
+
+          {selectedAuxDevices.length > 0 && selectedAuxDevices.some(d => d.id) && (
+            <p style={{ marginTop: 10 }}><strong>辅助设备总费用: {formatHourlyPrice(calculateAuxDeviceFee())}/小时</strong></p>
+          )}
+        </div>
       </Card>
       
       <Card title="费用明细" style={{ marginBottom: 20 }}>
@@ -1428,22 +1541,18 @@ const EngineeringQuote = () => {
               <span>{formatMiddlePrice(calculatePersonnelFeeForQuote('技术员'))}</span>
             </div>
           )}
-          {selectedAuxDevices.length > 0 && (
+          {selectedAuxDevices.length > 0 && selectedAuxDevices.some(d => d.id) && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span>辅助设备:</span>
                 <span></span>
               </div>
-              {selectedAuxDevices.map((device, index) => (
+              {selectedAuxDevices.filter(d => d.id).map((device, index) => (
                 <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, paddingLeft: 20 }}>
                   <span>{device.name} ({device.supplier?.machine_type?.name || '辅助设备'})</span>
-                  <span>{formatMiddlePrice(quoteCurrency === 'USD' ? (device.hourly_rate || device.hourlyRate || 0) / quoteExchangeRate : (device.hourly_rate || device.hourlyRate || 0))}/小时</span>
+                  <span>{formatMiddlePrice(calculateAuxDeviceHourlyRate(device))}/小时</span>
                 </div>
               ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                <span>辅助设备费用小计:</span>
-                <span>{formatMiddlePrice(calculateAuxDeviceFee())}</span>
-              </div>
             </div>
           )}
           <Divider />

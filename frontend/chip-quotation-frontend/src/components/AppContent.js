@@ -17,8 +17,6 @@ import QuoteResult from '../pages/QuoteResult';
 import DatabaseManagement from '../pages/DatabaseManagement';
 import HierarchicalDatabaseManagement from '../pages/HierarchicalDatabaseManagement';
 import DatabaseQuoteManagement from '../pages/DatabaseQuoteManagement';
-import ComingSoon from '../pages/ComingSoon';
-import QuoteTemplate from '../pages/QuoteTemplate';
 import AnalyticsDashboard from '../pages/AnalyticsDashboard';
 import VersionControl from '../pages/VersionControl';
 import QuoteManagement from '../pages/QuoteManagement';
@@ -73,7 +71,6 @@ const AppContent = () => {
                 <Route path="/quotes" element={<QuoteManagement />} />
                 <Route path="/quote-detail/:id" element={<QuoteDetail />} />
                 <Route path="/approval/:token" element={<WeComApprovalPage />} />
-                <Route path="/quote-templates" element={<QuoteTemplate />} />
                 <Route path="/approval-workflow" element={<ApprovalWorkflow />} />
                 <Route path="/analytics" element={<AnalyticsDashboard />} />
                 <Route path="/version-control" element={<VersionControl />} />
