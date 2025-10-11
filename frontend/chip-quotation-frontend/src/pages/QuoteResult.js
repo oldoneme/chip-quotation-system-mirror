@@ -1672,7 +1672,7 @@ const QuoteResult = () => {
                 fontWeight: 'bold'
               }}
             >
-              {confirmLoading ? '正在创建报价单...' : '确认报价'}
+              {confirmLoading ? '正在创建报价单...' : '确认生成报价单'}
             </Button>
           )}
           {/* 已确认状态显示 */}

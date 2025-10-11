@@ -363,18 +363,16 @@ const ToolingQuote = () => {
           }
         });
       } else {
-        // 新建模式：创建新报价
-        response = await QuoteApiService.createQuote(apiData);
-
-        // 准备结果页面数据（保持原有逻辑）
+        // 新建模式：跳转到结果页面预览，不直接创建数据库记录
         const quoteData = {
           type: '工装夹具报价',
-          number: response.quote_number, // 使用后端返回的真实报价号
+          number: generateTempQuoteNumber(formData.projectInfo.quoteUnit), // 使用临时报价号
           date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
           ...formData,
           totalCost,
           generatedAt: new Date().toISOString(),
-          quoteCreateData: response // 添加后端返回的数据
+          // 添加API数据结构，供结果页面确认时使用
+          quoteCreateData: apiData
         };
 
         navigate('/quote-result', { state: quoteData });
@@ -792,7 +790,7 @@ const ToolingQuote = () => {
           返回
         </SecondaryButton>
         <PrimaryButton onClick={handleSubmit} disabled={isSubmitting}>
-          {isSubmitting ? '提交中...' : (isEditMode ? '更新报价单' : '生成报价单')}
+          {isSubmitting ? '提交中...' : (isEditMode ? '更新报价单' : '完成报价')}
         </PrimaryButton>
       </div>
     </div>

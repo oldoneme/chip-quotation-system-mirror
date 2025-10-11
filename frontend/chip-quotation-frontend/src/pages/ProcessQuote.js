@@ -1285,7 +1285,7 @@ const ProcessQuote = () => {
           {isEditMode ? "上一步" : "返回"}
         </SecondaryButton>
         <PrimaryButton onClick={handleSubmit}>
-          {isEditMode ? "保存修改" : "生成工序报价单"}
+          {isEditMode ? "保存修改" : "完成报价"}
         </PrimaryButton>
       </div>
     </div>

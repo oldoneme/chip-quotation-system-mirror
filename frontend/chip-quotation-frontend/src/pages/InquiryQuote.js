@@ -916,7 +916,7 @@ const InquiryQuote = () => {
           返回
         </SecondaryButton>
         <PrimaryButton onClick={handleSubmit} disabled={isSubmitting}>
-          {isSubmitting ? '提交中...' : (isEditMode ? '更新询价单' : '生成询价单')}
+          {isSubmitting ? '提交中...' : (isEditMode ? '更新询价单' : '完成报价')}
         </PrimaryButton>
       </div>
     </div>

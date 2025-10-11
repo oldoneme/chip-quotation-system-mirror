@@ -1490,7 +1490,6 @@ const MassProductionQuote = () => {
             </div>
           </Card>
         </div>
-      )}
 
       {/* 机器选择 - 单页面显示 */}
       <div>
@@ -1903,7 +1902,7 @@ const MassProductionQuote = () => {
             onClick={handleConfirmQuote}
             size="large"
           >
-            {isEditMode ? '保存编辑' : '确认报价'}
+            {isEditMode ? '保存编辑' : '完成报价'}
           </Button>
         </div>
       </Card>
