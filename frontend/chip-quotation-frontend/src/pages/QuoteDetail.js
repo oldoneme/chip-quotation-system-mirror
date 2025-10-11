@@ -19,6 +19,8 @@ import ApprovalHistory from '../components/ApprovalHistory';
 import SubmitApprovalModal from '../components/SubmitApprovalModal';
 import { useAuth } from '../contexts/AuthContext';
 import { getColumnsForPDF } from '../utils/columnConfigurations';
+import { getMachines } from '../services/machines';
+import { getCardTypes } from '../services/cardTypes';
 import '../styles/QuoteDetail.css';
 
 const { confirm } = Modal;
@@ -34,6 +36,8 @@ const QuoteDetail = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [approvers, setApprovers] = useState([]);
   const [submitApprovalModalVisible, setSubmitApprovalModalVisible] = useState(false);
+  const [machines, setMachines] = useState([]);
+  const [cardTypes, setCardTypes] = useState([]);
 
   // 解析URL上的JWT参数
   const urlJwt = useMemo(() => {
@@ -46,16 +50,39 @@ const QuoteDetail = () => {
     return searchParams.get('__snapshot_token');
   }, [location.search]);
 
+  // 检测是否是PDF快照生成模式
+  const isSnapshotMode = useMemo(() => {
+    const searchParams = new URLSearchParams(location.search);
+    return searchParams.get('userid') === 'snapshot-bot';
+  }, [location.search]);
+
   // 检测移动端
   useEffect(() => {
     const checkIsMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
-    
+
     checkIsMobile();
     window.addEventListener('resize', checkIsMobile);
-    
+
     return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  // 加载设备和板卡数据（用于工序报价显示机时费率）
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [machinesData, cardTypesData] = await Promise.all([
+          getMachines(),
+          getCardTypes()
+        ]);
+        setMachines(machinesData);
+        setCardTypes(cardTypesData);
+      } catch (error) {
+        console.error('获取设备/板卡数据失败:', error);
+      }
+    };
+    loadData();
   }, []);
 
   useEffect(() => {
@@ -110,7 +137,7 @@ const QuoteDetail = () => {
         setLoading(false);
       }
     })();
-  }, [id, urlJwt, location.pathname, location.search]);
+  }, [id, urlJwt]); // 移除 location.pathname 和 location.search 以避免过度刷新
 
   const fetchQuoteDetail = async () => {
     setLoading(true);
@@ -251,27 +278,44 @@ const QuoteDetail = () => {
     return <Tag color={typeColors[type]} style={{ fontSize: '14px', padding: '4px 12px' }}>{type}</Tag>;
   };
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     // 根据报价类型跳转到对应的编辑页面
     const quoteTypeToPath = {
       '询价报价': '/inquiry-quote',
-      '工装夹具报价': '/tooling-quote', 
+      '工装夹具报价': '/tooling-quote',
       '工程机时报价': '/engineering-quote',
       '量产机时报价': '/mass-production-quote',
       '量产工序报价': '/process-quote',
       '综合报价': '/comprehensive-quote'
     };
-    
+
     const editPath = quoteTypeToPath[quote.type];
     if (editPath) {
-      // 传递报价单数据到编辑页面
-      navigate(editPath, { 
-        state: { 
-          editingQuote: quote,
-          isEditing: true,
-          quoteId: quote.id 
-        } 
-      });
+      try {
+        console.log('📝 从详情页编辑报价单:', quote.quoteId || quote.id);
+
+        // 获取完整的报价单详情数据（包含items字段）
+        // 使用原始的API数据，确保包含所有字段
+        let fullQuoteData;
+        if (quote.quoteId) {
+          fullQuoteData = await QuoteApiService.getQuoteDetailById(quote.quoteId);
+        } else {
+          fullQuoteData = await QuoteApiService.getQuoteDetailById(quote.id);
+        }
+        console.log('📝 详情页获取完整报价数据:', fullQuoteData);
+
+        // 传递完整的报价单数据到编辑页面
+        navigate(editPath, {
+          state: {
+            editingQuote: fullQuoteData, // 使用完整的API数据
+            isEditing: true,
+            quoteId: quote.quoteId || quote.id
+          }
+        });
+      } catch (error) {
+        console.error('从详情页获取报价单详情失败:', error);
+        message.error('获取报价单详情失败，请稍后重试');
+      }
     } else {
       message.error('未知的报价类型，无法编辑');
     }
@@ -890,9 +934,49 @@ const QuoteDetail = () => {
             
             {/* 1. 机器设备 */}
             {(() => {
-              const machineItems = quote.items.filter(item => 
+              // 聚合同类设备的板卡为单一设备项
+              const machineItemsRaw = quote.items.filter(item =>
                 item.machineType && item.machineType !== '人员'
               );
+
+              // 按设备类型聚合（不按型号，直接按类型）
+              const aggregatedMachines = {};
+              machineItemsRaw.forEach(item => {
+                const machineKey = item.machineType;
+                if (!aggregatedMachines[machineKey]) {
+                  aggregatedMachines[machineKey] = {
+                    machineType: item.machineType,
+                    machineModel: item.machineModel || item.itemName,
+                    itemName: item.machineModel || item.itemName,
+                    totalPrice: 0,
+                    itemCount: 0,
+                    items: []
+                  };
+                }
+                aggregatedMachines[machineKey].totalPrice += (item.unitPrice || 0);
+                aggregatedMachines[machineKey].itemCount += 1;
+                aggregatedMachines[machineKey].items.push(item);
+
+                // 如果是同类型的第一个设备，使用其型号；如果有多个不同型号，显示类型名
+                if (aggregatedMachines[machineKey].itemCount === 1) {
+                  aggregatedMachines[machineKey].machineModel = item.machineModel || item.itemName;
+                } else {
+                  // 有多个项目时，检查是否同一型号
+                  const currentModel = item.machineModel || item.itemName;
+                  if (aggregatedMachines[machineKey].machineModel !== currentModel) {
+                    aggregatedMachines[machineKey].machineModel = machineKey; // 使用设备类型名
+                  }
+                }
+              });
+
+              const machineItems = Object.values(aggregatedMachines).map(machine => ({
+                ...machine,
+                unitPrice: machine.totalPrice,
+                // 显示名称：如果只有一个型号就显示型号，否则显示类型
+                displayName: machine.itemCount > 1 && machine.machineModel === machine.machineType
+                  ? `${machine.machineType}(${machine.itemCount}个板卡)`
+                  : machine.machineModel
+              }));
               
               return machineItems && machineItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
@@ -909,7 +993,7 @@ const QuoteDetail = () => {
                           padding: '12px'
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.machineModel || item.itemName}</span>
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.displayName || item.machineModel || item.itemName}</span>
                             <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
                               ¥{(item.unitPrice || 0).toFixed(2)}/小时
                             </span>
@@ -947,7 +1031,7 @@ const QuoteDetail = () => {
                           fontSize: '12px'
                         }}>
                           <span>{item.machineType}</span>
-                          <span>{item.machineModel || item.itemName}</span>
+                          <span>{item.displayName || item.machineModel || item.itemName}</span>
                           <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
                             ¥{(item.unitPrice || 0).toFixed(2)}/小时
                           </span>
@@ -1302,20 +1386,118 @@ const QuoteDetail = () => {
           </div>
         ) : (quote.type === '量产工序报价' || quote.type === '工序报价' || quote.quote_type === 'process') ? (
           (() => {
-            // 分离CP和FT工序
-            const cpProcesses = quote.items.filter(item => {
-              const name = item.itemName || '';
-              const description = item.itemDescription || '';
-              const machineType = item.machineType || '';
-              return name.includes('CP') || description.includes('CP') || machineType.includes('CP');
-            });
+            // 解析工序配置，从configuration JSON中提取UPH和机时费率
+            const parseProcessItem = (item) => {
+              let uph = null;
+              let hourlyRate = null;
 
-            const ftProcesses = quote.items.filter(item => {
-              const name = item.itemName || '';
-              const description = item.itemDescription || '';
-              const machineType = item.machineType || '';
-              return name.includes('FT') || description.includes('FT') || machineType.includes('FT');
-            });
+              if (item.configuration) {
+                try {
+                  const config = typeof item.configuration === 'string'
+                    ? JSON.parse(item.configuration)
+                    : item.configuration;
+
+                  // 提取UPH
+                  uph = config.uph || null;
+
+                  // 辅助函数：计算设备的板卡费用
+                  const calculateDeviceCost = (deviceConfig, deviceType) => {
+                    if (!deviceConfig || !deviceConfig.cards || deviceConfig.cards.length === 0) {
+                      return 0;
+                    }
+
+                    const machine = machines.find(m => m.id === deviceConfig.id);
+                    if (!machine) {
+                      return 0;
+                    }
+
+                    let deviceCost = 0;
+                    deviceConfig.cards.forEach(cardInfo => {
+                      const card = cardTypes.find(c => c.id === cardInfo.id);
+                      if (card && cardInfo.quantity > 0) {
+                        // 板卡单价 / 10000
+                        let adjustedPrice = (card.unit_price || 0) / 10000;
+
+                        // 汇率转换
+                        if (quote.currency === 'USD') {
+                          if (machine.currency === 'CNY' || machine.currency === 'RMB') {
+                            adjustedPrice = adjustedPrice / (quote.exchange_rate || 7.2);
+                          }
+                        } else {
+                          if (!machine.exchange_rate) {
+                            console.error(`设备 ${machine.name} 缺少 exchange_rate`);
+                            return;
+                          }
+                          adjustedPrice = adjustedPrice * machine.exchange_rate;
+                        }
+
+                        // 应用折扣率和数量
+                        if (!machine.discount_rate) {
+                          console.error(`设备 ${machine.name} 缺少 discount_rate`);
+                          return;
+                        }
+                        const hourlyCost = adjustedPrice * machine.discount_rate * (cardInfo.quantity || 1);
+                        deviceCost += hourlyCost;
+                      }
+                    });
+
+                    return deviceCost;
+                  };
+
+                  // 计算机时费率（基于所选板卡）
+                  if (machines.length > 0 && cardTypes.length > 0) {
+                    let totalHourlyCost = 0;
+
+                    // 计算测试机费用
+                    if (config.test_machine) {
+                      totalHourlyCost += calculateDeviceCost(config.test_machine, 'test_machine');
+                    }
+
+                    // 计算探针台费用（CP工序）
+                    if (config.prober) {
+                      totalHourlyCost += calculateDeviceCost(config.prober, 'prober');
+                    }
+
+                    // 计算分选机费用（FT工序）
+                    if (config.handler) {
+                      totalHourlyCost += calculateDeviceCost(config.handler, 'handler');
+                    }
+
+                    if (totalHourlyCost > 0) {
+                      const currencySymbol = quote.currency === 'USD' ? '$' : '¥';
+                      hourlyRate = `${currencySymbol}${totalHourlyCost.toFixed(2)}/小时`;
+                    }
+                  }
+                } catch (e) {
+                  console.warn('无法解析工序配置:', e);
+                }
+              }
+
+              return {
+                ...item,
+                uph: uph,
+                hourlyRate: hourlyRate || '-'
+              };
+            };
+
+            // 分离CP和FT工序，并解析配置
+            const cpProcesses = quote.items
+              .filter(item => {
+                const name = item.itemName || '';
+                const description = item.itemDescription || '';
+                const machineType = item.machineType || '';
+                return name.includes('CP') || description.includes('CP') || machineType.includes('CP');
+              })
+              .map(parseProcessItem);
+
+            const ftProcesses = quote.items
+              .filter(item => {
+                const name = item.itemName || '';
+                const description = item.itemDescription || '';
+                const machineType = item.machineType || '';
+                return name.includes('FT') || description.includes('FT') || machineType.includes('FT');
+              })
+              .map(parseProcessItem);
 
             // 定义工序表格列（仅桌面端使用）
             const processColumns = [
@@ -1512,18 +1694,20 @@ const QuoteDetail = () => {
         )}
       </Card>
 
-      {/* 统一审批面板 */}
-      <UnifiedApprovalPanel
-        quote={quote}
-        currentUser={currentUser}
-        onApprovalStatusChange={(result) => {
-          console.log('审批状态变更:', result);
-          // 刷新报价详情
-          fetchQuoteDetail();
-        }}
-        layout={isMobile ? 'mobile' : 'desktop'}
-        showHistory={true}
-      />
+      {/* 统一审批面板 - PDF快照模式下不显示 */}
+      {!isSnapshotMode && (
+        <UnifiedApprovalPanel
+          quote={quote}
+          currentUser={currentUser}
+          onApprovalStatusChange={(result) => {
+            console.log('审批状态变更:', result);
+            // 刷新报价详情
+            fetchQuoteDetail();
+          }}
+          layout={isMobile ? 'mobile' : 'desktop'}
+          showHistory={true}
+        />
+      )}
 
       {/* 提交审批模态框 */}
       <SubmitApprovalModal

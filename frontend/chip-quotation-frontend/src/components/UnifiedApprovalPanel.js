@@ -69,26 +69,47 @@ const UnifiedApprovalPanel = ({
   useEffect(() => {
     if (quote?.id) {
       fetchApprovalStatus();
-      if (showHistory) {
-        fetchApprovalHistory();
-      }
     }
   }, [quote?.id, showHistory]);
 
-  // 实时更新 useEffect
+  // 实时更新 useEffect - 优化性能
   useEffect(() => {
     let intervalId;
 
-    if (enableRealTimeUpdate && quote?.id && !loading) {
+    // 只有在启用实时更新、有报价ID、非加载状态，且页面可见时才启动轮询
+    if (enableRealTimeUpdate && quote?.id && !loading && !document.hidden) {
+      // 增加轮询间隔到60秒以减少服务器负载
       intervalId = setInterval(() => {
-        fetchApprovalStatus(true); // 静默刷新
-      }, updateInterval);
+        // 检查页面是否仍然可见
+        if (!document.hidden) {
+          fetchApprovalStatus(true); // 静默刷新
+        }
+      }, Math.max(updateInterval, 60000)); // 最小60秒间隔
     }
+
+    // 监听页面可见性变化
+    const handleVisibilityChange = () => {
+      if (document.hidden && intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      } else if (!document.hidden && enableRealTimeUpdate && quote?.id && !loading) {
+        if (!intervalId) {
+          intervalId = setInterval(() => {
+            if (!document.hidden) {
+              fetchApprovalStatus(true);
+            }
+          }, Math.max(updateInterval, 60000));
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [enableRealTimeUpdate, quote?.id, loading, updateInterval]);
 
@@ -103,9 +124,10 @@ const UnifiedApprovalPanel = ({
       const newPermissions = UnifiedApprovalApiV3.checkApprovalPermissions(status, currentUser);
       setPermissions(newPermissions);
 
-      // 如果不是静默刷新，更新历史记录
-      if (!silent && showHistory) {
-        fetchApprovalHistory();
+      // 处理审批历史 - V2 API已包含历史记录在状态响应中
+      if (showHistory && status?.approval_history) {
+        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(status.approval_history);
+        setApprovalHistory(formattedHistory);
       }
     } catch (error) {
       console.error('获取审批状态失败:', error);
@@ -115,17 +137,10 @@ const UnifiedApprovalPanel = ({
     }
   };
 
-  // 获取审批历史
+  // 获取审批历史 - 已废弃，直接从fetchApprovalStatus中处理
   const fetchApprovalHistory = async () => {
-    try {
-      // V2 API已包含历史记录在状态响应中
-      if (approvalStatus?.approval_history) {
-        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(approvalStatus.approval_history);
-        setApprovalHistory(formattedHistory);
-      }
-    } catch (error) {
-      console.error('获取审批历史失败:', error);
-    }
+    // 此函数已整合到fetchApprovalStatus中，保留仅为兼容性
+    console.log('fetchApprovalHistory: 审批历史已从fetchApprovalStatus中获取');
   };
 
   // 处理审批操作

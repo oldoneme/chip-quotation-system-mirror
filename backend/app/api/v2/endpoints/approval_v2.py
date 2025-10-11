@@ -177,14 +177,23 @@ async def get_approval_status(
         # 构建审批历史数据
         history_data = []
         for record in approval_history:
+            # 获取审批人信息
+            approver_name = "系统"
+            if record.approver_id:
+                approver = db.query(User).filter(User.id == record.approver_id).first()
+                if approver:
+                    approver_name = approver.name or approver.userid or f"用户{approver.id}"
+
             history_data.append({
                 "id": record.id,
                 "action": record.action,
                 "status": record.status,
-                "operator": record.operator_name if hasattr(record, 'operator_name') else "系统",
+                "approver_name": approver_name,
+                "operator": approver_name,
                 "comments": record.comments,
-                "created_at": record.created_at,
-                "channel": record.channel if hasattr(record, 'channel') else "internal"
+                "created_at": record.created_at.isoformat() if record.created_at else None,
+                "processed_at": record.processed_at.isoformat() if record.processed_at else None,
+                "channel": "wecom" if record.wecom_sp_no else "internal"
             })
 
         # 初始化审批引擎检查权限

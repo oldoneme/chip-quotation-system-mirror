@@ -6,17 +6,23 @@ import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
 import { ceilByCurrency, formatQuotePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
+import useQuoteEditMode from '../hooks/useQuoteEditMode';
+import { QuoteApiService } from '../services/quoteApi';
 import '../App.css';
 
 const ProcessQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  
+
+  // 编辑模式相关状态
+  const { isEditMode, editingQuote, convertQuoteToFormData } = useQuoteEditMode();
+
   const [machines, setMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
+  const [editMessageShown, setEditMessageShown] = useState(false);
 
   const [formData, setFormData] = useState({
     customerInfo: {
@@ -109,7 +115,6 @@ const ProcessQuote = () => {
           if (savedState) {
             try {
               const parsedState = JSON.parse(savedState);
-              console.log('从 sessionStorage 恢复工序报价状态:', parsedState);
               setFormData(parsedState);
             } catch (error) {
               console.error('恢复状态失败:', error);
@@ -118,7 +123,6 @@ const ProcessQuote = () => {
         } else {
           // 正常进入页面时清空之前的状态
           sessionStorage.removeItem('processQuoteState');
-          console.log('开始全新工序报价流程');
         }
         
       } catch (error) {
@@ -138,6 +142,37 @@ const ProcessQuote = () => {
       sessionStorage.setItem('processQuoteState', JSON.stringify(formData));
     }
   }, [formData, isMounted, loading]);
+
+  // 编辑模式：预填充报价数据
+  useEffect(() => {
+    if (isEditMode && editingQuote && machines.length > 0 && cardTypes.length > 0 && !editMessageShown) {
+      // 使用转换函数将报价数据转换为表单数据
+      const convertedFormData = convertQuoteToFormData(
+        editingQuote,
+        'process',
+        cardTypes,
+        machines
+      );
+
+      if (convertedFormData) {
+        setFormData(prev => ({
+          ...prev,
+          ...convertedFormData,
+          // 确保嵌套对象正确合并
+          customerInfo: {
+            ...prev.customerInfo,
+            ...convertedFormData.customerInfo
+          },
+          projectInfo: {
+            ...prev.projectInfo,
+            ...convertedFormData.projectInfo
+          }
+        }));
+        setEditMessageShown(true); // 标记已加载，防止重复
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, editingQuote, machines, cardTypes, editMessageShown]);
 
   // 处理测试类型变化
   const handleProductionTypeChange = (checkedValues) => {
@@ -192,7 +227,6 @@ const ProcessQuote = () => {
 
   // 更新工序 - 支持双设备结构
   const updateProcess = (type, processId, field, value) => {
-    console.log('updateProcess called:', { type, processId, field, value });
     const processKey = type === 'cp' ? 'cpProcesses' : 'ftProcesses';
     setFormData(prev => ({
       ...prev,
@@ -313,86 +347,71 @@ const ProcessQuote = () => {
     
     const machineData = process[machineDataKey];
     const cardQuantities = process[cardQuantitiesKey];
-    
+
     if (!machineData || !cardQuantities) {
-      console.log(`calculateProcessMachineCostForDevice: No ${deviceName} data or card quantities`, { 
-        machineData: machineData, 
-        cardQuantities: cardQuantities 
-      });
       return 0;
     }
-    
-    console.log(`calculateProcessMachineCostForDevice for ${deviceName} in process:`, process.name, 'Machine:', process[deviceName], 'UPH:', process.uph);
-    console.log(`${deviceName} Card quantities:`, cardQuantities);
-    
+
     let totalCost = 0;
     Object.entries(cardQuantities).forEach(([cardId, quantity]) => {
       const card = cardTypes.find(c => c.id === parseInt(cardId));
       if (card && quantity > 0) {
-        console.log(`Processing ${deviceName} card ${card.part_number}: price=${card.unit_price}, quantity=${quantity}`);
-        
         // 计算调整后的板卡价格，参考工程机时的计算逻辑
         let adjustedPrice = (card.unit_price || 0) / 10000;
-        console.log(`Adjusted price after /10000: ${adjustedPrice}`);
-        
+
         // 根据报价币种和机器币种进行转换（参考EngineeringQuote.js逻辑）
         if (formData.currency === 'USD') {
           if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
             // RMB机器转USD：除以报价汇率
             adjustedPrice = adjustedPrice / formData.exchangeRate;
-            console.log(`Converted CNY to USD: ${adjustedPrice} (rate: ${formData.exchangeRate})`);
           }
           // USD机器：不做汇率转换，直接使用unit_price
         } else {
           // 报价币种是CNY，保持原逻辑
-          adjustedPrice = adjustedPrice * (machineData.exchange_rate || 1.0);
-          console.log(`Applied exchange rate: ${adjustedPrice} (rate: ${machineData.exchange_rate})`);
+          if (!machineData.exchange_rate) {
+            console.error('机器缺少exchange_rate:', machineData);
+            return 0;
+          }
+          adjustedPrice = adjustedPrice * machineData.exchange_rate;
         }
-        
+
         // 应用折扣率和数量，然后除以UPH得到单颗成本
-        const hourlyCost = adjustedPrice * (machineData.discount_rate || 1.0) * quantity;
-        console.log(`${deviceName} Hourly cost: ${adjustedPrice} * ${machineData.discount_rate} * ${quantity} = ${hourlyCost}`);
-        
+        if (!machineData.discount_rate) {
+          console.error('机器缺少discount_rate:', machineData);
+          return 0;
+        }
+        const hourlyCost = adjustedPrice * machineData.discount_rate * quantity;
+
         if (process.uph > 0) {
           const unitCost = hourlyCost / process.uph;
-          console.log(`${deviceName} Unit cost: ${hourlyCost} / ${process.uph} = ${unitCost}`);
           totalCost += unitCost;
-        } else {
-          console.log('UPH is 0 or undefined, unit cost = 0');
         }
       }
     });
-    
-    console.log(`Total ${deviceName} cost for ${process.name}: ${totalCost}`);
+
     return totalCost;
   };
 
-  // 计算总成本（人工成本 + 双设备机器成本）
+  // 计算总成本（设备成本）
   const calculateTotalUnitCost = () => {
     let total = 0;
-    
+
     if (formData.selectedTypes.includes('cp')) {
       total += formData.cpProcesses.reduce((sum, process) => {
-        const laborCost = process.unitCost || 0; // 人工成本
-        // 双设备机器成本：测试机 + 探针台
         const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
         const proberCost = calculateProcessMachineCostForDevice(process, 'prober');
-        const totalMachineCost = testMachineCost + proberCost;
-        return sum + laborCost + totalMachineCost;
+        return sum + testMachineCost + proberCost;
       }, 0);
     }
-    
+
     if (formData.selectedTypes.includes('ft')) {
       total += formData.ftProcesses.reduce((sum, process) => {
-        const laborCost = process.unitCost || 0; // 人工成本
-        // 双设备机器成本：测试机 + 分选机
         const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
         const handlerCost = calculateProcessMachineCostForDevice(process, 'handler');
-        const totalMachineCost = testMachineCost + handlerCost;
-        return sum + laborCost + totalMachineCost;
+        return sum + testMachineCost + handlerCost;
       }, 0);
     }
-    
+
     // 根据货币类型向上取整
     return ceilByCurrency(total, formData.currency);
   };
@@ -416,7 +435,7 @@ const ProcessQuote = () => {
   const generateTempQuoteNumber = (quoteUnit) => {
     const unitMapping = {
       "昆山芯信安": "KS",
-      "苏州芯昱安": "SZ", 
+      "苏州芯昱安": "SZ",
       "上海芯睿安": "SH",
       "珠海芯创安": "ZH"
     };
@@ -426,37 +445,235 @@ const ProcessQuote = () => {
     return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
   };
 
+  // 生成工序报价项（应用板卡JSON序列化模式）
+  const generateProcessQuoteItems = () => {
+    const items = [];
+
+    // 辅助函数：获取板卡信息数组
+    const getCardsInfo = (cardQuantities) => {
+      if (!cardQuantities || Object.keys(cardQuantities).length === 0) return [];
+      return Object.entries(cardQuantities).map(([cardId, quantity]) => {
+        const card = cardTypes.find(c => c.id === parseInt(cardId));
+        return {
+          id: parseInt(cardId),
+          board_name: card?.board_name || '',
+          part_number: card?.part_number || '',
+          quantity: quantity || 1
+        };
+      });
+    };
+
+    // 1. 处理CP工序
+    if (formData.selectedTypes.includes('cp')) {
+      formData.cpProcesses.forEach((process, index) => {
+        if (process.testMachine || process.prober) {
+          // 计算工序单颗成本（设备成本）
+          const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
+          const proberCost = calculateProcessMachineCostForDevice(process, 'prober');
+          const totalUnitCost = testMachineCost + proberCost;
+          // 保留4位小数
+          const unitCost = parseFloat(formatUnitPrice(totalUnitCost).replace(/[￥$,]/g, ''));
+
+          // 准备工序配置JSON
+          const configuration = {
+            process_type: process.name,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            prober: process.proberData ? {
+              id: process.proberData.id,
+              name: process.prober,
+              cards: getCardsInfo(process.proberCardQuantities)
+            } : null,
+            uph: process.uph
+          };
+
+          // 构建设备类型和型号
+          const deviceType = (process.testMachine && process.prober)
+            ? '测试机/探针台'
+            : (process.testMachine ? '测试机' : (process.prober ? '探针台' : '-'));
+          const deviceModel = (process.testMachine && process.prober)
+            ? `${process.testMachine}/${process.prober}`
+            : (process.testMachine || process.prober || '-');
+
+          items.push({
+            item_name: `CP工序 - ${process.name}`,
+            item_description: `${process.name} (UPH: ${process.uph})`,
+            machine_type: deviceType,
+            supplier: process.testMachineData?.supplier
+              ? (typeof process.testMachineData.supplier === 'object'
+                  ? process.testMachineData.supplier.name
+                  : process.testMachineData.supplier)
+              : '',
+            machine_model: deviceModel,
+            configuration: JSON.stringify(configuration),
+            quantity: 1,
+            unit: '颗',
+            unit_price: unitCost,
+            total_price: unitCost, // 工序报价单颗成本即总价
+            machine_id: process.testMachineData?.id || null,
+            category_type: 'process'
+          });
+        }
+      });
+    }
+
+    // 2. 处理FT工序
+    if (formData.selectedTypes.includes('ft')) {
+      formData.ftProcesses.forEach((process, index) => {
+        if (process.testMachine || process.handler) {
+          // 计算工序单颗成本（设备成本）
+          const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
+          const handlerCost = calculateProcessMachineCostForDevice(process, 'handler');
+          const totalUnitCost = testMachineCost + handlerCost;
+          // 保留4位小数
+          const unitCost = parseFloat(formatUnitPrice(totalUnitCost).replace(/[￥$,]/g, ''));
+
+          // 准备工序配置JSON
+          const configuration = {
+            process_type: process.name,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            handler: process.handlerData ? {
+              id: process.handlerData.id,
+              name: process.handler,
+              cards: getCardsInfo(process.handlerCardQuantities)
+            } : null,
+            uph: process.uph
+          };
+
+          // 构建设备类型和型号
+          const deviceType = (process.testMachine && process.handler)
+            ? '测试机/分选机'
+            : (process.testMachine ? '测试机' : (process.handler ? '分选机' : '-'));
+          const deviceModel = (process.testMachine && process.handler)
+            ? `${process.testMachine}/${process.handler}`
+            : (process.testMachine || process.handler || '-');
+
+          items.push({
+            item_name: `FT工序 - ${process.name}`,
+            item_description: `${process.name} (UPH: ${process.uph})`,
+            machine_type: deviceType,
+            supplier: process.testMachineData?.supplier
+              ? (typeof process.testMachineData.supplier === 'object'
+                  ? process.testMachineData.supplier.name
+                  : process.testMachineData.supplier)
+              : '',
+            machine_model: deviceModel,
+            configuration: JSON.stringify(configuration),
+            quantity: 1,
+            unit: '颗',
+            unit_price: unitCost,
+            total_price: unitCost, // 工序报价单颗成本即总价
+            machine_id: process.testMachineData?.id || null,
+            category_type: 'process'
+          });
+        }
+      });
+    }
+
+    return items;
+  };
+
   // 提交处理
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    // 生成报价项（包含JSON序列化的工序配置）
+    const quoteItems = generateProcessQuoteItems();
+
+    // 构建报价标题
+    const title = `${formData.projectInfo.projectName || '工序报价'} - ${formData.customerInfo.companyName}`;
+
+    // 准备数据库创建/更新数据
+    // 构建项目描述信息（用于存储在description字段，使用中文标点符号以匹配解析逻辑）
+    const projectDescription = [
+      formData.projectInfo.projectName && `项目：${formData.projectInfo.projectName}`,
+      formData.projectInfo.chipPackage && `芯片封装：${formData.projectInfo.chipPackage}`,
+      `测试类型：工序报价`
+    ].filter(Boolean).join('，');
+
+    const quoteCreateData = {
+      title,
+      quote_type: '工序报价',
+      customer_name: formData.customerInfo.companyName,
+      customer_contact: formData.customerInfo.contactPerson,
+      customer_phone: formData.customerInfo.phone || '',
+      customer_email: formData.customerInfo.email || '',
+      quote_unit: formData.projectInfo.quoteUnit,
+      currency: formData.currency,
+      exchange_rate: formData.exchangeRate,
+      total_amount: calculateTotalUnitCost(),
+      description: projectDescription || '',
+      notes: formData.remarks || '',
+      items: quoteItems
+    };
+
+    // 完成报价，将数据传递到结果页面
     const tempQuoteNumber = generateTempQuoteNumber(formData.projectInfo.quoteUnit);
     const quoteData = {
       type: '工序报价',
       number: tempQuoteNumber,
-      date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      date: new Date().toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }),
       ...formData,
-      cardTypes, // 传递板卡类型数据
+      cardTypes,
       totalUnitCost: calculateTotalUnitCost(),
       totalProjectCost: calculateTotalProjectCost(),
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
+      quoteCreateData,
+      // 编辑模式相关字段
+      isEditMode: isEditMode || false,
+      editingQuoteId: isEditMode && editingQuote ? editingQuote.id : null,
+      quoteNumber: isEditMode && editingQuote ? editingQuote.quote_number : null
     };
-    
-    console.log('ProcessQuote handleSubmit - quoteData:', quoteData);
-    console.log('ProcessQuote handleSubmit - currency:', quoteData.currency);
-    console.log('ProcessQuote handleSubmit - exchangeRate:', quoteData.exchangeRate);
 
-    navigate('/quote-result', { state: quoteData });
+    if (isEditMode && editingQuote) {
+      // 编辑模式：调用API更新报价
+      try {
+        const updatedQuote = await QuoteApiService.updateQuote(editingQuote.id, quoteCreateData);
+        // 编辑成功后跳转到报价详情页面
+        navigate(`/quote-detail/${editingQuote.quote_number}`, {
+          state: {
+            message: '报价单更新成功',
+            updatedQuote: updatedQuote
+          }
+        });
+      } catch (error) {
+        console.error('更新工序报价失败:', error);
+      }
+    } else {
+      // 新建模式：通过location.state传递数据到结果页面
+      navigate('/quote-result', { state: { ...quoteData, fromQuotePage: true } });
+    }
   };
 
   const handleBack = () => {
-    console.log('ProcessQuote handleBack called');
-    console.log('Current formData before back:', formData);
-    
+    // 保存工序数组到 sessionStorage（用于"上一步"功能）
+    const processData = {
+      selectedTypes: formData.selectedTypes,
+      cpProcesses: formData.cpProcesses,
+      ftProcesses: formData.ftProcesses,
+      currency: formData.currency,
+      exchangeRate: formData.exchangeRate
+    };
+    sessionStorage.setItem('processQuoteProcessData', JSON.stringify(processData));
+
     // 保持当前状态并返回报价类型选择页面
-    navigate('/quote-type-selection', { 
-      state: { 
+    navigate('/quote-type-selection', {
+      state: {
         preserveState: true,
-        pageType: 'process-quote' 
-      } 
+        pageType: 'process-quote'
+      }
     });
   };
 
@@ -592,22 +809,19 @@ const ProcessQuote = () => {
       title: '单颗费用',
       dataIndex: 'unitCost',
       render: (unitCost, record) => {
-        const laborCost = unitCost || 0;
         const isTest = isTestProcess(record.name);
-        
+
         if (isTest) {
           // 测试工序：计算双设备成本
           const testMachineCost = calculateProcessMachineCostForDevice(record, 'testMachine');
           const secondDeviceCost = calculateProcessMachineCostForDevice(record, type === 'cp' ? 'prober' : 'handler');
-          const totalMachineCost = testMachineCost + secondDeviceCost;
-          const totalCost = laborCost + totalMachineCost;
-          
+          const totalCost = testMachineCost + secondDeviceCost;
+
           return (
             <div>
               <div>{formatUnitPrice(totalCost)}</div>
-              {totalMachineCost > 0 && (
+              {totalCost > 0 && (
                 <div style={{ fontSize: '11px', color: '#666' }}>
-                  人工: {formatUnitPrice(laborCost)}<br/>
                   {testMachineCost > 0 && <>测试机: {formatUnitPrice(testMachineCost)}<br/></>}
                   {secondDeviceCost > 0 && <>{type === 'cp' ? '探针台' : '分选机'}: {formatUnitPrice(secondDeviceCost)}</>}
                 </div>
@@ -617,14 +831,12 @@ const ProcessQuote = () => {
         } else {
           // 非测试工序：计算单设备成本
           const machineCost = calculateProcessMachineCostForDevice(record, 'testMachine');
-          const totalCost = laborCost + machineCost;
-          
+
           return (
             <div>
-              <div>{formatUnitPrice(totalCost)}</div>
+              <div>{formatUnitPrice(machineCost)}</div>
               {machineCost > 0 && (
                 <div style={{ fontSize: '11px', color: '#666' }}>
-                  人工: {formatUnitPrice(laborCost)}<br/>
                   设备: {formatUnitPrice(machineCost)}
                 </div>
               )}
@@ -798,9 +1010,9 @@ const ProcessQuote = () => {
 
   return (
     <div className="quote-container">
-      <PageTitle 
-        title="量产工序报价" 
-        subtitle="基于生产工序的单颗芯片成本分析 (v2.0)" 
+      <PageTitle
+        title={isEditMode && editingQuote ? `编辑量产工序报价 - ${editingQuote.quote_number}` : "量产工序报价"}
+        subtitle="基于生产工序的单颗芯片成本分析 (v2.0)"
       />
 
       {/* 客户信息 */}
@@ -890,6 +1102,9 @@ const ProcessQuote = () => {
               value={formData.projectInfo.quoteUnit}
               onChange={(e) => handleInputChange('projectInfo', 'quoteUnit', e.target.value)}
               required
+              disabled={isEditMode}
+              style={isEditMode ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
+              title={isEditMode ? '编辑模式下不允许修改报价单位' : ''}
             >
               <option value="昆山芯信安">昆山芯信安</option>
               <option value="苏州芯昱安">苏州芯昱安</option>
@@ -1067,10 +1282,10 @@ const ProcessQuote = () => {
 
       <div className="button-group">
         <SecondaryButton onClick={handleBack}>
-          返回
+          {isEditMode ? "上一步" : "返回"}
         </SecondaryButton>
         <PrimaryButton onClick={handleSubmit}>
-          生成工序报价单
+          {isEditMode ? "保存修改" : "完成报价"}
         </PrimaryButton>
       </div>
     </div>

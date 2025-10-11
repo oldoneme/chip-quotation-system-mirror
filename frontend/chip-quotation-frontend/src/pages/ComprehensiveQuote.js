@@ -906,7 +906,7 @@ const ComprehensiveQuote = () => {
           返回
         </SecondaryButton>
         <PrimaryButton onClick={handleSubmit}>
-          生成综合报价单
+          完成报价
         </PrimaryButton>
       </div>
     </div>

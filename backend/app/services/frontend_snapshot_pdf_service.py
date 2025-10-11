@@ -131,12 +131,14 @@ def generate_quote_pdf(
 
         def is_ready() -> bool:
             try:
-                return (
+                # 检查基础页面元素是否加载（报价明细等核心内容）
+                base_ready = (
                     page.evaluate("!!document.querySelector('#quote-ready')")
                     or page.evaluate(
                         "!!document.querySelector('.ant-descriptions, .ant-card, .ant-table')"
                     )
                 )
+                return base_ready
             except Exception:
                 return False
 

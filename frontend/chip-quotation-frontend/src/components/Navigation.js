@@ -75,11 +75,6 @@ const Navigation = () => {
         icon: <UnorderedListOutlined />,
         label: '报价单管理',
       },
-      {
-        key: '/quote-templates',
-        icon: <SettingOutlined />,
-        label: '报价模板',
-      },
     ];
 
     let items = [...baseMenuItems];

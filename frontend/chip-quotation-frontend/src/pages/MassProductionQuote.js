@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Select, Table, Tabs, Spin, Alert, Checkbox, Button, Card, InputNumber, message, Divider } from 'antd';
-import StepIndicator from '../components/StepIndicator';
+// 移除StepIndicator导入，统一为单页面模式
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,6 +18,8 @@ import {
   getAuxiliaryEquipment
 } from '../services/auxiliaryEquipment';
 import { ceilByCurrency, formatQuotePrice } from '../utils';
+import useQuoteEditMode from '../hooks/useQuoteEditMode';
+import { QuoteApiService } from '../services/quoteApi';
 import '../App.css';
 
 const { Option } = Select;
@@ -28,9 +30,18 @@ const MassProductionQuote = () => {
   const location = useLocation();
   const { state } = location;
   const { user } = useAuth();
-  const [currentStep, setCurrentStep] = useState(0);
+
+  // 编辑模式相关状态
+  const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
+
+  // 编辑模式数据加载标志（确保只加载一次）
+  const [editDataLoaded, setEditDataLoaded] = useState(false);
+
+  // 移除步骤管理，统一为单页面模式
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const [editMessageShown, setEditMessageShown] = useState(false);
   
   // 机器数据
   const [machines, setMachines] = useState([]);      // 测试机
@@ -38,6 +49,8 @@ const MassProductionQuote = () => {
   const [probers, setProbers] = useState([]);        // 探针台
   const [auxDevices, setAuxDevices] = useState({ handlers: [], probers: [], others: [] }); // 辅助设备
   const [cardTypes, setCardTypes] = useState([]);    // 板卡类型
+  const [auxMachinesByType, setAuxMachinesByType] = useState({});  // 辅助设备按类型分组
+  const [auxMachineTypes, setAuxMachineTypes] = useState([]);      // 辅助设备类型列表
   
   // 选择状态
   const [selectedMachine, setSelectedMachine] = useState(null);
@@ -100,26 +113,32 @@ const MassProductionQuote = () => {
           
           if (isMounted) {
             // 恢复所有状态
-            setCurrentStep(parsedState.currentStep || 0);
             setSelectedTypes(parsedState.selectedTypes || ['ft', 'cp']);
-            setFtData(parsedState.ftData || { 
-              testMachine: null, 
-              handler: null, 
-              testMachineCards: [], 
+            setFtData(parsedState.ftData || {
+              testMachine: null,
+              handler: null,
+              testMachineCards: [],
               handlerCards: [],
               proberCards: []
             });
-            setCpData(parsedState.cpData || { 
-              testMachine: null, 
-              prober: null, 
-              testMachineCards: [], 
+            setCpData(parsedState.cpData || {
+              testMachine: null,
+              prober: null,
+              testMachineCards: [],
               handlerCards: [],
-              proberCards: [] 
+              proberCards: []
             });
             setSelectedAuxDevices(parsedState.selectedAuxDevices || []);
             setPersistedCardQuantities(parsedState.persistedCardQuantities || {});
             setQuoteCurrency(parsedState.quoteCurrency || 'CNY');
             setQuoteExchangeRate(parsedState.quoteExchangeRate || 7.2);
+            // 恢复客户信息和项目信息
+            if (parsedState.customerInfo) {
+              setCustomerInfo(parsedState.customerInfo);
+            }
+            if (parsedState.projectInfo) {
+              setProjectInfo(parsedState.projectInfo);
+            }
           }
         } catch (error) {
           console.error('解析保存状态时出错:', error);
@@ -139,6 +158,92 @@ const MassProductionQuote = () => {
       isMounted = false;
     };
   }, []);
+
+  // 编辑模式数据预填充
+  useEffect(() => {
+    // 只在编辑模式下，且数据未加载过时执行，并且需要等待cardTypes和machines数据加载完成
+    if (isEditMode && editingQuote && !editLoading && !editDataLoaded && cardTypes.length > 0 && machines.length > 0) {
+      console.log('MassProductionQuote 编辑模式：开始预填充数据', editingQuote);
+
+      // 合并所有机器数据供ID匹配使用（包括所有类型的辅助设备）
+      const allMachines = [
+        ...machines,
+        ...handlers,
+        ...probers,
+        ...auxDevices.handlers,
+        ...auxDevices.probers,
+        ...auxDevices.others
+      ];
+      const formData = convertQuoteToFormData(editingQuote, 'mass_production', cardTypes, allMachines);
+
+      if (formData) {
+        // 填充基本信息
+        setCustomerInfo(formData.customerInfo);
+        setProjectInfo(formData.projectInfo);
+
+        // 填充报价参数
+        if (formData.quoteCurrency) setQuoteCurrency(formData.quoteCurrency);
+        if (formData.quoteExchangeRate) setQuoteExchangeRate(formData.quoteExchangeRate);
+
+        // 填充设备配置（从deviceConfig中获取）
+        if (formData.deviceConfig) {
+          const { deviceConfig } = formData;
+
+          // 设置测试类型
+          if (deviceConfig.selectedTypes) {
+            setSelectedTypes(deviceConfig.selectedTypes);
+          }
+
+          // 设置FT数据
+          if (deviceConfig.ftData) {
+            setFtData(deviceConfig.ftData);
+          }
+
+          // 设置CP数据
+          if (deviceConfig.cpData) {
+            setCpData(deviceConfig.cpData);
+          }
+
+          // 设置辅助设备
+          if (deviceConfig.auxDevices) {
+            setSelectedAuxDevices(deviceConfig.auxDevices);
+          }
+
+          // 为板卡数量创建持久化数据
+          const cardQuantities = {};
+          deviceConfig.ftData?.testMachineCards?.forEach(card => {
+            cardQuantities[`ft-testMachine-${card.id}`] = card.quantity || 1;
+          });
+          deviceConfig.ftData?.handlerCards?.forEach(card => {
+            cardQuantities[`ft-handler-${card.id}`] = card.quantity || 1;
+          });
+          deviceConfig.cpData?.testMachineCards?.forEach(card => {
+            cardQuantities[`cp-testMachine-${card.id}`] = card.quantity || 1;
+          });
+          deviceConfig.cpData?.proberCards?.forEach(card => {
+            cardQuantities[`cp-prober-${card.id}`] = card.quantity || 1;
+          });
+          setPersistedCardQuantities(cardQuantities);
+        }
+
+        // 标记数据已加载
+        setEditDataLoaded(true);
+
+        // 只在第一次显示消息
+        if (!editMessageShown) {
+          message.info(`正在编辑报价单: ${editingQuote.quote_number || editingQuote.id || '未知'}`);
+          setEditMessageShown(true);
+        }
+      }
+    }
+  }, [isEditMode, editingQuote, editLoading, editDataLoaded, cardTypes, machines, handlers, probers, auxDevices, editMessageShown]);
+
+  // 重置编辑消息标志
+  useEffect(() => {
+    if (!isEditMode) {
+      setEditMessageShown(false);
+    }
+  }, [isEditMode]);
 
   // 格式化价格显示（包含币种符号）
   const formatPrice = (number) => {
@@ -162,12 +267,58 @@ const MassProductionQuote = () => {
       const auxDevicesResponse = await getAuxiliaryEquipment();
       console.log('获取到的辅助设备数据:', auxDevicesResponse);
 
+      // 获取层级化的机器类型数据
+      const hierarchicalData = await fetch('/api/v1/hierarchical/machine-types').then(res => res.json());
+      console.log('获取到的层级化机器类型数据:', hierarchicalData);
+
       setCardTypes(cardTypesResponse);
       setAuxDevices({
         handlers: auxDevicesResponse.filter(device => device.type === 'handler'),
         probers: auxDevicesResponse.filter(device => device.type === 'prober'),
         others: auxDevicesResponse.filter(device => !device.type || (device.type !== 'handler' && device.type !== 'prober'))
       });
+
+      // 筛选出辅助设备类型(排除测试机、分选机、探针台)
+      const auxTypes = hierarchicalData.filter(type =>
+        type.name !== '测试机' &&
+        type.name !== '分选机' &&
+        type.name !== '探针台'
+      ).map(type => ({
+        id: type.id,
+        name: type.name
+      }));
+
+      setAuxMachineTypes(auxTypes);
+
+      // 将所有机器按类型分组(只包含辅助设备类型)
+      const groupedAuxMachines = {};
+      hierarchicalData.forEach(type => {
+        if (type.name !== '测试机' && type.name !== '分选机' && type.name !== '探针台') {
+          type.suppliers.forEach(supplier => {
+            if (supplier.machines && supplier.machines.length > 0) {
+              supplier.machines.forEach(machine => {
+                if (!groupedAuxMachines[type.id]) {
+                  groupedAuxMachines[type.id] = [];
+                }
+                // 确保包含supplier信息
+                groupedAuxMachines[type.id].push({
+                  ...machine,
+                  supplier: {
+                    ...supplier,
+                    machine_type: {
+                      id: type.id,
+                      name: type.name
+                    }
+                  }
+                });
+              });
+            }
+          });
+        }
+      });
+
+      console.log('辅助设备按类型分组:', groupedAuxMachines);
+      setAuxMachinesByType(groupedAuxMachines);
       
       // 从机器中筛选出不同类型的机器
       console.log('开始筛选不同类型机器...');
@@ -567,26 +718,22 @@ const MassProductionQuote = () => {
     return `CIS-${unitAbbr}${dateStr}${randomSeq}`;
   };
 
-  const handleNextStep = () => {
-    const nextStepValue = currentStep + 1;
-    
-    // 保存当前状态到sessionStorage
+  const handleConfirmQuote = async () => {
+    // 保存当前状态到sessionStorage（用于"上一步"功能）
     const currentState = {
-      currentStep: nextStepValue,
       selectedTypes,
       ftData,
       cpData,
       selectedAuxDevices,
       persistedCardQuantities,
       quoteCurrency,
-      quoteExchangeRate
+      quoteExchangeRate,
+      customerInfo,
+      projectInfo
     };
     sessionStorage.setItem('massProductionQuoteState', JSON.stringify(currentState));
-    
-    if (nextStepValue < 2) {
-      // Save current step data and navigate to next step
-      setCurrentStep(nextStepValue);
-    } else {
+
+    {
       // 生成量产报价项目
       const generateMassProductionQuoteItems = () => {
         const items = [];
@@ -594,14 +741,14 @@ const MassProductionQuote = () => {
         // 1. FT测试设备
         if (selectedTypes.includes('ft')) {
           // FT测试机（只有板卡费用）
-          if (ftData.testMachine && ftData.testMachineCards.length > 0) {
+          if (ftData.testMachine && ftData.testMachine.name && ftData.testMachineCards.length > 0) {
             let testMachineFee = 0;
-            
+
             // 计算测试机板卡费用
             ftData.testMachineCards.forEach(card => {
               if (card && card.quantity > 0) {
                 let adjustedPrice = card.unit_price / 10000;
-                
+
                 // 根据报价币种和机器币种进行转换
                 if (quoteCurrency === 'USD') {
                   if (ftData.testMachine.currency === 'CNY' || ftData.testMachine.currency === 'RMB') {
@@ -610,40 +757,58 @@ const MassProductionQuote = () => {
                 } else {
                   adjustedPrice = adjustedPrice * (ftData.testMachine.exchange_rate || 1);
                 }
-                
+
                 testMachineFee += adjustedPrice * (ftData.testMachine.discount_rate || 1) * card.quantity;
               }
             });
-            
+
             if (testMachineFee > 0) {
+              // 应用价格向上取整
+              const ceiledFee = ceilByCurrency(testMachineFee, quoteCurrency);
+
+              // 准备板卡信息JSON
+              const cardsInfo = ftData.testMachineCards.map(card => ({
+                id: card.id,
+                board_name: card.board_name || '',
+                part_number: card.part_number || '',
+                quantity: card.quantity || 1
+              }));
+
               items.push({
                 item_name: ftData.testMachine.name || 'FT测试机',
-                item_description: `FT测试机 - ${typeof ftData.testMachine.supplier === 'object' 
-                  ? ftData.testMachine.supplier.name || '' 
+                item_description: `FT测试机 - ${typeof ftData.testMachine.supplier === 'object'
+                  ? ftData.testMachine.supplier.name || ''
                   : ftData.testMachine.supplier || ''}`,
                 machine_type: '测试机',
-                supplier: typeof ftData.testMachine.supplier === 'object' 
-                  ? ftData.testMachine.supplier.name || '' 
+                supplier: typeof ftData.testMachine.supplier === 'object'
+                  ? ftData.testMachine.supplier.name || ''
                   : ftData.testMachine.supplier || '',
                 machine_model: ftData.testMachine.name || '',
+                configuration: JSON.stringify({
+                  device_type: '测试机',
+                  device_model: ftData.testMachine.name,
+                  test_type: 'FT',
+                  cards: cardsInfo
+                }),
                 quantity: 1,
                 unit: '小时',
-                unit_price: testMachineFee,
-                total_price: testMachineFee,
+                unit_price: ceiledFee,
+                total_price: ceiledFee,
+                machine_id: ftData.testMachine.id,
                 category_type: 'machine'
               });
             }
           }
           
           // FT分选机（只有板卡费用）
-          if (ftData.handler && ftData.handlerCards.length > 0) {
+          if (ftData.handler && ftData.handler.name && ftData.handlerCards.length > 0) {
             let handlerFee = 0;
-            
+
             // 计算分选机板卡费用
             ftData.handlerCards.forEach(card => {
               if (card && card.quantity > 0) {
                 let adjustedPrice = card.unit_price / 10000;
-                
+
                 // 根据报价币种和机器币种进行转换
                 if (quoteCurrency === 'USD') {
                   if (ftData.handler.currency === 'CNY' || ftData.handler.currency === 'RMB') {
@@ -652,26 +817,44 @@ const MassProductionQuote = () => {
                 } else {
                   adjustedPrice = adjustedPrice * (ftData.handler.exchange_rate || 1);
                 }
-                
+
                 handlerFee += adjustedPrice * (ftData.handler.discount_rate || 1) * card.quantity;
               }
             });
-            
+
             if (handlerFee > 0) {
+              // 应用价格向上取整
+              const ceiledFee = ceilByCurrency(handlerFee, quoteCurrency);
+
+              // 准备板卡信息JSON
+              const cardsInfo = ftData.handlerCards.map(card => ({
+                id: card.id,
+                board_name: card.board_name || '',
+                part_number: card.part_number || '',
+                quantity: card.quantity || 1
+              }));
+
               items.push({
                 item_name: ftData.handler.name || 'FT分选机',
-                item_description: `FT分选机 - ${typeof ftData.handler.supplier === 'object' 
-                  ? ftData.handler.supplier.name || '' 
+                item_description: `FT分选机 - ${typeof ftData.handler.supplier === 'object'
+                  ? ftData.handler.supplier.name || ''
                   : ftData.handler.supplier || ''}`,
                 machine_type: '分选机',
-                supplier: typeof ftData.handler.supplier === 'object' 
-                  ? ftData.handler.supplier.name || '' 
+                supplier: typeof ftData.handler.supplier === 'object'
+                  ? ftData.handler.supplier.name || ''
                   : ftData.handler.supplier || '',
                 machine_model: ftData.handler.name || '',
+                configuration: JSON.stringify({
+                  device_type: '分选机',
+                  device_model: ftData.handler.name,
+                  test_type: 'FT',
+                  cards: cardsInfo
+                }),
                 quantity: 1,
                 unit: '小时',
-                unit_price: handlerFee,
-                total_price: handlerFee,
+                unit_price: ceiledFee,
+                total_price: ceiledFee,
+                machine_id: ftData.handler.id,
                 category_type: 'machine'
               });
             }
@@ -681,14 +864,14 @@ const MassProductionQuote = () => {
         // 2. CP测试设备
         if (selectedTypes.includes('cp')) {
           // CP测试机（只有板卡费用）
-          if (cpData.testMachine && cpData.testMachineCards.length > 0) {
+          if (cpData.testMachine && cpData.testMachine.name && cpData.testMachineCards.length > 0) {
             let testMachineFee = 0;
-            
+
             // 计算测试机板卡费用
             cpData.testMachineCards.forEach(card => {
               if (card && card.quantity > 0) {
                 let adjustedPrice = card.unit_price / 10000;
-                
+
                 // 根据报价币种和机器币种进行转换
                 if (quoteCurrency === 'USD') {
                   if (cpData.testMachine.currency === 'CNY' || cpData.testMachine.currency === 'RMB') {
@@ -697,40 +880,58 @@ const MassProductionQuote = () => {
                 } else {
                   adjustedPrice = adjustedPrice * (cpData.testMachine.exchange_rate || 1);
                 }
-                
+
                 testMachineFee += adjustedPrice * (cpData.testMachine.discount_rate || 1) * card.quantity;
               }
             });
-            
+
             if (testMachineFee > 0) {
+              // 应用价格向上取整
+              const ceiledFee = ceilByCurrency(testMachineFee, quoteCurrency);
+
+              // 准备板卡信息JSON
+              const cardsInfo = cpData.testMachineCards.map(card => ({
+                id: card.id,
+                board_name: card.board_name || '',
+                part_number: card.part_number || '',
+                quantity: card.quantity || 1
+              }));
+
               items.push({
                 item_name: cpData.testMachine.name || 'CP测试机',
-                item_description: `CP测试机 - ${typeof cpData.testMachine.supplier === 'object' 
-                  ? cpData.testMachine.supplier.name || '' 
+                item_description: `CP测试机 - ${typeof cpData.testMachine.supplier === 'object'
+                  ? cpData.testMachine.supplier.name || ''
                   : cpData.testMachine.supplier || ''}`,
                 machine_type: '测试机',
-                supplier: typeof cpData.testMachine.supplier === 'object' 
-                  ? cpData.testMachine.supplier.name || '' 
+                supplier: typeof cpData.testMachine.supplier === 'object'
+                  ? cpData.testMachine.supplier.name || ''
                   : cpData.testMachine.supplier || '',
                 machine_model: cpData.testMachine.name || '',
+                configuration: JSON.stringify({
+                  device_type: '测试机',
+                  device_model: cpData.testMachine.name,
+                  test_type: 'CP',
+                  cards: cardsInfo
+                }),
                 quantity: 1,
                 unit: '小时',
-                unit_price: testMachineFee,
-                total_price: testMachineFee,
+                unit_price: ceiledFee,
+                total_price: ceiledFee,
+                machine_id: cpData.testMachine.id,
                 category_type: 'machine'
               });
             }
           }
           
           // CP探针台（只有板卡费用）
-          if (cpData.prober && cpData.proberCards.length > 0) {
+          if (cpData.prober && cpData.prober.name && cpData.proberCards.length > 0) {
             let proberFee = 0;
-            
+
             // 计算探针台板卡费用
             cpData.proberCards.forEach(card => {
               if (card && card.quantity > 0) {
                 let adjustedPrice = card.unit_price / 10000;
-                
+
                 // 根据报价币种和机器币种进行转换
                 if (quoteCurrency === 'USD') {
                   if (cpData.prober.currency === 'CNY' || cpData.prober.currency === 'RMB') {
@@ -739,26 +940,44 @@ const MassProductionQuote = () => {
                 } else {
                   adjustedPrice = adjustedPrice * (cpData.prober.exchange_rate || 1);
                 }
-                
+
                 proberFee += adjustedPrice * (cpData.prober.discount_rate || 1) * card.quantity;
               }
             });
-            
+
             if (proberFee > 0) {
+              // 应用价格向上取整
+              const ceiledFee = ceilByCurrency(proberFee, quoteCurrency);
+
+              // 准备板卡信息JSON
+              const cardsInfo = cpData.proberCards.map(card => ({
+                id: card.id,
+                board_name: card.board_name || '',
+                part_number: card.part_number || '',
+                quantity: card.quantity || 1
+              }));
+
               items.push({
                 item_name: cpData.prober.name || 'CP探针台',
-                item_description: `CP探针台 - ${typeof cpData.prober.supplier === 'object' 
-                  ? cpData.prober.supplier.name || '' 
+                item_description: `CP探针台 - ${typeof cpData.prober.supplier === 'object'
+                  ? cpData.prober.supplier.name || ''
                   : cpData.prober.supplier || ''}`,
                 machine_type: '探针台',
-                supplier: typeof cpData.prober.supplier === 'object' 
-                  ? cpData.prober.supplier.name || '' 
+                supplier: typeof cpData.prober.supplier === 'object'
+                  ? cpData.prober.supplier.name || ''
                   : cpData.prober.supplier || '',
                 machine_model: cpData.prober.name || '',
+                configuration: JSON.stringify({
+                  device_type: '探针台',
+                  device_model: cpData.prober.name,
+                  test_type: 'CP',
+                  cards: cardsInfo
+                }),
                 quantity: 1,
                 unit: '小时',
-                unit_price: proberFee,
-                total_price: proberFee,
+                unit_price: ceiledFee,
+                total_price: ceiledFee,
+                machine_id: cpData.prober.id,
                 category_type: 'machine'
               });
             }
@@ -767,19 +986,60 @@ const MassProductionQuote = () => {
         
         // 3. 辅助设备费用
         selectedAuxDevices.forEach(device => {
-          if (device && device.hourlyFee > 0) {
-            items.push({
-              item_name: device.name || '辅助设备',
-              item_description: `辅助设备 - ${device.description || ''}`,
-              machine_type: '辅助设备',
-              supplier: device.supplier || '',
-              machine_model: device.model || device.name || '',
-              quantity: 1,
-              unit: '小时',
-              unit_price: device.hourlyFee,
-              total_price: device.hourlyFee,
-              category_type: 'auxiliary'
-            });
+          if (device) {
+            // 计算单个辅助设备的小时费率（参考calculateAuxDeviceHourlyRate函数）
+            let deviceHourlyRate = 0;
+            if (device.supplier || device.machine_type) {
+              // 如果是机器类型的辅助设备，计算板卡费用
+              const machineCards = cardTypes.filter(card => card.machine_id === device.id);
+              deviceHourlyRate = machineCards.reduce((sum, card) => {
+                let adjustedPrice = card.unit_price / 10000;
+
+                // 根据报价币种和机器币种进行转换
+                if (quoteCurrency === 'USD') {
+                  if (device.currency === 'CNY' || device.currency === 'RMB') {
+                    adjustedPrice = adjustedPrice / quoteExchangeRate;
+                  }
+                } else {
+                  adjustedPrice = adjustedPrice * (device.exchange_rate || 1);
+                }
+
+                const cardRate = adjustedPrice * (device.discount_rate || 1);
+                return sum + cardRate;
+              }, 0);
+            } else {
+              // 如果是原来的辅助设备类型，使用小时费率
+              deviceHourlyRate = device.hourly_rate || 0;
+              if (quoteCurrency === 'USD') {
+                deviceHourlyRate = deviceHourlyRate / quoteExchangeRate;
+              }
+            }
+
+            // 应用价格向上取整
+            const ceiledFee = ceilByCurrency(deviceHourlyRate, quoteCurrency);
+
+            if (ceiledFee > 0) {
+              items.push({
+                item_name: device.name || '辅助设备',
+                item_description: `辅助设备 - ${device.description || ''}`,
+                machine_type: '辅助设备',
+                supplier: typeof device.supplier === 'object'
+                  ? device.supplier?.name || ''
+                  : device.supplier || '',
+                machine_model: device.model || device.name || '',
+                configuration: JSON.stringify({
+                  device_type: '辅助设备',
+                  device_model: device.name,
+                  device_category: device.category || device.machine_type || 'other'
+                }),
+                quantity: 1,
+                unit: '小时',
+                unit_price: ceiledFee,
+                total_price: ceiledFee,
+                machine_id: device.id,
+                category_type: 'auxiliary_device'
+              });
+            }
           }
         });
         
@@ -810,13 +1070,13 @@ const MassProductionQuote = () => {
       const quoteData = {
         type: '量产报价',
         number: generateTempQuoteNumber(projectInfo.quoteUnit),  // 使用新的报价单号生成函数
-        date: new Date().toLocaleString('zh-CN', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric', 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          second: '2-digit' 
+        date: new Date().toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
         }),
         customerInfo,  // 添加客户信息
         projectInfo,   // 添加项目信息
@@ -830,67 +1090,37 @@ const MassProductionQuote = () => {
         auxDeviceFee,
         quoteCurrency, // 添加报价币种
         quoteExchangeRate, // 添加报价汇率
+        persistedCardQuantities, // 添加板卡数量持久化数据
         generatedAt: new Date().toISOString(),
-        quoteCreateData // 添加数据库创建数据
+        quoteCreateData, // 添加数据库创建数据
+        // 编辑模式相关字段
+        isEditMode: isEditMode || false,
+        editingQuoteId: isEditMode && editingQuote ? editingQuote.id : null,
+        quoteNumber: isEditMode && editingQuote ? editingQuote.quote_number : null
       };
-      
-      // 通过location.state传递数据到结果页面
-      navigate('/quote-result', { state: { ...quoteData, fromQuotePage: true } });
-    }
-  };
-  
-  const handlePrevStep = () => {
-    const prevStepValue = currentStep - 1;
-    
-    // 保存当前状态到sessionStorage
-    const currentState = {
-      currentStep: prevStepValue,
-      selectedTypes,
-      ftData,
-      cpData,
-      selectedAuxDevices,
-      persistedCardQuantities,
-      quoteCurrency,
-      quoteExchangeRate
-    };
-    sessionStorage.setItem('massProductionQuoteState', JSON.stringify(currentState));
-    
-    // Navigate to previous step
-    setCurrentStep(prevStepValue);
-  };
-  
-  const resetQuote = () => {
-    ConfirmDialog.showResetConfirm({
-      title: '确认重置报价',
-      content: '您确定要重置所有选择吗？这将清除您当前的所有配置和选择。',
-      onOk: () => {
-        setSelectedMachine(null);
-        setSelectedConfig(null);
-        setSelectedCards([]);
-        setSelectedAuxDevices([]);
-        setSelectedTypes(['ft', 'cp']);
-        setFtData({ 
-          testMachine: null, 
-          handler: null, 
-          testMachineCards: [], 
-          handlerCards: [] 
-        });
-        setCpData({ 
-          testMachine: null, 
-          prober: null, 
-          testMachineCards: [], 
-          proberCards: [] 
-        });
-        setPersistedCardQuantities({});
-        setQuoteCurrency('CNY');
-        setQuoteExchangeRate(7.2);
-        setCurrentStep(0);
-        
-        // 清除sessionStorage中的状态
-        sessionStorage.removeItem('massProductionQuoteState');
-        message.success('报价已重置');
+
+      if (isEditMode && editingQuote) {
+        // 编辑模式：调用API更新报价
+        try {
+          const updatedQuote = await QuoteApiService.updateQuote(editingQuote.id, quoteCreateData);
+          message.success('量产机时报价更新成功！');
+
+          // 编辑成功后跳转到报价详情页面
+          navigate(`/quote-detail/${editingQuote.quote_number}`, {
+            state: {
+              message: '报价单更新成功',
+              updatedQuote: updatedQuote
+            }
+          });
+        } catch (error) {
+          console.error('更新量产机时报价失败:', error);
+          message.error('更新报价单失败，请重试');
+        }
+      } else {
+        // 新建模式：通过location.state传递数据到结果页面
+        navigate('/quote-result', { state: { ...quoteData, fromQuotePage: true } });
       }
-    });
+    }
   };
   
   const handleAuxDeviceSelect = (selectedRowKeys, selectedRows) => {
@@ -913,15 +1143,19 @@ const MassProductionQuote = () => {
       });
     }
     
-    columns.push({ 
-      title: 'Quantity', 
-      render: (_, record) => (
-        <InputNumber 
-          min={1} 
-          defaultValue={1} 
-          onChange={(value) => handleCardQuantityChange(type, machineType, record.id, value)}
-        />
-      ) 
+    columns.push({
+      title: 'Quantity',
+      render: (_, record) => {
+        const cardKey = `${type}-${machineType}-${record.id}`;
+        const currentQuantity = persistedCardQuantities[cardKey] || 1;
+        return (
+          <InputNumber
+            min={1}
+            value={currentQuantity}
+            onChange={(value) => handleCardQuantityChange(type, machineType, record.id, value)}
+          />
+        );
+      }
     });
     
     return columns;
@@ -1022,7 +1256,7 @@ const MassProductionQuote = () => {
 
   return (
     <div className="mass-production-quote">
-      <h2>量产报价</h2>
+      <h2>{isEditMode ? `编辑量产机时报价 - ${editingQuote?.quote_number || editingQuote?.id}` : '量产报价'}</h2>
       
       {/* 币种选择 */}
       <Card title="币种设置" style={{ marginBottom: 20 }}>
@@ -1074,21 +1308,10 @@ const MassProductionQuote = () => {
           </div>
         </div>
       </Card>
-      
-      {/* 步骤指示器 */}
-      <StepIndicator 
-        currentStep={currentStep}
-        steps={[
-          '基本信息',
-          '机器选择',
-          '辅助设备'
-        ]}
-      />
 
-      {/* 第0步：基本信息 */}
-      {currentStep === 0 && (
-        <div>
-          <h2 className="section-title">基本信息</h2>
+      {/* 基本信息 - 单页面显示 */}
+      <div>
+        <h2 className="section-title">基本信息</h2>
           
           {/* 客户信息 */}
           <Card title="客户信息" style={{ marginBottom: 20 }}>
@@ -1267,12 +1490,12 @@ const MassProductionQuote = () => {
             </div>
           </Card>
         </div>
-      )}
 
-      {/* 第一步：机器选择 */}
-      {currentStep === 1 && (
-        <>
-          {/* 选择FT或CP */}
+      {/* 机器选择 - 单页面显示 */}
+      <div>
+        <h2 className="section-title">机器选择</h2>
+
+        {/* 选择FT或CP */}
           <Card title="测试类型选择" style={{ marginBottom: 20 }}>
             <Checkbox.Group value={selectedTypes} onChange={handleProductionTypeChange}>
               <Checkbox value="ft" style={{ marginRight: 20 }}>FT</Checkbox>
@@ -1331,7 +1554,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: (ftData.testMachineCards || []).map(card => card.id)
                         }}
                         columns={cardColumns('ft', 'testMachine')}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
@@ -1389,7 +1612,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: (ftData.handlerCards || []).map(card => card.id)
                         }}
                         columns={cardColumns('ft', 'handler')}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
@@ -1453,7 +1676,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: (cpData.testMachineCards || []).map(card => card.id)
                         }}
                         columns={cardColumns('cp', 'testMachine')}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
@@ -1511,7 +1734,7 @@ const MassProductionQuote = () => {
                           selectedRowKeys: (cpData.proberCards || []).map(card => card.id)
                         }}
                         columns={cardColumns('cp', 'prober')}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
+                        pagination={false}
                       />
                     ) : (
                       <EmptyState 
@@ -1524,84 +1747,108 @@ const MassProductionQuote = () => {
               )}
               
               <p><strong>CP小时费: {formatPrice(cpHourlyFee)}</strong></p>
-            </Card>
-          )}
-        </>
-      )}
+          </Card>
+        )}
+      </div>
 
-      {/* 第二步：辅助设备选择 */}
-      {currentStep === 2 && (
-        <div>
-          <h2 className="section-title">辅助设备选择</h2>
-          
+      {/* 辅助设备选择 - 单页面显示 */}
+      <div>
+        <h2 className="section-title">辅助设备选择</h2>
+
           <Card title="辅助设备选择" style={{ marginBottom: 20 }}>
-            <Tabs 
-              defaultActiveKey="others"
-              items={[
-                ...(auxDevices.handlers && auxDevices.handlers.length > 0 ? [{
-                  key: 'handlers',
-                  label: '分选机类',
-                  children: (
-                    <Table 
-                      dataSource={auxDevices.handlers}
-                      rowKey="id"
-                      rowSelection={{
-                        type: 'checkbox',
-                        onChange: handleAuxDeviceSelect,
-                        selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                      }}
-                      columns={auxDeviceColumns}
-                      pagination={{ pageSize: 5, showSizeChanger: false }}
-                    />
-                  )
-                }] : []),
-                ...(auxDevices.probers && auxDevices.probers.length > 0 ? [{
-                  key: 'probers',
-                  label: '探针台类',
-                  children: (
-                    <Table 
-                      dataSource={auxDevices.probers}
-                      rowKey="id"
-                      rowSelection={{
-                        type: 'checkbox',
-                        onChange: handleAuxDeviceSelect,
-                        selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                      }}
-                      columns={auxDeviceColumns}
-                      pagination={{ pageSize: 5, showSizeChanger: false }}
-                    />
-                  )
-                }] : []),
-                {
-                  key: 'others',
-                  label: '其他设备',
-                  children: (
-                    auxDevices.others && auxDevices.others.length > 0 ? (
-                      <Table 
-                        dataSource={auxDevices.others}
-                        rowKey="id"
-                        rowSelection={{
-                          type: 'checkbox',
-                          onChange: handleAuxDeviceSelect,
-                          selectedRowKeys: selectedAuxDevices.map(device => device.id)
-                        }}
-                        columns={auxDeviceColumns}
-                        pagination={{ pageSize: 5, showSizeChanger: false }}
-                      />
-                    ) : (
-                      <EmptyState 
-                        description="暂无可用的其他设备"
-                        size="small"
-                      />
-                    )
-                  )
-                }
-              ]}
-            />
-            
-            {selectedAuxDevices.length > 0 && (
-              <p style={{ marginTop: 10 }}><strong>辅助设备机时费: {formatPrice(calculateAuxDeviceFee())}</strong></p>
-            )}
+            <div style={{ marginBottom: 15 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                <h4>已选择的辅助设备</h4>
+                <Button
+                  type="primary"
+                  onClick={() => setSelectedAuxDevices([...selectedAuxDevices, { tempId: Date.now(), typeId: null, device: null }])}
+                >
+                  添加辅助设备
+                </Button>
+              </div>
+
+              {selectedAuxDevices.length > 0 ? (
+                selectedAuxDevices.map((auxDevice, index) => (
+                  <div
+                    key={auxDevice.tempId || auxDevice.id || index}
+                    style={{
+                      marginBottom: '15px',
+                      padding: '15px',
+                      border: '1px solid #d9d9d9',
+                      borderRadius: '6px',
+                      backgroundColor: '#fafafa'
+                    }}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'start' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>设备类型</label>
+                        <Select
+                          style={{ width: '100%' }}
+                          placeholder="选择设备类型"
+                          value={auxDevice.typeId || (auxDevice.supplier?.machine_type?.id)}
+                          onChange={(typeId) => {
+                            const newAuxDevices = [...selectedAuxDevices];
+                            newAuxDevices[index] = { ...auxDevice, typeId, device: null };
+                            setSelectedAuxDevices(newAuxDevices);
+                          }}
+                        >
+                          {auxMachineTypes.map(type => (
+                            <Option key={type.id} value={type.id}>
+                              {type.name}
+                            </Option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>设备型号</label>
+                        <Select
+                          style={{ width: '100%' }}
+                          placeholder="选择设备型号"
+                          value={auxDevice.id || auxDevice.device?.id}
+                          disabled={!auxDevice.typeId && !(auxDevice.supplier?.machine_type?.id)}
+                          onChange={(deviceId) => {
+                            const currentTypeId = auxDevice.typeId || auxDevice.supplier?.machine_type?.id;
+                            const device = auxMachinesByType[currentTypeId]?.find(d => d.id === deviceId);
+                            if (device) {
+                              const newAuxDevices = [...selectedAuxDevices];
+                              newAuxDevices[index] = device;
+                              setSelectedAuxDevices(newAuxDevices);
+                            }
+                          }}
+                        >
+                          {(auxMachinesByType[auxDevice.typeId || auxDevice.supplier?.machine_type?.id] || []).map(device => (
+                            <Option key={device.id} value={device.id}>
+                              {device.name} ({device.currency}, 汇率: {device.exchange_rate || 1.0}, 折扣率: {device.discount_rate || 1.0})
+                            </Option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      <div style={{ paddingTop: '30px' }}>
+                        <Button
+                          danger
+                          onClick={() => {
+                            const newAuxDevices = selectedAuxDevices.filter((_, i) => i !== index);
+                            setSelectedAuxDevices(newAuxDevices);
+                          }}
+                        >
+                          删除
+                        </Button>
+                      </div>
+                    </div>
+
+                    {auxDevice.id && (
+                      <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#fff', borderRadius: '4px' }}>
+                        <strong>设备费率: {formatPrice(calculateAuxDeviceHourlyRate(auxDevice))}/小时</strong>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <EmptyState description="暂无选择的辅助设备，点击上方按钮添加" />
+              )}
+            </div>
           </Card>
           
           <Card title="费用明细" style={{ marginBottom: 20 }}>
@@ -1618,13 +1865,12 @@ const MassProductionQuote = () => {
                   <span style={{ fontWeight: 'bold', fontSize: '16px', color: '#52c41a' }}>{formatPrice(cpHourlyFee)}</span>
                 </div>
               )}
-              {selectedAuxDevices.length > 0 && (
+              {selectedAuxDevices.length > 0 && selectedAuxDevices.some(d => d.id) && (
                 <div style={{ marginTop: 15 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, fontWeight: 'bold', borderBottom: '1px solid #d9d9d9', paddingBottom: '5px' }}>
-                    <span>辅助设备费用:</span>
-                    <span>{formatPrice(auxDeviceFee)}/小时</span>
+                  <div style={{ fontWeight: 'bold', marginBottom: 10 }}>
+                    <span>辅助设备:</span>
                   </div>
-                  {selectedAuxDevices.map((device, index) => (
+                  {selectedAuxDevices.filter(d => d.id).map((device, index) => (
                     <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, paddingLeft: 20, color: '#666' }}>
                       <span>• {device.name}</span>
                       <span>{formatPrice(calculateAuxDeviceHourlyRate(device))}/小时</span>
@@ -1634,61 +1880,30 @@ const MassProductionQuote = () => {
               )}
             </div>
           </Card>
-        </div>
-      )}
+      </div>
 
-      {/* 导航按钮 */}
+      {/* 确认报价按钮 - 单页面模式 */}
       <Card style={{ marginTop: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <Button 
-              onClick={handlePrevStep} 
-              disabled={currentStep === 0}
-              size="large"
-            >
-              返回上一步
-            </Button>
-            <Button 
-              onClick={resetQuote}
-              style={{ marginLeft: 10 }}
-              size="large"
-              danger
-            >
-              重置报价
-            </Button>
-          </div>
-          
-          {/* 进度提示 */}
-          <div style={{ textAlign: 'center', color: '#666' }}>
-            <div>步骤 {currentStep + 1} / 3</div>
-            <div style={{ fontSize: '12px', marginTop: '4px' }}>
-              {currentStep === 0 ? '填写基本信息' : currentStep === 1 ? '配置测试机器和板卡' : '选择辅助设备并确认费用'}
-            </div>
-          </div>
-          
-          <div>
-            <Button 
-              onClick={() => {
-                ConfirmDialog.showCustomConfirm({
-                  title: '退出报价确认',
-                  content: '您确定要退出当前报价吗？未保存的配置将会丢失。',
-                  onOk: () => navigate('/')
-                });
-              }}
-              style={{ marginRight: 10 }}
-              size="large"
-            >
-              退出报价
-            </Button>
-            <Button 
-              type="primary" 
-              onClick={handleNextStep}
-              size="large"
-              disabled={currentStep === 0 && !selectedTypes.length}
-            >
-              {currentStep === 1 ? '生成报价结果' : '继续下一步'}
-            </Button>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <Button
+            onClick={() => {
+              ConfirmDialog.showCustomConfirm({
+                title: '退出报价确认',
+                content: '您确定要退出当前报价吗？未保存的配置将会丢失。',
+                onOk: () => navigate('/')
+              });
+            }}
+            size="large"
+          >
+            退出报价
+          </Button>
+          <Button
+            type="primary"
+            onClick={handleConfirmQuote}
+            size="large"
+          >
+            {isEditMode ? '保存编辑' : '完成报价'}
+          </Button>
         </div>
       </Card>
     </div>

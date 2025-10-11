@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Table, Card, Button, Space, Tag, Row, Col, Statistic, message, Modal, List, Dropdown
 } from 'antd';
-import { 
+import {
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined,
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
   MoreOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
+import { getMachines } from '../services/machines';
+import { getCardTypes } from '../services/cardTypes';
 import '../styles/QuoteManagement.css';
 
 const { confirm } = Modal;
@@ -18,7 +20,9 @@ const QuoteManagement = () => {
   const [loading, setLoading] = useState(false);
   const [quotes, setQuotes] = useState([]);
   const [isMobile, setIsMobile] = useState(false);
-  
+  const [machines, setMachines] = useState([]);
+  const [cardTypes, setCardTypes] = useState([]);
+
   // 统计数据
   const [statistics, setStatistics] = useState({
     total: 0,
@@ -36,10 +40,12 @@ const QuoteManagement = () => {
       
       // 格式化数据显示
       const formattedQuotes = quotesData.map(quote => ({
-        id: quote.quote_number,
+        id: quote.id,  // 使用数字ID作为主键
         quoteId: quote.id,  // 保存实际ID用于操作
         title: quote.title,
         type: QuoteApiService.mapQuoteTypeFromBackend(quote.quote_type),
+        quote_type: quote.quote_type, // 保留原始类型用于编辑跳转
+        quote_number: quote.quote_number, // 保留报价单号
         customer: quote.customer_name,
         currency: quote.currency || 'CNY',
         status: QuoteApiService.mapStatusFromBackend(quote.status),
@@ -49,7 +55,9 @@ const QuoteManagement = () => {
         updatedAt: new Date(quote.updated_at).toLocaleString('zh-CN'),
         validUntil: quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('zh-CN') : '-',
         totalAmount: quote.total_amount,
-        quoteDetails: quote.quote_details || []
+        quoteDetails: quote.quote_details || [],
+        // 为编辑功能保留完整的原始数据
+        ...quote
       }));
       
       setQuotes(formattedQuotes);
@@ -86,6 +94,20 @@ const QuoteManagement = () => {
   useEffect(() => {
     fetchQuotes();
     fetchStatistics();
+    // 加载设备和板卡数据（用于工序报价显示机时费率）
+    const loadData = async () => {
+      try {
+        const [machinesData, cardTypesData] = await Promise.all([
+          getMachines(),
+          getCardTypes()
+        ]);
+        setMachines(machinesData);
+        setCardTypes(cardTypesData);
+      } catch (error) {
+        console.error('获取设备/板卡数据失败:', error);
+      }
+    };
+    loadData();
   }, []);
 
   const getStatusTag = (status, approvalStatus) => {
@@ -137,8 +159,8 @@ const QuoteManagement = () => {
   const columns = [
     {
       title: '报价单号',
-      dataIndex: 'id',
-      key: 'id',
+      dataIndex: 'quote_number',
+      key: 'quote_number',
       width: 160,
       render: (text) => <Button type="link" onClick={() => handleView(text)}>{text}</Button>
     },
@@ -197,11 +219,11 @@ const QuoteManagement = () => {
       fixed: 'right',
       render: (_, record) => (
         <Space size="small">
-          <Button 
-            type="link" 
+          <Button
+            type="link"
             size="small"
-            icon={<EyeOutlined />} 
-            onClick={() => handleView(record.id)}
+            icon={<EyeOutlined />}
+            onClick={() => handleView(record.quote_number)}
           >
             查看
           </Button>
@@ -235,9 +257,44 @@ const QuoteManagement = () => {
     navigate(`/quote-detail/${id}`);
   };
 
-  const handleEdit = (record) => {
-    message.info(`编辑报价单 ${record.id}`);
-    // 根据类型导航到对应的编辑页面
+  const handleEdit = async (record) => {
+    // 根据报价类型跳转到对应的编辑页面（支持中英文类型）
+    const quoteTypeToPath = {
+      'inquiry': '/inquiry-quote',
+      '询价报价': '/inquiry-quote',
+      'tooling': '/tooling-quote',
+      '工装夹具报价': '/tooling-quote',
+      'engineering': '/engineering-quote',
+      '工程报价': '/engineering-quote',
+      'mass_production': '/mass-production-quote',
+      '量产报价': '/mass-production-quote',
+      'process': '/process-quote',
+      '工序报价': '/process-quote',
+      'comprehensive': '/comprehensive-quote',
+      '综合报价': '/comprehensive-quote'
+    };
+
+    const editPath = quoteTypeToPath[record.quote_type];
+    if (editPath) {
+      try {
+        // 获取完整的报价单详情数据（包含items字段）
+        const fullQuoteData = await QuoteApiService.getQuoteDetailById(record.quoteId);
+
+        // 传递完整的报价单数据到编辑页面
+        navigate(editPath, {
+          state: {
+            editingQuote: fullQuoteData, // 使用完整的数据
+            isEditing: true,
+            quoteId: record.quoteId // 使用实际的数据库ID
+          }
+        });
+      } catch (error) {
+        console.error('获取报价单详情失败:', error);
+        message.error('获取报价单详情失败，请稍后重试');
+      }
+    } else {
+      message.error(`未知的报价类型：${record.quote_type}，无法编辑`);
+    }
   };
 
   const handleDelete = (record) => {
@@ -267,7 +324,7 @@ const QuoteManagement = () => {
         key: 'view',
         label: '查看',
         icon: <EyeOutlined />,
-        onClick: () => handleView(record.id)
+        onClick: () => handleView(record.quote_number)
       }
     ];
 
@@ -317,16 +374,16 @@ const QuoteManagement = () => {
               marginBottom: '8px'
             }}>
               <div style={{ flex: 1 }}>
-                <div style={{ 
-                  fontSize: '16px', 
-                  fontWeight: 'bold', 
+                <div style={{
+                  fontSize: '16px',
+                  fontWeight: 'bold',
                   color: '#1890ff',
                   marginBottom: '4px'
                 }}>
-                  {item.id}
+                  {item.quote_number}
                 </div>
-                <div style={{ 
-                  fontSize: '14px', 
+                <div style={{
+                  fontSize: '14px',
                   color: '#333',
                   marginBottom: '4px',
                   wordBreak: 'break-all'
@@ -832,6 +889,100 @@ const QuoteManagement = () => {
 
     // 量产工序报价使用表格显示，分CP和FT两类
     if (record.type === '量产工序报价' || record.type === '工序报价' || record.quote_type === 'process') {
+      // 解析工序配置，从configuration JSON中提取UPH和机时费率
+      const parseProcessItem = (item) => {
+        let uph = null;
+        let hourlyRate = null;
+
+        if (item.configuration) {
+          try {
+            const config = typeof item.configuration === 'string'
+              ? JSON.parse(item.configuration)
+              : item.configuration;
+
+            // 提取UPH
+            uph = config.uph || null;
+
+            // 辅助函数：计算设备的板卡费用
+            const calculateDeviceCost = (deviceConfig) => {
+              if (!deviceConfig || !deviceConfig.cards || deviceConfig.cards.length === 0) {
+                return 0;
+              }
+
+              const machine = machines.find(m => m.id === deviceConfig.id);
+              if (!machine) {
+                return 0;
+              }
+
+              let deviceCost = 0;
+              deviceConfig.cards.forEach(cardInfo => {
+                const card = cardTypes.find(c => c.id === cardInfo.id);
+                if (card && cardInfo.quantity > 0) {
+                  // 板卡单价 / 10000
+                  let adjustedPrice = (card.unit_price || 0) / 10000;
+
+                  // 汇率转换
+                  if (record.currency === 'USD') {
+                    if (machine.currency === 'CNY' || machine.currency === 'RMB') {
+                      adjustedPrice = adjustedPrice / (record.exchange_rate || 7.2);
+                    }
+                  } else {
+                    if (!machine.exchange_rate) {
+                      console.error(`设备 ${machine.name} 缺少 exchange_rate`);
+                      return;
+                    }
+                    adjustedPrice = adjustedPrice * machine.exchange_rate;
+                  }
+
+                  // 应用折扣率和数量
+                  if (!machine.discount_rate) {
+                    console.error(`设备 ${machine.name} 缺少 discount_rate`);
+                    return;
+                  }
+                  const hourlyCost = adjustedPrice * machine.discount_rate * (cardInfo.quantity || 1);
+                  deviceCost += hourlyCost;
+                }
+              });
+
+              return deviceCost;
+            };
+
+            // 计算机时费率（基于所选板卡）
+            if (machines.length > 0 && cardTypes.length > 0) {
+              let totalHourlyCost = 0;
+
+              // 计算测试机费用
+              if (config.test_machine) {
+                totalHourlyCost += calculateDeviceCost(config.test_machine);
+              }
+
+              // 计算探针台费用（CP工序）
+              if (config.prober) {
+                totalHourlyCost += calculateDeviceCost(config.prober);
+              }
+
+              // 计算分选机费用（FT工序）
+              if (config.handler) {
+                totalHourlyCost += calculateDeviceCost(config.handler);
+              }
+
+              if (totalHourlyCost > 0) {
+                const currencySymbol = record.currency === 'USD' ? '$' : '¥';
+                hourlyRate = `${currencySymbol}${totalHourlyCost.toFixed(2)}/小时`;
+              }
+            }
+          } catch (e) {
+            console.warn('无法解析工序配置:', e);
+          }
+        }
+
+        return {
+          ...item,
+          uph: uph,
+          hourly_rate: hourlyRate || '-'
+        };
+      };
+
       const processDetailColumns = [
         {
           title: '工序名称',
@@ -855,7 +1006,7 @@ const QuoteManagement = () => {
           title: '机时费率',
           dataIndex: 'hourly_rate',
           key: 'hourly_rate',
-          render: (rate) => rate || '¥0.00/小时'
+          render: (rate) => rate || '-'
         },
         {
           title: 'UPH',
@@ -871,20 +1022,24 @@ const QuoteManagement = () => {
         }
       ];
 
-      // 分离CP和FT工序
-      const cpProcesses = record.quoteDetails.filter(item => {
-        const name = item.item_name || '';
-        const description = item.item_description || '';
-        const machineType = item.machine_type || '';
-        return name.includes('CP') || description.includes('CP') || machineType.includes('CP');
-      });
+      // 分离CP和FT工序，并解析配置
+      const cpProcesses = record.quoteDetails
+        .filter(item => {
+          const name = item.item_name || '';
+          const description = item.item_description || '';
+          const machineType = item.machine_type || '';
+          return name.includes('CP') || description.includes('CP') || machineType.includes('CP');
+        })
+        .map(parseProcessItem);
 
-      const ftProcesses = record.quoteDetails.filter(item => {
-        const name = item.item_name || '';
-        const description = item.item_description || '';
-        const machineType = item.machine_type || '';
-        return name.includes('FT') || description.includes('FT') || machineType.includes('FT');
-      });
+      const ftProcesses = record.quoteDetails
+        .filter(item => {
+          const name = item.item_name || '';
+          const description = item.item_description || '';
+          const machineType = item.machine_type || '';
+          return name.includes('FT') || description.includes('FT') || machineType.includes('FT');
+        })
+        .map(parseProcessItem);
 
       return (
         <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
