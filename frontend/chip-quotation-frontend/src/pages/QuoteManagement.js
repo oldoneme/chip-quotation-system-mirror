@@ -219,11 +219,11 @@ const QuoteManagement = () => {
       fixed: 'right',
       render: (_, record) => (
         <Space size="small">
-          <Button 
-            type="link" 
+          <Button
+            type="link"
             size="small"
-            icon={<EyeOutlined />} 
-            onClick={() => handleView(record.id)}
+            icon={<EyeOutlined />}
+            onClick={() => handleView(record.quote_number)}
           >
             查看
           </Button>
@@ -324,7 +324,7 @@ const QuoteManagement = () => {
         key: 'view',
         label: '查看',
         icon: <EyeOutlined />,
-        onClick: () => handleView(record.id)
+        onClick: () => handleView(record.quote_number)
       }
     ];
 
@@ -374,16 +374,16 @@ const QuoteManagement = () => {
               marginBottom: '8px'
             }}>
               <div style={{ flex: 1 }}>
-                <div style={{ 
-                  fontSize: '16px', 
-                  fontWeight: 'bold', 
+                <div style={{
+                  fontSize: '16px',
+                  fontWeight: 'bold',
                   color: '#1890ff',
                   marginBottom: '4px'
                 }}>
-                  {item.id}
+                  {item.quote_number}
                 </div>
-                <div style={{ 
-                  fontSize: '14px', 
+                <div style={{
+                  fontSize: '14px',
                   color: '#333',
                   marginBottom: '4px',
                   wordBreak: 'break-all'
