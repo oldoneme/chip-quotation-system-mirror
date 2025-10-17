@@ -222,11 +222,11 @@ async def wecom_security_check():
         },
         "status_mapping": {
             "1": "pending (审批中)",
-            "2": "approved (已通过)", 
+            "2": "approved (已通过)",
             "3": "rejected (已拒绝)",
             "4": "cancelled (已取消)"
         },
-        "configuration": "https://wecom-dev.chipinfos.com.cn/wecom/callback"
+        "configuration": f"{runtime_settings.WECOM_BASE_URL}/wecom/callback"
     }
 
 @app.get("/test-route")

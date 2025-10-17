@@ -93,7 +93,7 @@ const QuoteTypeSelection = () => {
 
       {/* 第二阶段：待合作阶段机时报价 */}
       <div className="quote-section">
-        <h2 className="section-title">⚡ 机时报价</h2>
+        <h2 className="section-title">⚡ 测试硬件和机时报价</h2>
         <p className="stage-description">项目确定，详细技术方案和成本评估</p>
         <div className="quote-type-cards">
           {/* 工装夹具报价卡片 */}

@@ -20,7 +20,8 @@ from ..schemas import Quote as QuoteSchema
 from ..wecom_auth import AuthService
 from .weasyprint_pdf_service import weasyprint_pdf_service
 
-SNAP_BASE = "https://wecom-dev.chipinfos.com.cn"
+# 从配置读取前端基础URL，而不是硬编码
+SNAP_BASE = settings.FRONTEND_BASE_URL.rstrip('/')
 LOGGER = logging.getLogger("app.snapshot.frontend")
 
 
@@ -72,12 +73,15 @@ def generate_quote_pdf(
                 "X-Snapshot-Client": "playwright-service",
             },
         )
+        # 从SNAP_BASE提取域名（去掉https://前缀）
+        cookie_domain = SNAP_BASE.replace("https://", "").replace("http://", "")
+
         context.add_cookies(
             [
                 {
                     "name": "admin_token",
                     "value": token,
-                    "domain": "wecom-dev.chipinfos.com.cn",
+                    "domain": cookie_domain,
                     "path": "/",
                     "secure": True,
                     "httpOnly": False,
@@ -86,7 +90,7 @@ def generate_quote_pdf(
                 {
                     "name": "session_token",
                     "value": session_token,
-                    "domain": "wecom-dev.chipinfos.com.cn",
+                    "domain": cookie_domain,
                     "path": "/",
                     "secure": True,
                     "httpOnly": False,
@@ -95,7 +99,7 @@ def generate_quote_pdf(
                 {
                     "name": "auth_token",
                     "value": token,
-                    "domain": "wecom-dev.chipinfos.com.cn",
+                    "domain": cookie_domain,
                     "path": "/",
                     "secure": True,
                     "httpOnly": False,
