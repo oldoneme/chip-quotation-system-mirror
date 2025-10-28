@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ....database import get_db
 from ....services.export_service import ExportService
 from ....services.simple_export_service import SimpleExportService
-from ....auth import get_current_user
+from ....auth_routes import get_current_user
 from ....models import User
 
 router = APIRouter(prefix="/export", tags=["导出功能"])

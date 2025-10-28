@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from ....database import get_db
 from ....services.wecom_approval_service import WeComApprovalService, WeComApprovalCallbackHandler
 from ....services.wecom_integration import WeComApprovalIntegration
-from ....auth import get_current_user
+from ....auth_routes import get_current_user
 from ....models import User
 
 # 请求数据模型

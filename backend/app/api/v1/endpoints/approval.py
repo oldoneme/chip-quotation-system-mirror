@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from ....database import get_db
-from ....auth import get_current_user
+from ....auth_routes import get_current_user
 from ....models import User
 from ....services.unified_approval_service import UnifiedApprovalService
 

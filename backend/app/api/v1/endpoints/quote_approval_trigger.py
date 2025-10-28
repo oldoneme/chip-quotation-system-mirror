@@ -12,7 +12,7 @@ from pathlib import Path
 from ....database import get_db
 from ....services.wecom_integration import WeComApprovalIntegration
 from ....services.quote_service import QuoteService, PDFGenerationInProgress
-from ....auth import get_current_user
+from ....auth_routes import get_current_user
 from ....models import User, Quote
 
 router = APIRouter(prefix="/quote-approval", tags=["报价审批触发"])

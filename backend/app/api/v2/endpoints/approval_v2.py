@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from ....database import get_db
-from ....auth import get_current_user
+from ....auth_routes import get_current_user
 from ....models import User, Quote, ApprovalRecord
 from ....services.approval_engine import (
     UnifiedApprovalEngine,

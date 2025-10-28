@@ -233,7 +233,7 @@ def require_admin_or_super_admin_auth(request: Request):
 
     # 如果没有管理员token，检查企业微信认证
     try:
-        from ....auth import get_current_user
+        from ....auth_routes import get_current_user
         current_user = get_current_user(request)
         if current_user and current_user.role in ['admin', 'super_admin']:
             return {"type": "wecom", "user": current_user}

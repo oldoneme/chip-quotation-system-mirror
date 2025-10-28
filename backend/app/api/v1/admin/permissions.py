@@ -6,7 +6,7 @@ from fastapi import HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from typing import Optional
 
-from ....auth import get_current_user
+from ....auth_routes import get_current_user
 from ....database import get_db
 from ....models import User
 

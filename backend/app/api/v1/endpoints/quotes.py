@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, selectinload
 
-from ....auth import get_current_user
+from ....auth_routes import get_current_user
 from ....database import get_db, SessionLocal
 from ....models import User, Quote as QuoteModel
 from ....schemas import (
