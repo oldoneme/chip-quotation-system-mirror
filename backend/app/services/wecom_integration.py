@@ -356,29 +356,35 @@ class WeComApprovalIntegration:
         # 先提交SQLAlchemy的更改
         self.db.commit()
         
-        # 保存审批实例映射（用于回调时查找）- 在SQLAlchemy提交后进行
+        # 保存审批实例映射（仅SQLite需要，用于开发环境兼容）
         import sqlite3
         from sqlalchemy.engine.url import make_url
 
         db_url = make_url(settings.DATABASE_URL)
-        db_path = db_url.database if db_url.drivername.startswith('sqlite') else None
-        if db_path and not os.path.isabs(db_path):
-            db_path = os.path.join(os.getcwd(), db_path)
+        # 如果是SQLite数据库，保存审批实例映射
+        if db_url.drivername.startswith('sqlite'):
+            db_path = db_url.database
+            if db_path and not os.path.isabs(db_path):
+                db_path = os.path.join(os.getcwd(), db_path)
 
-        if not db_path:
-            raise HTTPException(status_code=500, detail="仅支持SQLite数据库的审批实例映射存储")
-
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                INSERT OR REPLACE INTO approval_instance 
-                (quotation_id, sp_no, third_no, status) 
-                VALUES (?, ?, ?, ?)
-            """, (quote.id, result["sp_no"], str(quote.id), "pending"))
-            conn.commit()
-        finally:
-            conn.close()
+            if db_path:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO approval_instance
+                        (quotation_id, sp_no, third_no, status)
+                        VALUES (?, ?, ?, ?)
+                    """, (quote.id, result["sp_no"], str(quote.id), "pending"))
+                    conn.commit()
+                except Exception as e:
+                    # SQLite表不存在时忽略错误（不影响主流程）
+                    self.logger.warning(f"保存审批实例映射失败（可忽略）: {e}")
+                finally:
+                    conn.close()
+        else:
+            # PostgreSQL等其他数据库不需要approval_instance表
+            self.logger.info(f"PostgreSQL环境，跳过approval_instance表操作")
         
         return {
             "success": True,
