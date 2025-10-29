@@ -214,7 +214,9 @@ const QuoteDetail = () => {
       setQuote(formattedQuote);
 
       // 设置页面标题为报价单号，便于PDF识别
-      document.title = `${formattedQuote.id} - ${formattedQuote.title || '报价单'}`;
+      const newTitle = `${formattedQuote.id} - ${formattedQuote.title || '报价单'}`;
+      console.log('🏷️ 设置页面标题:', newTitle);
+      document.title = newTitle;
     } catch (error) {
       console.error('❌ 获取报价单详情失败:', error);
       
@@ -346,7 +348,9 @@ const QuoteDetail = () => {
   const handleDownload = () => {
     // 注意：不传columns参数以避免414 URI Too Long错误
     // 后端columns参数是Optional，不传会使用默认配置
-    const pdfUrl = `/api/v1/quotes/${quote.quoteId || quote.id}/pdf?download=true`;
+    // 添加时间戳参数防止浏览器缓存
+    const timestamp = quote.updatedAt ? new Date(quote.updatedAt).getTime() : Date.now();
+    const pdfUrl = `/api/v1/quotes/${quote.quoteId || quote.id}/pdf?download=true&t=${timestamp}`;
     const link = document.createElement('a');
     link.href = pdfUrl;
     link.download = `${quote.id}_报价单.pdf`;
@@ -362,12 +366,15 @@ const QuoteDetail = () => {
 
     // 注意：不传columns参数以避免414 URI Too Long错误
     // 后端columns参数是Optional，不传会使用默认配置
-    const pdfUrl = `/quotes/${quoteIdentifier}/pdf?download=false`;
+    // 添加时间戳参数防止浏览器缓存
+    const timestamp = quote.updatedAt ? new Date(quote.updatedAt).getTime() : Date.now();
+    const pdfUrl = `/quotes/${quoteIdentifier}/pdf?download=false&t=${timestamp}`;
 
     console.log('=== PDF预览调试信息 ===');
     console.log('quote.id (报价单号):', quote.id);
     console.log('quote.quoteId (数字ID):', quote.quoteId);
     console.log('使用的标识符:', quoteIdentifier);
+    console.log('时间戳参数:', timestamp);
     console.log('API请求URL (会加上baseURL /api/v1):', pdfUrl);
 
     try {
@@ -386,15 +393,18 @@ const QuoteDetail = () => {
           content: 'PDF正在生成中，请稍后再试',
           okText: '确定',
           onOk: async () => {
-            // 用户点击确定后，再次检查PDF状态
+            // 用户点击确定后，再次检查PDF状态（使用新的时间戳）
             try {
-              const retryCheckResponse = await api.get(pdfUrl, {
+              const retryTimestamp = Date.now();
+              const retryUrl = `/quotes/${quoteIdentifier}/pdf?download=false&t=${retryTimestamp}`;
+
+              const retryCheckResponse = await api.get(retryUrl, {
                 validateStatus: (status) => status === 200 || status === 202
               });
 
               if (retryCheckResponse.status === 200) {
                 // PDF已经生成，重新获取blob并打开
-                const blobResponse = await api.get(pdfUrl, {
+                const blobResponse = await api.get(retryUrl, {
                   responseType: 'blob'
                 });
 

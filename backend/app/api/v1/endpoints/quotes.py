@@ -1057,6 +1057,10 @@ async def get_quote_pdf(
         encoded = url_quote(f"{quote.quote_number}_报价单.pdf")
         headers = {
             "Content-Disposition": f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
+            # 添加防缓存响应头，确保浏览器不会缓存旧版本PDF
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
         }
 
         return FileResponse(
