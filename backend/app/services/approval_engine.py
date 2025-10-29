@@ -1043,6 +1043,8 @@ class UnifiedApprovalEngine:
         """清除PDF缓存，下次访问时会自动重新生成"""
         try:
             from ..models import QuotePDFCache
+            from pathlib import Path
+            import os
 
             # 删除PDF缓存记录（会在execute_operation中统一commit）
             pdf_cache = self.db.query(QuotePDFCache).filter(
@@ -1050,8 +1052,28 @@ class UnifiedApprovalEngine:
             ).first()
 
             if pdf_cache:
+                # 删除物理文件
+                pdf_path = Path(pdf_cache.pdf_path)
+                if not pdf_path.is_absolute():
+                    # 相对路径，需要加上backend目录
+                    pdf_path = Path(__file__).parent.parent.parent / pdf_path
+
+                if pdf_path.exists():
+                    try:
+                        pdf_path.unlink()
+                        self.logger.info(f"PDF物理文件已删除: {pdf_path}")
+
+                        # 同时删除PNG文件（如果存在）
+                        png_path = pdf_path.with_suffix('.png')
+                        if png_path.exists():
+                            png_path.unlink()
+                            self.logger.info(f"PNG文件已删除: {png_path}")
+                    except Exception as file_error:
+                        self.logger.warning(f"删除PDF物理文件失败: {file_error}")
+
+                # 删除数据库记录
                 self.db.delete(pdf_cache)
-                self.logger.info(f"PDF缓存已标记删除: 报价单{quote_id}, 路径{pdf_cache.pdf_path}")
+                self.logger.info(f"PDF缓存记录已标记删除: 报价单{quote_id}")
             else:
                 self.logger.debug(f"报价单{quote_id}无PDF缓存记录，无需清除")
 
