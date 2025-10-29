@@ -276,6 +276,15 @@ class UnifiedApprovalEngine:
                 # 7. 发布事件
                 self._publish_operation_event(operation, result)
 
+                # 8. 刷新PDF缓存（批准/拒绝后PDF需要显示最新状态）
+                if operation.action in [ApprovalAction.APPROVE, ApprovalAction.REJECT]:
+                    try:
+                        self._invalidate_pdf_cache(operation.quote_id)
+                        self.logger.info(f"已清除PDF缓存: 报价单 {operation.quote_id}")
+                    except Exception as pdf_error:
+                        # PDF缓存清除失败不应影响审批结果
+                        self.logger.error(f"PDF缓存清除失败: {pdf_error}")
+
             return result
 
         except Exception as e:
@@ -1024,3 +1033,24 @@ class UnifiedApprovalEngine:
                 self.logger.warning(f"企业微信通知发送失败: 报价单{quote_id}, 类型{notification_type}")
         except Exception as e:
             self.logger.error(f"企业微信通知发送异常: {e}")
+
+    def _invalidate_pdf_cache(self, quote_id: int):
+        """清除PDF缓存，下次访问时会自动重新生成"""
+        try:
+            from ..models import QuotePDFCache
+
+            # 删除PDF缓存记录
+            pdf_cache = self.db.query(QuotePDFCache).filter(
+                QuotePDFCache.quote_id == quote_id
+            ).first()
+
+            if pdf_cache:
+                self.db.delete(pdf_cache)
+                self.db.flush()
+                self.logger.info(f"PDF缓存已删除: 报价单{quote_id}, 路径{pdf_cache.pdf_path}")
+            else:
+                self.logger.debug(f"报价单{quote_id}无PDF缓存记录，无需清除")
+
+        except Exception as e:
+            self.logger.error(f"清除PDF缓存失败: 报价单{quote_id}, 错误: {e}")
+            raise
