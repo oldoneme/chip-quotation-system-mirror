@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from playwright.sync_api import sync_playwright
+from pypdf import PdfReader, PdfWriter
 
 from ..auth import create_user_token
 from ..config import settings
@@ -180,6 +181,24 @@ def generate_quote_pdf(
             format="A4",
             prefer_css_page_size=True,
         )
+
+        # 添加PDF元数据（Title等信息）
+        try:
+            reader = PdfReader(out_pdf)
+            writer = PdfWriter()
+            for page_obj in reader.pages:
+                writer.add_page(page_obj)
+            writer.add_metadata({
+                '/Title': f'{quote_no} PDF快照',
+                '/Author': 'Chip Quotation System',
+                '/Subject': f'报价单 {quote_no}',
+                '/Creator': 'Playwright + pypdf'
+            })
+            with open(out_pdf, 'wb') as f:
+                writer.write(f)
+            LOGGER.info(f"PDF元数据已添加: {quote_no}")
+        except Exception as e:
+            LOGGER.warning(f"添加PDF元数据失败: {e}")
 
         context.close()
         browser.close()

@@ -13,3 +13,4 @@ passlib[bcrypt]
 python-jose[cryptography]
 xmltodict
 playwright
+pypdf>=3.0.0
