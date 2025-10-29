@@ -988,70 +988,96 @@ async def get_quote_pdf(
 ):
     """获取报价单PDF，优先使用前端快照缓存，必要时兜底WeasyPrint"""
     logger = logging.getLogger("app.api.quotes")
-    try:
-        column_configs = None
-        if columns:
-            try:
-                column_configs = json.loads(columns)
-            except json.JSONDecodeError:
-                logger.warning("invalid_column_config", extra={"quote_identifier": quote_id})
 
-        base_query = db.query(QuoteModel).options(
-            selectinload(QuoteModel.items),
-            selectinload(QuoteModel.creator),
-            selectinload(QuoteModel.pdf_cache),
-        )
+    # 添加重试逻辑：最多重试5次，每次等待2秒
+    max_retries = 5
+    retry_delay = 2  # 秒
 
-        quote = None
-        # 简单判断是否为数字ID或UUID
-        if quote_id.isdigit():
-            quote = base_query.filter(QuoteModel.id == int(quote_id), QuoteModel.is_deleted == False).first()
-        else:
-            from uuid import UUID
-            try:
-                UUID(quote_id)
-                quote = base_query.filter(QuoteModel.uuid == quote_id, QuoteModel.is_deleted == False).first()
-            except (ValueError, AttributeError):
-                quote = base_query.filter(QuoteModel.quote_number == quote_id, QuoteModel.is_deleted == False).first()
-
-        if not quote:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报价单不存在")
-
-        if (quote.created_by != current_user.id and current_user.role not in ['admin', 'super_admin']):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限访问此报价单")
-
-        service = QuoteService(db)
+    for attempt in range(max_retries):
         try:
-            cache = await asyncio.to_thread(
-                service.ensure_pdf_cache, quote, current_user, False, column_configs, True, False
+            column_configs = None
+            if columns:
+                try:
+                    column_configs = json.loads(columns)
+                except json.JSONDecodeError:
+                    logger.warning("invalid_column_config", extra={"quote_identifier": quote_id})
+
+            base_query = db.query(QuoteModel).options(
+                selectinload(QuoteModel.items),
+                selectinload(QuoteModel.creator),
+                selectinload(QuoteModel.pdf_cache),
             )
-        except PDFGenerationInProgress:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="PDF生成中，请稍后再试")
-        pdf_path = Path(cache.pdf_path)
-        if not pdf_path.is_absolute():
-            pdf_path = Path(pdf_path)
-        if not pdf_path.exists():
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="PDF生成中，请稍后再试")
 
-        filename = f"{quote.quote_number}_quote.pdf"
-        disposition = "attachment" if download else "inline"
-        from urllib.parse import quote as url_quote
-        encoded = url_quote(f"{quote.quote_number}_报价单.pdf")
-        headers = {
-            "Content-Disposition": f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
-        }
+            quote = None
+            # 简单判断是否为数字ID或UUID
+            if quote_id.isdigit():
+                quote = base_query.filter(QuoteModel.id == int(quote_id), QuoteModel.is_deleted == False).first()
+            else:
+                from uuid import UUID
+                try:
+                    UUID(quote_id)
+                    quote = base_query.filter(QuoteModel.uuid == quote_id, QuoteModel.is_deleted == False).first()
+                except (ValueError, AttributeError):
+                    quote = base_query.filter(QuoteModel.quote_number == quote_id, QuoteModel.is_deleted == False).first()
 
-        return FileResponse(
-            path=str(pdf_path),
-            media_type="application/pdf",
-            filename=filename,
-            headers=headers,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:  # pragma: no cover
-        logger.exception("get_quote_pdf_failed", extra={"error": str(exc), "quote_id": quote_id})
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"PDF生成失败: {str(exc)}"
-        )
+            if not quote:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报价单不存在")
+
+            if (quote.created_by != current_user.id and current_user.role not in ['admin', 'super_admin']):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限访问此报价单")
+
+            service = QuoteService(db)
+            try:
+                cache = await asyncio.to_thread(
+                    service.ensure_pdf_cache, quote, current_user, False, column_configs, True, False
+                )
+            except PDFGenerationInProgress:
+                # 如果是最后一次尝试，返回错误
+                if attempt == max_retries - 1:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="PDF生成超时，请稍后再试"
+                    )
+                # 否则等待后重试
+                logger.info(f"PDF生成中，等待{retry_delay}秒后重试 (尝试 {attempt + 1}/{max_retries})", extra={"quote_id": quote_id})
+                await asyncio.sleep(retry_delay)
+                continue  # 重试
+
+            pdf_path = Path(cache.pdf_path)
+            if not pdf_path.is_absolute():
+                pdf_path = Path(pdf_path)
+            if not pdf_path.exists():
+                # 如果是最后一次尝试，返回错误
+                if attempt == max_retries - 1:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="PDF文件不存在，请稍后再试"
+                    )
+                # 否则等待后重试
+                logger.info(f"PDF文件未就绪，等待{retry_delay}秒后重试 (尝试 {attempt + 1}/{max_retries})", extra={"quote_id": quote_id})
+                await asyncio.sleep(retry_delay)
+                continue  # 重试
+
+            # 成功获取PDF，返回文件
+            filename = f"{quote.quote_number}_quote.pdf"
+            disposition = "attachment" if download else "inline"
+            from urllib.parse import quote as url_quote
+            encoded = url_quote(f"{quote.quote_number}_报价单.pdf")
+            headers = {
+                "Content-Disposition": f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
+            }
+
+            return FileResponse(
+                path=str(pdf_path),
+                media_type="application/pdf",
+                filename=filename,
+                headers=headers,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:  # pragma: no cover
+            logger.exception("get_quote_pdf_failed", extra={"error": str(exc), "quote_id": quote_id})
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"PDF生成失败: {str(exc)}"
+            )
