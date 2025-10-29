@@ -355,13 +355,64 @@ const QuoteDetail = () => {
     message.success('PDF下载已开始');
   };
 
-  const handlePreview = () => {
+  const handlePreview = async () => {
     // 获取列配置并传递给PDF生成
     const columnConfig = getColumnsForPDF(quote.type, quote.items);
     const configParam = encodeURIComponent(JSON.stringify(columnConfig));
 
-    // 直接在新标签页打开PDF文件
-    window.open(`/api/v1/quotes/${quote.id}/pdf?download=false&columns=${configParam}`, '_blank');
+    const pdfUrl = `/api/v1/quotes/${quote.id}/pdf?download=false&columns=${configParam}`;
+
+    try {
+      const response = await api.get(pdfUrl, {
+        responseType: 'blob',
+        validateStatus: (status) => status === 200 || status === 202
+      });
+
+      if (response.status === 202) {
+        // PDF正在生成，显示弹窗
+        Modal.info({
+          title: 'PDF生成中',
+          content: 'PDF正在生成中，请稍后再试',
+          okText: '确定',
+          onOk: async () => {
+            // 用户点击确定后，再次检查PDF状态
+            try {
+              const retryResponse = await api.get(pdfUrl, {
+                responseType: 'blob',
+                validateStatus: (status) => status === 200 || status === 202
+              });
+
+              if (retryResponse.status === 200) {
+                // PDF已经生成，打开新窗口
+                const blob = new Blob([retryResponse.data], { type: 'application/pdf' });
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+
+                // 清理URL对象
+                setTimeout(() => window.URL.revokeObjectURL(url), 100);
+              } else if (retryResponse.status === 202) {
+                // 还是没有生成，不做任何操作（用户需要手动再次点击预览）
+                message.info('PDF仍在生成中，请稍后再次点击预览');
+              }
+            } catch (error) {
+              console.error('重试获取PDF失败:', error);
+              message.error('获取PDF失败，请稍后再试');
+            }
+          }
+        });
+      } else if (response.status === 200) {
+        // PDF已生成，直接打开
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+
+        // 清理URL对象
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      }
+    } catch (error) {
+      console.error('预览PDF失败:', error);
+      message.error('预览PDF失败，请稍后再试');
+    }
   };
 
   const handleSubmitApproval = () => {
