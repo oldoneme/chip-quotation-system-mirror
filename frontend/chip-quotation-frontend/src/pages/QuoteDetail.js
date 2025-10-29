@@ -345,7 +345,8 @@ const QuoteDetail = () => {
     const columnConfig = getColumnsForPDF(quote.type, quote.items);
     const configParam = encodeURIComponent(JSON.stringify(columnConfig));
 
-    const pdfUrl = `/api/v1/quotes/${quote.quoteId}/pdf?download=true&columns=${configParam}`;
+    // 注意：api.js的baseURL已经是/api/v1，所以这里只需要/quotes/...
+    const pdfUrl = `/api/v1/quotes/${quote.quoteId || quote.id}/pdf?download=true&columns=${configParam}`;
     const link = document.createElement('a');
     link.href = pdfUrl;
     link.download = `${quote.id}_报价单.pdf`;
@@ -360,7 +361,16 @@ const QuoteDetail = () => {
     const columnConfig = getColumnsForPDF(quote.type, quote.items);
     const configParam = encodeURIComponent(JSON.stringify(columnConfig));
 
-    const pdfUrl = `/api/v1/quotes/${quote.quoteId}/pdf?download=false&columns=${configParam}`;
+    // 使用报价单号或数字ID（后端支持报价单号、数字ID和UUID）
+    const quoteIdentifier = quote.quoteId || quote.id;
+    // 注意：axios api的baseURL已经是/api/v1，所以这里只用/quotes/...
+    const pdfUrl = `/quotes/${quoteIdentifier}/pdf?download=false&columns=${configParam}`;
+
+    console.log('=== PDF预览调试信息 ===');
+    console.log('quote.id (报价单号):', quote.id);
+    console.log('quote.quoteId (数字ID):', quote.quoteId);
+    console.log('使用的标识符:', quoteIdentifier);
+    console.log('API请求URL (会加上baseURL /api/v1):', pdfUrl);
 
     try {
       // 第一步：先发送请求检查状态，不设置responseType
