@@ -341,12 +341,9 @@ const QuoteDetail = () => {
   };
 
   const handleDownload = () => {
-    // 获取列配置并传递给PDF生成
-    const columnConfig = getColumnsForPDF(quote.type, quote.items);
-    const configParam = encodeURIComponent(JSON.stringify(columnConfig));
-
-    // 注意：api.js的baseURL已经是/api/v1，所以这里只需要/quotes/...
-    const pdfUrl = `/api/v1/quotes/${quote.quoteId || quote.id}/pdf?download=true&columns=${configParam}`;
+    // 注意：不传columns参数以避免414 URI Too Long错误
+    // 后端columns参数是Optional，不传会使用默认配置
+    const pdfUrl = `/api/v1/quotes/${quote.quoteId || quote.id}/pdf?download=true`;
     const link = document.createElement('a');
     link.href = pdfUrl;
     link.download = `${quote.id}_报价单.pdf`;
@@ -357,14 +354,12 @@ const QuoteDetail = () => {
   };
 
   const handlePreview = async () => {
-    // 获取列配置并传递给PDF生成
-    const columnConfig = getColumnsForPDF(quote.type, quote.items);
-    const configParam = encodeURIComponent(JSON.stringify(columnConfig));
-
     // 使用报价单号或数字ID（后端支持报价单号、数字ID和UUID）
     const quoteIdentifier = quote.quoteId || quote.id;
-    // 注意：axios api的baseURL已经是/api/v1，所以这里只用/quotes/...
-    const pdfUrl = `/quotes/${quoteIdentifier}/pdf?download=false&columns=${configParam}`;
+
+    // 注意：不传columns参数以避免414 URI Too Long错误
+    // 后端columns参数是Optional，不传会使用默认配置
+    const pdfUrl = `/quotes/${quoteIdentifier}/pdf?download=false`;
 
     console.log('=== PDF预览调试信息 ===');
     console.log('quote.id (报价单号):', quote.id);
