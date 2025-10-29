@@ -169,6 +169,10 @@ def generate_quote_pdf(
             )
 
         Path(out_png).parent.mkdir(parents=True, exist_ok=True)
+
+        # 设置PDF标题为报价单号
+        page.evaluate(f"document.title = '{quote_no} PDF快照'")
+
         page.screenshot(path=out_png, full_page=True)
         page.pdf(
             path=out_pdf,
