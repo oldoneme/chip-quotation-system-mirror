@@ -285,10 +285,15 @@ class UnifiedApprovalEngine:
                         # PDF缓存清除失败不应影响审批结果
                         self.logger.error(f"PDF缓存清除失败: {pdf_error}")
 
+                # 9. 提交所有更改到数据库
+                self.db.commit()
+
             return result
 
         except Exception as e:
             self.logger.error(f"审批操作执行失败: {e}")
+            # 回滚所有未提交的更改
+            self.db.rollback()
             return ApprovalResult(
                 success=False,
                 message=f"操作失败: {str(e)}",
@@ -1039,15 +1044,14 @@ class UnifiedApprovalEngine:
         try:
             from ..models import QuotePDFCache
 
-            # 删除PDF缓存记录
+            # 删除PDF缓存记录（会在execute_operation中统一commit）
             pdf_cache = self.db.query(QuotePDFCache).filter(
                 QuotePDFCache.quote_id == quote_id
             ).first()
 
             if pdf_cache:
                 self.db.delete(pdf_cache)
-                self.db.flush()
-                self.logger.info(f"PDF缓存已删除: 报价单{quote_id}, 路径{pdf_cache.pdf_path}")
+                self.logger.info(f"PDF缓存已标记删除: 报价单{quote_id}, 路径{pdf_cache.pdf_path}")
             else:
                 self.logger.debug(f"报价单{quote_id}无PDF缓存记录，无需清除")
 
