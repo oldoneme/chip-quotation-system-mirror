@@ -97,6 +97,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.dev
+.env.prod
 .venv
 env/
 venv/
@@ -165,3 +167,7 @@ backend/*.db
 backend/pdf_cache/
 backend/media/
 media/
+
+# Environment-specific data directories
+backend/data/dev/
+backend/data/prod/
