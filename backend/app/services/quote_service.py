@@ -485,25 +485,43 @@ class QuoteService:
         """获取报价单列表"""
         # 构建基础查询
         base_filters = [Quote.is_deleted == False]  # 默认过滤软删除数据
-        
+
         # 应用筛选条件
         if filter_params.status:
             base_filters.append(Quote.status == filter_params.status)
-        
+
         if filter_params.quote_type:
             base_filters.append(Quote.quote_type == filter_params.quote_type)
-        
+
         if filter_params.customer_name:
             base_filters.append(Quote.customer_name.contains(filter_params.customer_name))
-        
+
         if filter_params.created_by:
             base_filters.append(Quote.created_by == filter_params.created_by)
         elif user_id:
-            # 如果没有指定创建人且提供了用户ID，则只显示该用户的报价单
-            # 管理员可以看到所有报价单
+            # 权限过滤：用户只能看到自己和比自己权限更低的用户创建的报价单
+            # 权限等级定义（从高到低）
+            role_hierarchy = {
+                'super_admin': 4,
+                'admin': 3,
+                'manager': 2,
+                'user': 1
+            }
+
             user = self.db.query(User).filter(User.id == user_id).first()
-            if user and user.role not in ['admin', 'super_admin']:
-                base_filters.append(Quote.created_by == user_id)
+            if user:
+                current_role_level = role_hierarchy.get(user.role, 0)
+
+                # 查询所有权限等级小于等于当前用户的用户ID
+                allowed_user_ids = [user_id]  # 包括自己
+                all_users = self.db.query(User).filter(User.is_deleted == False).all()
+                for u in all_users:
+                    u_role_level = role_hierarchy.get(u.role, 0)
+                    if u_role_level <= current_role_level and u.id != user_id:
+                        allowed_user_ids.append(u.id)
+
+                # 过滤报价单：只显示允许的用户创建的报价单
+                base_filters.append(Quote.created_by.in_(allowed_user_ids))
         
         if filter_params.date_from:
             base_filters.append(Quote.created_at >= filter_params.date_from)
