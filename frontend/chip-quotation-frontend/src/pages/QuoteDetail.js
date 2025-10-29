@@ -210,8 +210,11 @@ const QuoteDetail = () => {
           hourlyRate: item.hourly_rate
         })) || []
       };
-      
+
       setQuote(formattedQuote);
+
+      // 设置页面标题为报价单号，便于PDF识别
+      document.title = `${formattedQuote.id} - ${formattedQuote.title || '报价单'}`;
     } catch (error) {
       console.error('❌ 获取报价单详情失败:', error);
       
