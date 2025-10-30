@@ -177,16 +177,44 @@ async def get_quotes(
 
 @router.get("/test", response_model=dict)
 async def get_quotes_test(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """测试端点 - 直接返回报价单列表"""
+    """测试端点 - 返回报价单列表（带权限过滤）"""
     try:
         from ....models import Quote, User, QuoteItem
-        from sqlalchemy import desc
+        from sqlalchemy import desc, and_
         from sqlalchemy.orm import selectinload
-        
-        # 获取所有未删除的报价单，按创建时间倒序排列，并关联用户信息和报价项目
-        quotes = db.query(Quote).filter(Quote.is_deleted == False).options(
+
+        # 权限过滤：用户只能看到自己和比自己权限更低的用户创建的报价单
+        role_hierarchy = {
+            'super_admin': 4,
+            'admin': 3,
+            'manager': 2,
+            'user': 1
+        }
+
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if not user:
+            return {"items": [], "total": 0, "page": 1, "size": 0}
+
+        current_role_level = role_hierarchy.get(user.role, 0)
+
+        # 查询所有权限等级小于等于当前用户的用户ID
+        allowed_user_ids = [current_user.id]  # 包括自己
+        all_users = db.query(User).filter(User.is_active == True).all()
+        for u in all_users:
+            u_role_level = role_hierarchy.get(u.role, 0)
+            if u_role_level <= current_role_level and u.id != current_user.id:
+                allowed_user_ids.append(u.id)
+
+        # 获取允许查看的报价单
+        quotes = db.query(Quote).filter(
+            and_(
+                Quote.is_deleted == False,
+                Quote.created_by.in_(allowed_user_ids)
+            )
+        ).options(
             selectinload(Quote.items)
         ).join(User, Quote.created_by == User.id, isouter=True).order_by(desc(Quote.created_at)).all()
         

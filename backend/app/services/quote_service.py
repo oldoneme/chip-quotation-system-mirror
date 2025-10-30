@@ -514,7 +514,7 @@ class QuoteService:
 
                 # 查询所有权限等级小于等于当前用户的用户ID
                 allowed_user_ids = [user_id]  # 包括自己
-                all_users = self.db.query(User).filter(User.is_deleted == False).all()
+                all_users = self.db.query(User).filter(User.is_active == True).all()
                 for u in all_users:
                     u_role_level = role_hierarchy.get(u.role, 0)
                     if u_role_level <= current_role_level and u.id != user_id:
