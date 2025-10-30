@@ -712,22 +712,52 @@ class QuoteService:
         return quote
 
     def get_quote_statistics(self, user_id: Optional[int] = None) -> QuoteStatistics:
-        """获取报价单统计信息"""
-        query = self.db.query(Quote).filter(Quote.is_deleted == False)
+        """获取报价单统计信息（基于审批流程的权限控制）"""
+        from sqlalchemy import and_, or_
 
-        # 非管理员只能看到自己创建的报价单统计
+        base_filters = [Quote.is_deleted == False]
+
         if user_id:
+            # 基于审批流程的权限控制
             user = self.db.query(User).filter(User.id == user_id).first()
-            if user and user.role not in ['admin', 'super_admin']:
-                query = query.filter(Quote.created_by == user_id)
-        
-        # 简单统计各状态数量
+            if user:
+                # 超级管理员可以看到所有报价单
+                if user.role == 'super_admin':
+                    pass  # 不添加额外过滤条件
+                else:
+                    # 构建权限过滤条件（使用OR逻辑）
+                    permission_filters = [
+                        Quote.created_by == user_id,  # 1. 自己创建的所有报价单
+                    ]
+
+                    # manager和admin可以看到指定自己为审批人且已提交审批的报价单
+                    if user.role in ['manager', 'admin']:
+                        permission_filters.append(
+                            and_(
+                                Quote.current_approver_id == user_id,
+                                Quote.approval_status.in_(['pending', 'approved', 'rejected'])
+                            )
+                        )
+
+                    # admin还可以看到所有已完成审批的报价单（用于统计）
+                    if user.role == 'admin':
+                        permission_filters.append(
+                            Quote.approval_status.in_(['approved', 'rejected'])
+                        )
+
+                    # 使用OR条件组合所有权限过滤
+                    base_filters.append(or_(*permission_filters))
+
+        # 应用权限过滤构建查询
+        query = self.db.query(Quote).filter(and_(*base_filters))
+
+        # 统计各状态数量
         total = query.count()
         draft = query.filter(Quote.status == 'draft').count()
         pending = query.filter(Quote.status == 'pending').count()
         approved = query.filter(Quote.status == 'approved').count()
         rejected = query.filter(Quote.status == 'rejected').count()
-        
+
         return QuoteStatistics(
             total=total,
             draft=draft,

@@ -497,13 +497,13 @@ async def get_quote_detail_test(
 
 @router.get("/statistics", response_model=QuoteStatistics)
 async def get_quote_statistics(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """获取报价单统计信息"""
+    """获取报价单统计信息（基于当前用户权限）"""
     try:
         service = QuoteService(db)
-        # 暂时不使用用户过滤，返回全部统计
-        return service.get_quote_statistics(user_id=None)
+        return service.get_quote_statistics(user_id=current_user.id if current_user else None)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
