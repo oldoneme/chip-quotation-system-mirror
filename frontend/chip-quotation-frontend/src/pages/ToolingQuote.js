@@ -62,28 +62,27 @@ const ToolingQuote = () => {
     fixture: {
       label: '测试夹具',
       types: [
-        { value: 'load_board', label: '负载板', basePrice: 8000 },
-        { value: 'dib_board', label: 'DIB板', basePrice: 6000 },
+        { value: 'loadboard', label: '测试载板', basePrice: 8000 },
         { value: 'socket', label: '测试座', basePrice: 3000 },
-        { value: 'contactor', label: '探针卡', basePrice: 15000 }
+        { value: 'prober card', label: '探针卡', basePrice: 15000 }
       ]
     },
     hardware: {
       label: '硬件设备',
       types: [
-        { value: 'handler_kit', label: '分选机套件', basePrice: 12000 },
-        { value: 'test_head', label: '测试头', basePrice: 25000 },
-        { value: 'interface_board', label: '接口板', basePrice: 4000 },
-        { value: 'calibration_kit', label: '校准套件', basePrice: 8000 }
+        { value: 'change kit', label: '分选机套件', basePrice: 12000 },
+        { value: 'test head', label: '测试头', basePrice: 25000 },
+        { value: 'interface board', label: '接口板', basePrice: 4000 },
+        { value: 'calibration kit', label: '校准套件', basePrice: 8000 }
       ]
     },
     consumables: {
       label: '耗材配件',
       types: [
-        { value: 'probe_needles', label: '探针', basePrice: 500 },
+        { value: 'probe needles', label: '探针', basePrice: 500 },
         { value: 'connector', label: '连接器', basePrice: 200 },
         { value: 'cable', label: '电缆', basePrice: 300 },
-        { value: 'spare_parts', label: '备用配件', basePrice: 1000 }
+        { value: 'spare parts', label: '备用配件', basePrice: 1000 }
       ]
     }
   });
