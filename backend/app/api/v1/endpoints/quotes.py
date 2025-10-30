@@ -200,12 +200,12 @@ async def get_quotes_test(
 
         current_role_level = role_hierarchy.get(user.role, 0)
 
-        # 查询所有权限等级小于等于当前用户的用户ID
+        # 查询所有权限等级严格小于当前用户的用户ID
         allowed_user_ids = [current_user.id]  # 包括自己
         all_users = db.query(User).filter(User.is_active == True).all()
         for u in all_users:
             u_role_level = role_hierarchy.get(u.role, 0)
-            if u_role_level <= current_role_level and u.id != current_user.id:
+            if u_role_level < current_role_level and u.id != current_user.id:  # 改为严格小于，同级用户不能互相看到
                 allowed_user_ids.append(u.id)
 
         # 获取允许查看的报价单

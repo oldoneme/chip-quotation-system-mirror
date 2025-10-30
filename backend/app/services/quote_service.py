@@ -512,12 +512,12 @@ class QuoteService:
             if user:
                 current_role_level = role_hierarchy.get(user.role, 0)
 
-                # 查询所有权限等级小于等于当前用户的用户ID
+                # 查询所有权限等级严格小于当前用户的用户ID
                 allowed_user_ids = [user_id]  # 包括自己
                 all_users = self.db.query(User).filter(User.is_active == True).all()
                 for u in all_users:
                     u_role_level = role_hierarchy.get(u.role, 0)
-                    if u_role_level <= current_role_level and u.id != user_id:
+                    if u_role_level < current_role_level and u.id != user_id:  # 改为严格小于，同级用户不能互相看到
                         allowed_user_ids.append(u.id)
 
                 # 过滤报价单：只显示允许的用户创建的报价单
