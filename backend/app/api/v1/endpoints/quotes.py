@@ -183,37 +183,47 @@ async def get_quotes_test(
     """测试端点 - 返回报价单列表（带权限过滤）"""
     try:
         from ....models import Quote, User, QuoteItem
-        from sqlalchemy import desc, and_
+        from sqlalchemy import desc, and_, or_
         from sqlalchemy.orm import selectinload
 
-        # 权限过滤：用户只能看到自己和比自己权限更低的用户创建的报价单
-        role_hierarchy = {
-            'super_admin': 4,
-            'admin': 3,
-            'manager': 2,
-            'user': 1
-        }
-
+        # 基于审批流程的权限控制
         user = db.query(User).filter(User.id == current_user.id).first()
         if not user:
             return {"items": [], "total": 0, "page": 1, "size": 0}
 
-        current_role_level = role_hierarchy.get(user.role, 0)
+        # 构建权限过滤条件
+        base_filters = [Quote.is_deleted == False]
 
-        # 查询所有权限等级严格小于当前用户的用户ID
-        allowed_user_ids = [current_user.id]  # 包括自己
-        all_users = db.query(User).filter(User.is_active == True).all()
-        for u in all_users:
-            u_role_level = role_hierarchy.get(u.role, 0)
-            if u_role_level < current_role_level and u.id != current_user.id:  # 改为严格小于，同级用户不能互相看到
-                allowed_user_ids.append(u.id)
+        # 超级管理员可以看到所有报价单
+        if user.role == 'super_admin':
+            pass  # 不添加额外过滤条件
+        else:
+            # 构建权限过滤条件（使用OR逻辑）
+            permission_filters = [
+                Quote.created_by == current_user.id,  # 1. 自己创建的所有报价单
+            ]
+
+            # manager和admin可以看到指定自己为审批人且已提交审批的报价单
+            if user.role in ['manager', 'admin']:
+                permission_filters.append(
+                    and_(
+                        Quote.current_approver_id == current_user.id,
+                        Quote.approval_status.in_(['pending', 'approved', 'rejected'])
+                    )
+                )
+
+            # admin还可以看到所有已完成审批的报价单（用于统计）
+            if user.role == 'admin':
+                permission_filters.append(
+                    Quote.approval_status.in_(['approved', 'rejected'])
+                )
+
+            # 使用OR条件组合所有权限过滤
+            base_filters.append(or_(*permission_filters))
 
         # 获取允许查看的报价单
         quotes = db.query(Quote).filter(
-            and_(
-                Quote.is_deleted == False,
-                Quote.created_by.in_(allowed_user_ids)
-            )
+            and_(*base_filters)
         ).options(
             selectinload(Quote.items)
         ).join(User, Quote.created_by == User.id, isouter=True).order_by(desc(Quote.created_at)).all()

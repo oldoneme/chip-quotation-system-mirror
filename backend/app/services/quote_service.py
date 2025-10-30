@@ -499,29 +499,35 @@ class QuoteService:
         if filter_params.created_by:
             base_filters.append(Quote.created_by == filter_params.created_by)
         elif user_id:
-            # 权限过滤：用户只能看到自己和比自己权限更低的用户创建的报价单
-            # 权限等级定义（从高到低）
-            role_hierarchy = {
-                'super_admin': 4,
-                'admin': 3,
-                'manager': 2,
-                'user': 1
-            }
-
+            # 基于审批流程的权限控制
             user = self.db.query(User).filter(User.id == user_id).first()
             if user:
-                current_role_level = role_hierarchy.get(user.role, 0)
+                # 超级管理员可以看到所有报价单
+                if user.role == 'super_admin':
+                    pass  # 不添加额外过滤条件
+                else:
+                    # 构建权限过滤条件（使用OR逻辑）
+                    permission_filters = [
+                        Quote.created_by == user_id,  # 1. 自己创建的所有报价单
+                    ]
 
-                # 查询所有权限等级严格小于当前用户的用户ID
-                allowed_user_ids = [user_id]  # 包括自己
-                all_users = self.db.query(User).filter(User.is_active == True).all()
-                for u in all_users:
-                    u_role_level = role_hierarchy.get(u.role, 0)
-                    if u_role_level < current_role_level and u.id != user_id:  # 改为严格小于，同级用户不能互相看到
-                        allowed_user_ids.append(u.id)
+                    # manager和admin可以看到指定自己为审批人且已提交审批的报价单
+                    if user.role in ['manager', 'admin']:
+                        permission_filters.append(
+                            and_(
+                                Quote.current_approver_id == user_id,
+                                Quote.approval_status.in_(['pending', 'approved', 'rejected'])
+                            )
+                        )
 
-                # 过滤报价单：只显示允许的用户创建的报价单
-                base_filters.append(Quote.created_by.in_(allowed_user_ids))
+                    # admin还可以看到所有已完成审批的报价单（用于统计）
+                    if user.role == 'admin':
+                        permission_filters.append(
+                            Quote.approval_status.in_(['approved', 'rejected'])
+                        )
+
+                    # 使用OR条件组合所有权限过滤
+                    base_filters.append(or_(*permission_filters))
         
         if filter_params.date_from:
             base_filters.append(Quote.created_at >= filter_params.date_from)
