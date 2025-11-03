@@ -56,9 +56,35 @@ def get_all_users(
 ):
     """获取所有用户列表 - 管理员及以上"""
     require_admin_permission()(current_user)
-    
+
     users = crud.get_users(db, skip=skip, limit=limit)
     return users
+
+
+@router.get("/stats")
+def get_user_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取用户统计信息 - 管理员及以上"""
+    require_admin_permission()(current_user)
+
+    # 统计各角色用户数量
+    total_users = db.query(User).filter(User.is_active == True).count()
+    super_admin_count = db.query(User).filter(User.role == 'super_admin', User.is_active == True).count()
+    admin_count = db.query(User).filter(User.role == 'admin', User.is_active == True).count()
+    manager_count = db.query(User).filter(User.role == 'manager', User.is_active == True).count()
+    user_count = db.query(User).filter(User.role == 'user', User.is_active == True).count()
+    inactive_count = db.query(User).filter(User.is_active == False).count()
+
+    return {
+        "total": total_users,
+        "super_admin": super_admin_count,
+        "admin": admin_count,
+        "manager": manager_count,
+        "user": user_count,
+        "inactive": inactive_count
+    }
 
 
 @router.get("/{user_id}", response_model=schemas.User)
@@ -164,32 +190,6 @@ def get_user_quotations(
     
     quotations = crud.get_user_quotations(db, user_id=user_id, skip=skip, limit=limit)
     return quotations
-
-
-@router.get("/stats")
-def get_user_stats(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """获取用户统计信息 - 管理员及以上"""
-    require_admin_permission()(current_user)
-
-    # 统计各角色用户数量
-    total_users = db.query(User).filter(User.is_active == True).count()
-    super_admin_count = db.query(User).filter(User.role == 'super_admin', User.is_active == True).count()
-    admin_count = db.query(User).filter(User.role == 'admin', User.is_active == True).count()
-    manager_count = db.query(User).filter(User.role == 'manager', User.is_active == True).count()
-    user_count = db.query(User).filter(User.role == 'user', User.is_active == True).count()
-    inactive_count = db.query(User).filter(User.is_active == False).count()
-
-    return {
-        "total": total_users,
-        "super_admin": super_admin_count,
-        "admin": admin_count,
-        "manager": manager_count,
-        "user": user_count,
-        "inactive": inactive_count
-    }
 
 
 @router.put("/{user_id}/role")
