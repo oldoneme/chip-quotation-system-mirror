@@ -164,3 +164,77 @@ def get_user_quotations(
     
     quotations = crud.get_user_quotations(db, user_id=user_id, skip=skip, limit=limit)
     return quotations
+
+
+@router.get("/stats")
+def get_user_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取用户统计信息 - 管理员及以上"""
+    require_admin_permission()(current_user)
+
+    # 统计各角色用户数量
+    total_users = db.query(User).filter(User.is_active == True).count()
+    super_admin_count = db.query(User).filter(User.role == 'super_admin', User.is_active == True).count()
+    admin_count = db.query(User).filter(User.role == 'admin', User.is_active == True).count()
+    manager_count = db.query(User).filter(User.role == 'manager', User.is_active == True).count()
+    user_count = db.query(User).filter(User.role == 'user', User.is_active == True).count()
+    inactive_count = db.query(User).filter(User.is_active == False).count()
+
+    return {
+        "total": total_users,
+        "super_admin": super_admin_count,
+        "admin": admin_count,
+        "manager": manager_count,
+        "user": user_count,
+        "inactive": inactive_count
+    }
+
+
+@router.put("/{user_id}/role")
+def update_user_role(
+    user_id: int,
+    new_role: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """更新用户角色 - 超级管理员"""
+    # 只有超级管理员可以修改用户角色
+    if current_user.role != 'super_admin':
+        raise HTTPException(status_code=403, detail="只有超级管理员可以修改用户角色")
+
+    user = crud.get_user(db, user_id=user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 验证新角色是否有效
+    valid_roles = ['user', 'manager', 'admin', 'super_admin']
+    if new_role not in valid_roles:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {valid_roles}")
+
+    # 防止超级管理员修改自己的角色
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot modify your own role")
+
+    # 更新角色
+    old_role = user.role
+    user.role = new_role
+    db.commit()
+    db.refresh(user)
+
+    # 记录操作日志
+    crud.log_operation(
+        db,
+        user_id=current_user.id,
+        operation="user_role_change",
+        details=f"Changed user {user.name}({user.userid}) role from {old_role} to {new_role}"
+    )
+
+    return {
+        "success": True,
+        "message": f"用户角色已更新为 {new_role}",
+        "user_id": user_id,
+        "old_role": old_role,
+        "new_role": new_role
+    }

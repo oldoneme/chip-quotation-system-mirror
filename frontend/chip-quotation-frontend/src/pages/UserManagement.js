@@ -71,7 +71,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/users/', {
+      const response = await fetch('/api/v1/users/', {
         credentials: 'include'
       });
       
@@ -92,7 +92,7 @@ const UserManagement = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/users/stats', {
+      const response = await fetch('/api/v1/users/stats', {
         credentials: 'include'
       });
       
@@ -118,7 +118,7 @@ const UserManagement = () => {
     }
 
     try {
-      const response = await fetch(`/api/users/${selectedUser.id}/role`, {
+      const response = await fetch(`/api/v1/users/${selectedUser.id}/role`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -146,7 +146,7 @@ const UserManagement = () => {
 
   const handleStatusChange = async (userId, isActive) => {
     try {
-      const response = await fetch(`/api/users/${userId}/status`, {
+      const response = await fetch(`/api/v1/users/${userId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
