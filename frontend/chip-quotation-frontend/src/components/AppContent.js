@@ -23,6 +23,7 @@ import QuoteManagement from '../pages/QuoteManagement';
 import QuoteDetail from '../pages/QuoteDetail';
 import ApprovalWorkflow from '../pages/ApprovalWorkflow';
 import WeComApprovalPage from '../pages/WeComApprovalPage';
+import UserManagement from '../pages/UserManagement';
 import DebugPanel from './DebugPanel';
 
 const { Header, Content, Footer } = Layout;
@@ -77,6 +78,7 @@ const AppContent = () => {
                 <Route path="/database-management" element={<DatabaseManagement />} />
                 <Route path="/hierarchical-database-management" element={<HierarchicalDatabaseManagement />} />
                 <Route path="/admin/database-quote-management" element={<DatabaseQuoteManagement />} />
+                <Route path="/user-management" element={<UserManagement />} />
               </Routes>
             </ErrorBoundary>
           </div>

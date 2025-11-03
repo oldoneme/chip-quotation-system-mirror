@@ -81,35 +81,46 @@ const Navigation = () => {
     
     // 只有管理员和超级管理员能看到管理功能
     if (user?.role === 'admin' || user?.role === 'super_admin') {
+      const managementChildren = [
+        {
+          key: '/approval-workflow',
+          label: '审批工作流',
+        },
+        {
+          key: '/analytics',
+          icon: <BarChartOutlined />,
+          label: '数据分析',
+        },
+        {
+          key: '/version-control',
+          label: '版本管理',
+        },
+        {
+          key: '/hierarchical-database-management',
+          icon: <DatabaseOutlined />,
+          label: '设备数据库管理',
+        },
+        {
+          key: '/admin/database-quote-management',
+          icon: <UnorderedListOutlined />,
+          label: '报价单数据库管理',
+        },
+      ];
+
+      // 只有超级管理员能看到用户管理
+      if (user?.role === 'super_admin') {
+        managementChildren.push({
+          key: '/user-management',
+          icon: <UserOutlined />,
+          label: '用户管理',
+        });
+      }
+
       items.push({
         key: 'management',
         icon: <SettingOutlined />,
         label: '系统管理',
-        children: [
-          {
-            key: '/approval-workflow',
-            label: '审批工作流',
-          },
-          {
-            key: '/analytics',
-            icon: <BarChartOutlined />,
-            label: '数据分析',
-          },
-          {
-            key: '/version-control',
-            label: '版本管理',
-          },
-          {
-            key: '/hierarchical-database-management',
-            icon: <DatabaseOutlined />,
-            label: '设备数据库管理',
-          },
-          {
-            key: '/admin/database-quote-management',
-            icon: <UnorderedListOutlined />,
-            label: '报价单数据库管理',
-          },
-        ],
+        children: managementChildren,
       });
     }
     
