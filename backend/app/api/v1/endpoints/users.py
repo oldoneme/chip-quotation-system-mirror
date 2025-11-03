@@ -78,12 +78,14 @@ def get_user_stats(
     inactive_count = db.query(User).filter(User.is_active == False).count()
 
     return {
-        "total": total_users,
-        "super_admin": super_admin_count,
-        "admin": admin_count,
-        "manager": manager_count,
-        "user": user_count,
-        "inactive": inactive_count
+        "total_users": total_users,
+        "role_distribution": {
+            "super_admin": super_admin_count,
+            "admin": admin_count,
+            "manager": manager_count,
+            "user": user_count
+        },
+        "inactive_count": inactive_count
     }
 
 
