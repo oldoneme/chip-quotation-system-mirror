@@ -2,9 +2,10 @@
 
 // 用户角色定义
 export const USER_ROLES = {
-  ADMIN: 'admin',      // 管理员 - 完全访问权限
-  MANAGER: 'manager',  // 销售管理 - 业务管理权限  
-  USER: 'user'         // 普通用户 - 业务操作权限
+  SUPER_ADMIN: 'super_admin',  // 超级管理员 - 系统最高权限
+  ADMIN: 'admin',              // 管理员 - 完全访问权限
+  MANAGER: 'manager',          // 销售管理 - 业务管理权限
+  USER: 'user'                 // 普通用户 - 业务操作权限
 };
 
 // 权限定义
@@ -45,11 +46,16 @@ export const PERMISSIONS = {
 
 // 角色权限映射
 export const ROLE_PERMISSIONS = {
-  [USER_ROLES.ADMIN]: [
-    // 拥有所有权限 - 完全访问权限
+  [USER_ROLES.SUPER_ADMIN]: [
+    // 超级管理员拥有所有权限 - 系统最高权限
     ...Object.values(PERMISSIONS)
   ],
-  
+
+  [USER_ROLES.ADMIN]: [
+    // 管理员拥有所有权限 - 完全访问权限
+    ...Object.values(PERMISSIONS)
+  ],
+
   [USER_ROLES.MANAGER]: [
     // 所有报价功能
     PERMISSIONS.QUOTE_INQUIRY,
@@ -126,8 +132,9 @@ export const canAccessRoute = (userRole, route) => {
 
 // 角色显示名称
 export const ROLE_LABELS = {
+  [USER_ROLES.SUPER_ADMIN]: '超级管理员',
   [USER_ROLES.ADMIN]: '管理员',
-  [USER_ROLES.MANAGER]: '销售管理', 
+  [USER_ROLES.MANAGER]: '销售管理',
   [USER_ROLES.USER]: '普通用户'
 };
 
