@@ -281,6 +281,49 @@ class WecomService:
             logger.error(f"获取应用可见范围异常: {e}")
             return []
     
+    def get_app_visible_userids(self) -> List[str]:
+        """
+        获取应用可见范围的用户ID列表（不需要通讯录权限）
+        仅返回userid列表，不获取详细信息
+        """
+        token = self.get_access_token()
+        if not token:
+            return []
+
+        try:
+            # 获取应用详情，包含可见范围
+            url = f"{self.base_url}/agent/get"
+            params = {
+                "access_token": token,
+                "agentid": self.agent_id
+            }
+
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("errcode") == 0:
+                allow_userinfos = data.get("allow_userinfos", {})
+                user_list = allow_userinfos.get("user", [])
+
+                # 提取userid列表
+                userids = [user.get("userid") for user in user_list if user.get("userid")]
+
+                if userids:
+                    logger.info(f"从应用可见范围获取到{len(userids)}个用户ID")
+                    return userids
+                else:
+                    # 如果返回空列表，可能是设置为"全部成员"
+                    logger.info("应用可见范围为全部成员或未设置具体用户")
+                    return []
+            else:
+                logger.error(f"获取应用信息失败: {data}")
+                return []
+
+        except Exception as e:
+            logger.error(f"获取应用可见范围异常: {e}")
+            return []
+
     def get_visible_users(self) -> List[Dict]:
         """
         获取应用可见范围内的用户

@@ -260,93 +260,67 @@ def sync_users_from_wecom(
 
         wecom_service = WecomService()
 
-        # 从企业微信获取用户列表（尝试多种方式）
-        wecom_users = wecom_service.get_all_users()
+        # 从企业微信获取应用可见范围的用户ID列表（不需要通讯录权限）
+        wecom_userids = wecom_service.get_app_visible_userids()
 
-        if not wecom_users:
+        if not wecom_userids:
             return {
                 "success": False,
-                "message": "未能从企业微信获取用户列表。请在企业微信管理后台配置应用权限：\n"
-                          "1. 进入【应用管理】→ 选择本应用\n"
-                          "2. 点击【通讯录】权限\n"
-                          "3. 勾选【访问通讯录】和【读取成员】权限\n"
-                          "4. 保存并重新同步",
+                "message": "未能从企业微信获取应用可见范围用户。请检查：\n"
+                          "1. 企业微信管理后台 → 应用管理 → 本应用\n"
+                          "2. 查看【可见范围】是否已设置具体用户或部门\n"
+                          "3. 如果设置为'全部成员'，请改为指定具体的用户或部门",
                 "stats": {
                     "total_wecom_users": 0,
                     "added": 0,
-                    "updated": 0,
+                    "activated": 0,
                     "deactivated": 0
                 },
-                "error_code": "WECOM_PERMISSION_REQUIRED"
+                "error_code": "WECOM_NO_VISIBLE_USERS"
             }
 
         # 统计信息
         stats = {
-            "total_wecom_users": len(wecom_users),
+            "total_wecom_users": len(wecom_userids),
             "added": 0,
-            "updated": 0,
+            "activated": 0,
             "deactivated": 0
         }
 
-        # 获取企业微信中的所有userid
-        wecom_userids = {user.get('userid') for user in wecom_users if user.get('userid')}
+        # 将列表转为集合，便于查找
+        wecom_userid_set = set(wecom_userids)
 
-        # 遍历企业微信用户，新增或更新
-        for wecom_user in wecom_users:
-            userid = wecom_user.get('userid')
+        # 遍历企业微信用户ID，新增或激活
+        for userid in wecom_userids:
             if not userid:
                 continue
-
-            name = wecom_user.get('name', '')
-            mobile = wecom_user.get('mobile', '')
-            email = wecom_user.get('email', '')
-            avatar = wecom_user.get('avatar', '')
-            department = wecom_user.get('department', [])
 
             # 查找本地用户
             user = db.query(User).filter(User.userid == userid).first()
 
             if user:
-                # 更新现有用户信息
-                updated = False
-                if user.name != name:
-                    user.name = name
-                    updated = True
-                if user.mobile != mobile:
-                    user.mobile = mobile
-                    updated = True
-                if user.email != email:
-                    user.email = email
-                    updated = True
-                if user.avatar != avatar:
-                    user.avatar = avatar
-                    updated = True
-
                 # 如果用户被禁用，重新激活
                 if not user.is_active:
                     user.is_active = True
-                    updated = True
-
-                if updated:
-                    stats['updated'] += 1
+                    stats['activated'] += 1
             else:
-                # 创建新用户
+                # 创建新用户（仅保存userid，其他信息在首次登录时自动补充）
                 new_user = User(
                     userid=userid,
-                    name=name,
-                    mobile=mobile,
-                    email=email,
-                    avatar=avatar,
+                    name=userid,  # 暂时使用userid作为名称，登录时会更新
+                    mobile='',
+                    email='',
+                    avatar='',
                     role='user',  # 默认角色为普通用户
                     is_active=True
                 )
                 db.add(new_user)
                 stats['added'] += 1
 
-        # 禁用不在企业微信中的用户
+        # 禁用不在企业微信可见范围中的用户
         all_local_users = db.query(User).filter(User.is_active == True).all()
         for user in all_local_users:
-            if user.userid not in wecom_userids:
+            if user.userid not in wecom_userid_set:
                 user.is_active = False
                 stats['deactivated'] += 1
 
@@ -358,12 +332,13 @@ def sync_users_from_wecom(
             db,
             user_id=current_user.id,
             operation="user_sync_from_wecom",
-            details=f"从企业微信同步用户: 新增{stats['added']}人, 更新{stats['updated']}人, 禁用{stats['deactivated']}人"
+            details=f"从企业微信同步用户: 新增{stats['added']}人, 激活{stats['activated']}人, 禁用{stats['deactivated']}人"
         )
 
         return {
             "success": True,
-            "message": f"同步完成：新增{stats['added']}人，更新{stats['updated']}人，禁用{stats['deactivated']}人",
+            "message": f"同步完成：新增{stats['added']}人，激活{stats['activated']}人，禁用{stats['deactivated']}人\n"
+                      f"（新用户的详细信息将在首次登录时自动补充）",
             "stats": stats
         }
 
