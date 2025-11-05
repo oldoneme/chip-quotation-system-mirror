@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict
 import logging
 
 from app import crud, schemas
@@ -200,7 +200,7 @@ def get_user_quotations(
 @router.put("/{user_id}/role")
 def update_user_role(
     user_id: int,
-    new_role: str,
+    role_data: Dict = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -208,6 +208,11 @@ def update_user_role(
     # 只有超级管理员可以修改用户角色
     if current_user.role != 'super_admin':
         raise HTTPException(status_code=403, detail="只有超级管理员可以修改用户角色")
+
+    # 从请求体中获取new_role
+    new_role = role_data.get('new_role')
+    if not new_role:
+        raise HTTPException(status_code=400, detail="Missing new_role in request body")
 
     user = crud.get_user(db, user_id=user_id)
     if not user:

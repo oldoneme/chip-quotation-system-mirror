@@ -149,7 +149,7 @@ const UserManagement = () => {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
-        body: JSON.stringify(newRole)
+        body: JSON.stringify({ new_role: newRole })
       });
 
       const result = await response.json();
