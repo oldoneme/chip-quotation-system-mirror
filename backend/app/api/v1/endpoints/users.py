@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+import logging
 
 from app import crud, schemas
 from app.database import get_db
 from app.models import User
 from app.auth_routes import get_current_user
 from app.middleware.permissions import (
-    require_user_permission, 
-    require_manager_permission, 
+    require_user_permission,
+    require_manager_permission,
     require_admin_permission
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -240,3 +243,129 @@ def update_user_role(
         "old_role": old_role,
         "new_role": new_role
     }
+
+
+@router.post("/sync-from-wecom")
+def sync_users_from_wecom(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """从企业微信同步用户列表 - 仅超级管理员"""
+    # 只有超级管理员可以同步用户
+    if current_user.role != 'super_admin':
+        raise HTTPException(status_code=403, detail="只有超级管理员可以同步用户")
+
+    try:
+        from app.wecom_service import WecomService
+
+        wecom_service = WecomService()
+
+        # 从企业微信获取用户列表
+        wecom_users = wecom_service.get_visible_users()
+
+        if not wecom_users:
+            return {
+                "success": False,
+                "message": "未能从企业微信获取用户列表，请检查应用权限配置",
+                "stats": {
+                    "total_wecom_users": 0,
+                    "added": 0,
+                    "updated": 0,
+                    "deactivated": 0
+                }
+            }
+
+        # 统计信息
+        stats = {
+            "total_wecom_users": len(wecom_users),
+            "added": 0,
+            "updated": 0,
+            "deactivated": 0
+        }
+
+        # 获取企业微信中的所有userid
+        wecom_userids = {user.get('userid') for user in wecom_users if user.get('userid')}
+
+        # 遍历企业微信用户，新增或更新
+        for wecom_user in wecom_users:
+            userid = wecom_user.get('userid')
+            if not userid:
+                continue
+
+            name = wecom_user.get('name', '')
+            mobile = wecom_user.get('mobile', '')
+            email = wecom_user.get('email', '')
+            avatar = wecom_user.get('avatar', '')
+            department = wecom_user.get('department', [])
+
+            # 查找本地用户
+            user = db.query(User).filter(User.userid == userid).first()
+
+            if user:
+                # 更新现有用户信息
+                updated = False
+                if user.name != name:
+                    user.name = name
+                    updated = True
+                if user.mobile != mobile:
+                    user.mobile = mobile
+                    updated = True
+                if user.email != email:
+                    user.email = email
+                    updated = True
+                if user.avatar != avatar:
+                    user.avatar = avatar
+                    updated = True
+
+                # 如果用户被禁用，重新激活
+                if not user.is_active:
+                    user.is_active = True
+                    updated = True
+
+                if updated:
+                    stats['updated'] += 1
+            else:
+                # 创建新用户
+                new_user = User(
+                    userid=userid,
+                    name=name,
+                    mobile=mobile,
+                    email=email,
+                    avatar=avatar,
+                    role='user',  # 默认角色为普通用户
+                    is_active=True
+                )
+                db.add(new_user)
+                stats['added'] += 1
+
+        # 禁用不在企业微信中的用户
+        all_local_users = db.query(User).filter(User.is_active == True).all()
+        for user in all_local_users:
+            if user.userid not in wecom_userids:
+                user.is_active = False
+                stats['deactivated'] += 1
+
+        # 提交更改
+        db.commit()
+
+        # 记录操作日志
+        crud.log_operation(
+            db,
+            user_id=current_user.id,
+            operation="user_sync_from_wecom",
+            details=f"从企业微信同步用户: 新增{stats['added']}人, 更新{stats['updated']}人, 禁用{stats['deactivated']}人"
+        )
+
+        return {
+            "success": True,
+            "message": f"同步完成：新增{stats['added']}人，更新{stats['updated']}人，禁用{stats['deactivated']}人",
+            "stats": stats
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"从企业微信同步用户失败: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"同步用户失败: {str(e)}"
+        )

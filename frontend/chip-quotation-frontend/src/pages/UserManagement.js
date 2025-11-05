@@ -105,6 +105,31 @@ const UserManagement = () => {
     }
   };
 
+  const handleSyncFromWecom = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/v1/users/sync-from-wecom', {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        message.success(result.message);
+        // 同步成功后刷新用户列表和统计
+        fetchUsers();
+        fetchStats();
+      } else {
+        message.error(result.message || '从企业微信同步用户失败');
+      }
+    } catch (error) {
+      console.error('从企业微信同步用户失败:', error);
+      message.error('网络错误，同步用户失败');
+    }
+    setLoading(false);
+  };
+
   const handleRoleChange = (record) => {
     setSelectedUser(record);
     setNewRole(record.role);
@@ -354,12 +379,12 @@ const UserManagement = () => {
         <div className="table-header">
           <Space>
             <Button
-              onClick={fetchUsers}
+              onClick={handleSyncFromWecom}
               loading={loading}
               type="primary"
               ghost
             >
-              刷新列表
+              从企业微信同步用户
             </Button>
           </Space>
         </div>
