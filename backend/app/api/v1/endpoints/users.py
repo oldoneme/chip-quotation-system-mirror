@@ -260,19 +260,24 @@ def sync_users_from_wecom(
 
         wecom_service = WecomService()
 
-        # 从企业微信获取用户列表
-        wecom_users = wecom_service.get_visible_users()
+        # 从企业微信获取用户列表（尝试多种方式）
+        wecom_users = wecom_service.get_all_users()
 
         if not wecom_users:
             return {
                 "success": False,
-                "message": "未能从企业微信获取用户列表，请检查应用权限配置",
+                "message": "未能从企业微信获取用户列表。请在企业微信管理后台配置应用权限：\n"
+                          "1. 进入【应用管理】→ 选择本应用\n"
+                          "2. 点击【通讯录】权限\n"
+                          "3. 勾选【访问通讯录】和【读取成员】权限\n"
+                          "4. 保存并重新同步",
                 "stats": {
                     "total_wecom_users": 0,
                     "added": 0,
                     "updated": 0,
                     "deactivated": 0
-                }
+                },
+                "error_code": "WECOM_PERMISSION_REQUIRED"
             }
 
         # 统计信息
