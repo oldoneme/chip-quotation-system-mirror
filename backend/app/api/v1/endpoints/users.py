@@ -274,7 +274,7 @@ def sync_users_from_wecom(
                     "total_wecom_users": 0,
                     "added": 0,
                     "activated": 0,
-                    "deactivated": 0
+                    "deleted": 0
                 },
                 "error_code": "WECOM_NO_VISIBLE_USERS"
             }
@@ -284,7 +284,7 @@ def sync_users_from_wecom(
             "total_wecom_users": len(wecom_userids),
             "added": 0,
             "activated": 0,
-            "deactivated": 0
+            "deleted": 0
         }
 
         # 将列表转为集合，便于查找
@@ -317,12 +317,12 @@ def sync_users_from_wecom(
                 db.add(new_user)
                 stats['added'] += 1
 
-        # 禁用不在企业微信可见范围中的用户
-        all_local_users = db.query(User).filter(User.is_active == True).all()
+        # 删除不在企业微信可见范围中的用户
+        all_local_users = db.query(User).all()
         for user in all_local_users:
             if user.userid not in wecom_userid_set:
-                user.is_active = False
-                stats['deactivated'] += 1
+                db.delete(user)
+                stats['deleted'] += 1
 
         # 提交更改
         db.commit()
@@ -332,12 +332,12 @@ def sync_users_from_wecom(
             db,
             user_id=current_user.id,
             operation="user_sync_from_wecom",
-            details=f"从企业微信同步用户: 新增{stats['added']}人, 激活{stats['activated']}人, 禁用{stats['deactivated']}人"
+            details=f"从企业微信同步用户: 新增{stats['added']}人, 激活{stats['activated']}人, 删除{stats['deleted']}人"
         )
 
         return {
             "success": True,
-            "message": f"同步完成：新增{stats['added']}人，激活{stats['activated']}人，禁用{stats['deactivated']}人\n"
+            "message": f"同步完成：新增{stats['added']}人，激活{stats['activated']}人，删除{stats['deleted']}人\n"
                       f"（新用户的详细信息将在首次登录时自动补充）",
             "stats": stats
         }
