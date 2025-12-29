@@ -631,7 +631,7 @@ const QuoteManagement = () => {
                 <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
                   <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: '2fr 2fr 2fr', 
+                    gridTemplateColumns: '1.5fr 1.5fr 1fr 1fr 2fr', 
                     gap: '10px',
                     padding: '8px 12px',
                     backgroundColor: '#fafafa',
@@ -641,24 +641,36 @@ const QuoteManagement = () => {
                   }}>
                     <span>设备类型</span>
                     <span>设备型号</span>
-                    <span>小时费率</span>
+                    <span>系统报价</span>
+                    <span>调整后报价</span>
+                    <span>调整理由</span>
                   </div>
-                  {machineItems.map((item, index) => (
-                    <div key={index} style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '2fr 2fr 2fr', 
-                      gap: '10px',
-                      padding: '8px 12px',
-                      borderBottom: index < machineItems.length - 1 ? '1px solid #f0f0f0' : 'none',
-                      fontSize: '12px'
-                    }}>
-                      <span>{item.machine_type}</span>
-                      <span>{item.machine_model}</span>
-                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                        ¥{item.unit_price?.toFixed(2)}/小时
-                      </span>
-                    </div>
-                  ))}
+                  {machineItems.map((item, index) => {
+                    const hasAdjustment = item.adjusted_price !== null && item.adjusted_price !== undefined;
+                    return (
+                      <div key={index} style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '1.5fr 1.5fr 1fr 1fr 2fr', 
+                        gap: '10px',
+                        padding: '8px 12px',
+                        borderBottom: index < machineItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        fontSize: '12px',
+                        alignItems: 'center'
+                      }}>
+                        <span>{item.machine_type}</span>
+                        <span>{item.machine_model}</span>
+                        <span style={{ color: hasAdjustment ? '#999' : '#1890ff', textDecoration: hasAdjustment ? 'line-through' : 'none' }}>
+                          ¥{item.unit_price?.toFixed(2)}/小时
+                        </span>
+                        <span style={{ fontWeight: 'bold', color: hasAdjustment ? '#f5222d' : '#1890ff' }}>
+                          {hasAdjustment ? `¥${item.adjusted_price?.toFixed(2)}/小时` : '-'}
+                        </span>
+                        <span style={{ color: '#666' }}>
+                          {item.adjustment_reason || '-'}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -677,7 +689,7 @@ const QuoteManagement = () => {
                 <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
                   <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: '3fr 3fr', 
+                    gridTemplateColumns: '2fr 1fr 1fr 2fr', 
                     gap: '10px',
                     padding: '8px 12px',
                     backgroundColor: '#fafafa',
@@ -686,23 +698,35 @@ const QuoteManagement = () => {
                     fontSize: '12px'
                   }}>
                     <span>人员类别</span>
-                    <span>小时费率</span>
+                    <span>系统报价</span>
+                    <span>调整后报价</span>
+                    <span>调整理由</span>
                   </div>
-                  {personnelItems.map((item, index) => (
-                    <div key={index} style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '3fr 3fr', 
-                      gap: '10px',
-                      padding: '8px 12px',
-                      borderBottom: index < personnelItems.length - 1 ? '1px solid #f0f0f0' : 'none',
-                      fontSize: '12px'
-                    }}>
-                      <span>{item.item_name || item.machine_model}</span>
-                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                        ¥{item.unit_price?.toFixed(2)}/小时
-                      </span>
-                    </div>
-                  ))}
+                  {personnelItems.map((item, index) => {
+                    const hasAdjustment = item.adjusted_price !== null && item.adjusted_price !== undefined;
+                    return (
+                      <div key={index} style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '2fr 1fr 1fr 2fr', 
+                        gap: '10px',
+                        padding: '8px 12px',
+                        borderBottom: index < personnelItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        fontSize: '12px',
+                        alignItems: 'center'
+                      }}>
+                        <span>{item.item_name || item.machine_model}</span>
+                        <span style={{ color: hasAdjustment ? '#999' : '#1890ff', textDecoration: hasAdjustment ? 'line-through' : 'none' }}>
+                          ¥{item.unit_price?.toFixed(2)}/小时
+                        </span>
+                        <span style={{ fontWeight: 'bold', color: hasAdjustment ? '#f5222d' : '#1890ff' }}>
+                          {hasAdjustment ? `¥${item.adjusted_price?.toFixed(2)}/小时` : '-'}
+                        </span>
+                        <span style={{ color: '#666' }}>
+                          {item.adjustment_reason || '-'}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

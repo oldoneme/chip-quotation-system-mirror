@@ -851,7 +851,7 @@ const useQuoteEditMode = () => {
                 board_name: cardInfo.board_name,
                 // 使用API中的真实数据
                 unit_price: realCard ? realCard.unit_price : 0,
-                quantity: cardInfo.quantity || 1,
+                quantity: cardInfo.quantity, // 直接使用解析的 quantity
                 machine_id: machineId
               };
             });
@@ -963,7 +963,7 @@ const useQuoteEditMode = () => {
                 part_number: cardInfo.part_number,
                 board_name: cardInfo.board_name,
                 unit_price: realCard ? realCard.unit_price : 0,
-                quantity: cardInfo.quantity || 1,
+                quantity: cardInfo.quantity,
                 machine_id: machineId
               };
             });
@@ -1104,7 +1104,7 @@ const useQuoteEditMode = () => {
                 part_number: cardInfo.part_number,
                 board_name: cardInfo.board_name,
                 unit_price: realCard ? realCard.unit_price : 0,
-                quantity: cardInfo.quantity || 1,
+                quantity: cardInfo.quantity,
                 machine_id: machineId
               };
             });

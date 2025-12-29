@@ -185,6 +185,10 @@ class QuoteItem(Base):
     unit_price = Column(Float, default=0.0)  # 单价
     total_price = Column(Float, default=0.0)  # 小计
     
+    # 价格调整
+    adjusted_price = Column(Float, nullable=True)  # 调整后单价
+    adjustment_reason = Column(Text, nullable=True)  # 调整理由
+    
     # 关联信息
     machine_id = Column(Integer, ForeignKey("machines.id"))
     configuration_id = Column(Integer, ForeignKey("configurations.id"))

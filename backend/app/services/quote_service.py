@@ -135,6 +135,10 @@ class QuoteService:
             item_dict["unit_price"] = float(unit_price)
             item_dict["total_price"] = float(total_price)
 
+            # 明确包含调整价格和调整理由
+            item_dict["adjusted_price"] = item_dict.get("adjusted_price")
+            item_dict["adjustment_reason"] = item_dict.get("adjustment_reason")
+
             prepared_items.append(item_dict)
             subtotal += total_price
 

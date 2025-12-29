@@ -383,6 +383,8 @@ class QuoteItemBase(BaseModel):
     unit: str = Field("小时", description="单位")
     unit_price: float = Field(0.0, ge=0, description="单价")
     total_price: float = Field(0.0, ge=0, description="小计")
+    adjusted_price: Optional[float] = Field(None, description="调整后单价")
+    adjustment_reason: Optional[str] = Field(None, description="调整理由")
     machine_id: Optional[int] = Field(None, description="设备ID")
     configuration_id: Optional[int] = Field(None, description="配置ID")
 
@@ -398,6 +400,8 @@ class QuoteItemUpdate(QuoteItemBase):
     quantity: Optional[float] = Field(None, ge=0)
     unit_price: Optional[float] = Field(None, ge=0)
     total_price: Optional[float] = Field(None, ge=0)
+    adjusted_price: Optional[float] = Field(None)
+    adjustment_reason: Optional[str] = None
 
 
 class QuoteItem(QuoteItemBase):

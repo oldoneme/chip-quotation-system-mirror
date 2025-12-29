@@ -113,6 +113,12 @@ async def create_quote(
 ):
     """创建新报价单并生成快照PDF缓存"""
     logger = logging.getLogger("app.api.quotes")
+    # DEBUG: Log incoming quote_data payload before processing
+    try:
+        logger.info(f"DEBUG: Incoming quote_data for create_quote: {quote_data.model_dump_json(indent=2)}")
+    except Exception as e:
+        logger.error(f"Failed to log incoming quote_data: {e}")
+
     try:
         service = QuoteService(db)
         quote = service.create_quote(quote_data, current_user.id)
@@ -258,6 +264,8 @@ async def get_quotes_test(
                     "quantity": item.quantity,
                     "unit": item.unit,
                     "total_price": item.total_price,
+                    "adjusted_price": item.adjusted_price,
+                    "adjustment_reason": item.adjustment_reason,
                     "uph": uph,
                     "hourly_rate": hourly_rate
                 }
@@ -351,6 +359,8 @@ async def get_quote_detail_by_id(
                 "unit": item.unit,
                 "unit_price": item.unit_price,
                 "total_price": item.total_price,
+                "adjusted_price": item.adjusted_price,
+                "adjustment_reason": item.adjustment_reason,
                 "machine_id": item.machine_id,
                 "configuration_id": item.configuration_id,
                 "uph": uph,
@@ -446,6 +456,8 @@ async def get_quote_detail_test(
                 "unit": item.unit,
                 "unit_price": item.unit_price,
                 "total_price": item.total_price,
+                "adjusted_price": item.adjusted_price,
+                "adjustment_reason": item.adjustment_reason,
                 "machine_id": item.machine_id,
                 "configuration_id": item.configuration_id,
                 "uph": uph,

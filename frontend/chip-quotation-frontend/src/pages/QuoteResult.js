@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button, Card, Divider, message } from 'antd';
+import { Button, Card, Divider, message, Input, InputNumber, Table } from 'antd';
 import { formatQuotePrice } from '../utils';
 import '../App.css';
 
@@ -10,6 +10,130 @@ const QuoteResult = () => {
   const [quoteData, setQuoteData] = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [isQuoteConfirmed, setIsQuoteConfirmed] = useState(false);
+  const [engineeringItems, setEngineeringItems] = useState([]);
+
+  // 初始化工程报价项目
+  useEffect(() => {
+    if (quoteData && (quoteData.type === '工程报价' || quoteData.type === '工程机时报价')) {
+      // 避免重复初始化导致用户编辑丢失
+      if (engineeringItems.length > 0) return;
+
+      const items = [];
+      
+      // 辅助函数：添加项目
+      const addItem = (key, name, systemPrice, originalData = null) => {
+        if (systemPrice > 0) {
+          items.push({
+            key,
+            name,
+            systemPrice,
+            adjustedPrice: systemPrice, // 默认等于系统报价
+            reason: '',
+            originalData // 保存原始数据以便后续使用
+          });
+        }
+      };
+
+      // 1. 测试机
+      const testMachineCost = calculateTestMachineCost();
+      const testMachineModel = quoteData.testMachine?.name || '测试机';
+      const testMachineOriginal = quoteData.quoteCreateData?.items?.find(i => i.machine_type === '测试机');
+      addItem('testMachine', '测试机机时费（含工程系数）', testMachineCost, { 
+        machine_type: '测试机', 
+        machine_model: testMachineModel,
+        configuration: testMachineOriginal?.configuration 
+      });
+
+      // 2. 分选机
+      const handlerCost = calculateHandlerCost();
+      const handlerModel = quoteData.handler?.name || '分选机';
+      const handlerOriginal = quoteData.quoteCreateData?.items?.find(i => i.machine_type === '分选机');
+      addItem('handler', '分选机机时费（含工程系数）', handlerCost, { 
+        machine_type: '分选机', 
+        machine_model: handlerModel,
+        configuration: handlerOriginal?.configuration
+      });
+
+      // 3. 探针台
+      const proberCost = calculateProberCost();
+      const proberModel = quoteData.prober?.name || '探针台';
+      const proberOriginal = quoteData.quoteCreateData?.items?.find(i => i.machine_type === '探针台');
+      addItem('prober', '探针台机时费（含工程系数）', proberCost, { 
+        machine_type: '探针台', 
+        machine_model: proberModel,
+        configuration: proberOriginal?.configuration
+      });
+      
+      // 4. 辅助设备
+      if (quoteData.selectedAuxDevices && quoteData.selectedAuxDevices.length > 0) {
+        quoteData.selectedAuxDevices.forEach((device, index) => {
+          let typeName = '';
+          if (device.supplier?.machine_type?.name) {
+            typeName = device.supplier.machine_type.name;
+          } else if (device.machine_type?.name) {
+            typeName = device.machine_type.name;
+          } else if (device.type === 'handler') {
+            typeName = '分选机';
+          } else if (device.type === 'prober') {
+            typeName = '探针台';
+          } else if (device.type) {
+            typeName = device.type;
+          }
+          const name = `${device.name}${typeName ? ` (${typeName})` : ''}`;
+          // 尝试找到原始的item以获取configuration
+          const originalAuxItem = quoteData.quoteCreateData?.items?.find(i => i.item_name === device.name);
+          
+          // 确保 machine_type 存在
+          const auxData = { 
+            ...device, 
+            machine_type: typeName || '辅助设备', 
+            machine_model: device.name,
+            configuration: originalAuxItem?.configuration
+          };
+          addItem(`aux_${index}`, name, calculateSingleAuxDeviceCost(device), auxData);
+        });
+      }
+
+      // 5. 人员
+      const engineerCost = calculateEngineerCost();
+      const engineerOriginal = quoteData.quoteCreateData?.items?.find(i => i.item_name === '工程师');
+      addItem('engineer', '工程师小时费', engineerCost, { 
+        machine_type: '人员', 
+        machine_model: '工程师',
+        configuration: engineerOriginal?.configuration
+      });
+
+      const technicianCost = calculateTechnicianCost();
+      const technicianOriginal = quoteData.quoteCreateData?.items?.find(i => i.item_name === '技术员');
+      addItem('technician', '技术员小时费', technicianCost, { 
+        machine_type: '人员', 
+        machine_model: '技术员',
+        configuration: technicianOriginal?.configuration
+      });
+
+      setEngineeringItems(items);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteData]); // 依赖 quoteData 重新计算
+
+  // 处理工程报价项目修改
+  const handleEngineeringItemChange = (key, field, value) => {
+    setEngineeringItems(prev => prev.map(item => {
+      if (item.key === key) {
+        return { ...item, [field]: value };
+      }
+      return item;
+    }));
+  };
+
+  // 计算工程报价总额（使用调整后的价格）
+  const calculateEngineeringTotal = () => {
+    return engineeringItems.reduce((sum, item) => {
+      const price = item.adjustedPrice !== null && item.adjustedPrice !== undefined ? item.adjustedPrice : item.systemPrice;
+      return sum + price;
+    }, 0);
+  };
+
 
   // 货币配置
   const currencies = [
@@ -236,13 +360,74 @@ const QuoteResult = () => {
 
   // 确认报价，创建数据库记录
   const handleConfirmQuote = async () => {
-    if (!quoteData || (!quoteData.quoteCreateData && quoteData.type !== '工序报价')) {
+    if (!quoteData || (!quoteData.quoteCreateData && quoteData.type !== '工序报价' && quoteData.type !== '工程报价' && quoteData.type !== '工程机时报价')) {
       message.error('报价数据不完整，无法创建报价单');
       return;
     }
     
-    // 对于工序报价，如果没有quoteCreateData，则构建一个
     let finalQuoteData = quoteData.quoteCreateData;
+
+    // 处理工程报价
+    if (quoteData.type === '工程报价' || quoteData.type === '工程机时报价') {
+        // 验证调整理由
+        const invalidItems = engineeringItems.filter(item => {
+           // 处理 undefined/null 情况
+           const adjusted = item.adjustedPrice !== undefined && item.adjustedPrice !== null ? item.adjustedPrice : item.systemPrice;
+           return adjusted < item.systemPrice && !item.reason;
+        });
+        
+        if (invalidItems.length > 0) {
+            message.error('请填写调整价格低于系统报价的项目的调整理由');
+            return;
+        }
+
+        // 确保 finalQuoteData 存在 (EngineeringQuote.js 应该已经创建了大部分数据)
+        if (!finalQuoteData) {
+             finalQuoteData = {
+                title: quoteData.projectInfo?.projectName || '工程报价',
+                quote_type: 'engineering',
+                customer_name: quoteData.customerInfo?.companyName || '测试客户',
+                customer_contact: quoteData.customerInfo?.contactPerson || '',
+                customer_phone: quoteData.customerInfo?.phone || '',
+                customer_email: quoteData.customerInfo?.email || '',
+                quote_unit: quoteData.projectInfo?.quoteUnit || '昆山芯信安',
+                currency: quoteData.quoteCurrency || 'CNY',
+                items: []
+             };
+        }
+
+        // 使用 engineeringItems 更新 items
+        // 注意：这里我们完全重写 items，因为 engineeringItems 包含了最新的调整信息
+        finalQuoteData.items = engineeringItems.map(item => {
+            // 尝试从原始数据获取更多信息
+            const originalItem = quoteData.quoteCreateData?.items?.find(i => i.item_name === item.name);
+            const originalData = item.originalData || {};
+            
+            const adjustedPrice = item.adjustedPrice !== undefined && item.adjustedPrice !== null ? item.adjustedPrice : item.systemPrice;
+
+            return {
+                ...(originalItem || {}), // 保留原始所有字段
+                item_name: item.name,
+                quantity: 1,
+                unit: '小时',
+                unit_price: item.systemPrice, // 系统原价
+                total_price: item.systemPrice, // 系统原总价
+                adjusted_price: adjustedPrice, // 调整后价格
+                adjustment_reason: item.reason, // 调整理由
+                // 确保关键字段存在
+                machine_type: originalItem?.machine_type || originalData.machine_type || '其他',
+                machine_model: originalItem?.machine_model || originalData.machine_model || '',
+                supplier: originalItem?.supplier || originalData.supplier || '',
+                configuration: originalItem?.configuration || originalData.configuration || '',
+            };
+        });
+        
+        // 更新总价
+        finalQuoteData.total_amount = calculateEngineeringTotal();
+        finalQuoteData.subtotal = finalQuoteData.total_amount;
+    }
+    
+    // 对于工序报价，如果没有quoteCreateData，则构建一个
     if (quoteData.type === '工序报价' && !finalQuoteData) {
       finalQuoteData = {
         title: quoteData.projectInfo?.projectName || '工序报价',
@@ -396,8 +581,7 @@ const QuoteResult = () => {
           supplier: typeof item.supplier === 'object' ? (item.supplier.name || '') : (item.supplier || ''),
           unit_price: item.unit_price === null || isNaN(item.unit_price) ? 0 : item.unit_price,
           total_price: item.total_price === null || isNaN(item.total_price) ? 0 : item.total_price,
-          configuration: item.configuration || '配置',
-          item_name: item.item_name.replace('undefined', '配置')
+                        configuration: item.configuration, // 避免覆盖 EngineeringQuote.js 正确生成的 JSON          item_name: item.item_name.replace('undefined', '配置')
         }))
       };
       
@@ -566,72 +750,63 @@ const QuoteResult = () => {
         <div className="quote-result-content">
           <h3>费用明细</h3>
           {/* 显示各项费用 */}
-          {quoteData && quoteData.type === '工程报价' && (
+          {quoteData && (quoteData.type === '工程报价' || quoteData.type === '工程机时报价') && (
             <>
-              {/* 设备费用 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span>测试机机时费（含工程系数）:</span>
-                <span>{formatHourlyPrice(calculateTestMachineCost())}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span>分选机机时费（含工程系数）:</span>
-                <span>{formatHourlyPrice(calculateHandlerCost())}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span>探针台机时费（含工程系数）:</span>
-                <span>{formatHourlyPrice(calculateProberCost())}</span>
-              </div>
-              
-              {/* 辅助设备费用 */}
-              {quoteData.selectedAuxDevices && quoteData.selectedAuxDevices.length > 0 && (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span>辅助设备:</span>
-                    <span></span>
-                  </div>
-                  <div style={{ paddingLeft: 20 }}>
-                    {quoteData.selectedAuxDevices.map((device, index) => {
-                      // 获取设备类型名称
-                      let typeName = '';
-                      if (device.supplier?.machine_type?.name) {
-                        typeName = device.supplier.machine_type.name;
-                      } else if (device.machine_type?.name) {
-                        typeName = device.machine_type.name;
-                      } else if (device.type === 'handler') {
-                        typeName = '分选机';
-                      } else if (device.type === 'prober') {
-                        typeName = '探针台';
-                      } else if (device.type) {
-                        typeName = device.type;
-                      }
-                      
+              <Table
+                dataSource={engineeringItems}
+                pagination={false}
+                rowKey="key"
+                columns={[
+                  {
+                    title: '费用项目',
+                    dataIndex: 'name',
+                    key: 'name',
+                  },
+                  {
+                    title: '系统报价',
+                    dataIndex: 'systemPrice',
+                    key: 'systemPrice',
+                    render: (text) => formatHourlyPrice(text)
+                  },
+                  {
+                    title: '客户调整报价',
+                    key: 'adjustedPrice',
+                    render: (_, record) => (
+                      <InputNumber
+                        value={record.adjustedPrice}
+                        onChange={(value) => handleEngineeringItemChange(record.key, 'adjustedPrice', value)}
+                        precision={2}
+                        style={{ width: 120 }}
+                        min={0}
+                      />
+                    )
+                  },
+                  {
+                    title: '调整理由',
+                    key: 'reason',
+                    render: (_, record) => {
+                      const isLower = record.adjustedPrice < record.systemPrice;
                       return (
-                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span>
-                            {device.name}
-                            {typeName && ` (${typeName})`}
-                          </span>
-                          <span>{formatPrice(calculateSingleAuxDeviceCost(device))}</span>
-                        </div>
+                        <Input
+                          value={record.reason}
+                          onChange={(e) => handleEngineeringItemChange(record.key, 'reason', e.target.value)}
+                          placeholder={isLower ? "请输入调整理由（必填）" : "选填"}
+                          status={isLower && !record.reason ? 'error' : ''}
+                          style={{ width: '100%' }}
+                        />
                       );
-                    })}
+                    }
+                  }
+                ]}
+                footer={() => (
+                  <div style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                    报价总额: {formatHourlyPrice(calculateEngineeringTotal())}
                   </div>
-                </>
-              )}
-              
-              {/* 人员费用 */}
-              {quoteData.selectedPersonnel && quoteData.selectedPersonnel.includes('工程师') && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span>工程师小时费:</span>
-                  <span>{formatHourlyPrice(calculateEngineerCost())}</span>
-                </div>
-              )}
-              {quoteData.selectedPersonnel && quoteData.selectedPersonnel.includes('技术员') && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span>技术员小时费:</span>
-                  <span>{formatHourlyPrice(calculateTechnicianCost())}</span>
-                </div>
-              )}
+                )}
+              />
+              <div style={{ marginTop: 10, color: '#666', fontSize: '12px' }}>
+                * 如果客户调整报价低于系统报价，必须填写调整理由。
+              </div>
             </>
           )}
           

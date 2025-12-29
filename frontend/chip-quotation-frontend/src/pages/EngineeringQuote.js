@@ -415,27 +415,29 @@ const EngineeringQuote = () => {
         quantity: card.quantity || 1
       }));
 
-      items.push({
+      const testMachineItem = {
         item_name: testMachine.name,
         item_description: `机器 - 测试机`,
         machine_type: '测试机',
         supplier: typeof testMachine.supplier === 'object' ? testMachine.supplier?.name || '' : testMachine.supplier || '',
         machine_model: testMachine.name,
-        configuration: JSON.stringify({
+                configuration: JSON.stringify({
           device_type: '测试机',
           device_model: testMachine.name,
           cards: cardsInfo
-        }),
-        quantity: 1,
+        }),         quantity: 1,
         unit: '小时',
         unit_price: ceiledRate,
         total_price: ceiledRate,
         machine_id: testMachine.id
-      });
-    }
-    
-    // 分选机机时费（含工程系数）
-    if (handler && handler.name && handlerCards.length > 0) {
+      };
+
+              console.log('Generated item configuration:', JSON.stringify({        device_type: '测试机',        device_model: testMachine.name,        cards: cardsInfo      }, null, 2));
+              items.push(testMachineItem);
+            }
+            
+            // 分选机机时费（含工程系数）
+            if (handler && handler.name && handlerCards.length > 0) {
       const handlerRate = calculateHandlerFee() * engineeringRate;
       const ceiledRate = ceilByCurrency(handlerRate, quoteCurrency);
 
@@ -447,27 +449,29 @@ const EngineeringQuote = () => {
         quantity: card.quantity || 1
       }));
 
-      items.push({
+      const handlerItem = {
         item_name: handler.name,
         item_description: `机器 - 分选机`,
         machine_type: '分选机',
         supplier: typeof handler.supplier === 'object' ? handler.supplier?.name || '' : handler.supplier || '',
         machine_model: handler.name,
-        configuration: JSON.stringify({
+                configuration: JSON.stringify({
           device_type: '分选机',
           device_model: handler.name,
           cards: cardsInfo
-        }),
-        quantity: 1,
+        }),         quantity: 1,
         unit: '小时',
         unit_price: ceiledRate,
         total_price: ceiledRate,
         machine_id: handler.id
-      });
-    }
-    
-    // 探针台机时费（含工程系数）
-    if (prober && prober.name && proberCards.length > 0) {
+      };
+
+              console.log('Generated item configuration:', JSON.stringify({        device_type: '分选机',        device_model: handler.name,        cards: cardsInfo      }, null, 2));
+              items.push(handlerItem);
+            }
+            
+            // 探针台机时费（含工程系数）
+            if (prober && prober.name && proberCards.length > 0) {
       const proberRate = calculateProberFee() * engineeringRate;
       const ceiledRate = ceilByCurrency(proberRate, quoteCurrency);
 
@@ -479,27 +483,30 @@ const EngineeringQuote = () => {
         quantity: card.quantity || 1
       }));
 
-      items.push({
+      const proberItem = {
         item_name: prober.name,
         item_description: `机器 - 探针台`,
         machine_type: '探针台',
         supplier: typeof prober.supplier === 'object' ? prober.supplier?.name || '' : prober.supplier || '',
         machine_model: prober.name,
-        configuration: JSON.stringify({
+                configuration: JSON.stringify({
           device_type: '探针台',
           device_model: prober.name,
           cards: cardsInfo
-        }),
-        quantity: 1,
+        }),         quantity: 1,
         unit: '小时',
         unit_price: ceiledRate,
         total_price: ceiledRate,
         machine_id: prober.id
-      });
-    }
-    
-    // 辅助设备：直接使用页面费用明细中的费率
-    if (selectedAuxDevices && selectedAuxDevices.length > 0) {
+      };
+
+              console.log('Generated item configuration:', JSON.stringify({        device_type: '探针台',        device_model: prober.name,
+                cards: cardsInfo      }, null, 2));
+              items.push(proberItem);
+            }
+            
+            // 辅助设备：直接使用页面费用明细中的费率
+            if (selectedAuxDevices && selectedAuxDevices.length > 0) {
       selectedAuxDevices.forEach(device => {
         if (!device || !device.name) {
           console.error('无效的辅助设备数据:', device);
@@ -507,42 +514,55 @@ const EngineeringQuote = () => {
         }
         const deviceRate = calculateAuxDeviceHourlyRate(device);
         const ceiledRate = ceilByCurrency(deviceRate, quoteCurrency);
-        items.push({
+        const auxDeviceItem = {
           item_name: device.name,
           item_description: `机器 - 辅助设备`,
           machine_type: device.supplier?.machine_type?.name || '辅助设备',
           supplier: typeof device.supplier === 'object' ? device.supplier?.name || '' : device.supplier || '',
           machine_model: device.name,
-          configuration: `设备类型: 辅助设备, 设备型号: ${device.name}`,
+          configuration: JSON.stringify({
+            device_type: device.supplier?.machine_type?.name || '辅助设备',
+            device_model: device.name,
+            id: device.id
+          }),
           quantity: 1,
           unit: '小时',
           unit_price: ceiledRate,
           total_price: ceiledRate,
           machine_id: device.id
-        });
-      });
-    }
-    
-    // === 人员部分：直接使用页面费用明细中的费率 ===
+        };
 
-    if (selectedPersonnel && selectedPersonnel.length > 0) {
+        console.log('Generated item configuration:', JSON.stringify({
+          device_type: device.supplier?.machine_type?.name || '辅助设备',
+          device_model: device.name,
+          id: device.id
+        }, null, 2));
+        items.push(auxDeviceItem);
+      });
+    }    if (selectedPersonnel && selectedPersonnel.length > 0) {
       selectedPersonnel.forEach(personnelType => {
         // 直接使用页面计算函数得到的费率
         const hourlyRate = calculatePersonnelFeeForQuote(personnelType);
         const ceiledRate = ceilByCurrency(hourlyRate, quoteCurrency);
 
-        items.push({
+        const personnelItem = {
           item_name: personnelType,
           item_description: `人员 - ${personnelType}`,
           machine_type: '人员',
           supplier: '内部人员',
           machine_model: personnelType,
-          configuration: `人员类别: ${personnelType}`,
-          quantity: 1,
+                    configuration: JSON.stringify({
+            personnel_type: personnelType
+          }),           quantity: 1,
           unit: '小时',
           unit_price: ceiledRate,
           total_price: ceiledRate
-        });
+        };
+
+          console.log('Generated item configuration:', JSON.stringify({
+            personnel_type: personnelType
+          }, null, 2));
+        items.push(personnelItem);
       });
     }
     
@@ -561,16 +581,21 @@ const EngineeringQuote = () => {
       message.error('请填写项目名称');
       return;
     }
+    // 添加对芯片封装的验证
+    if (!projectInfo.chipPackage || projectInfo.chipPackage.trim() === '') {
+      message.error('请填写芯片封装信息');
+      return;
+    }
     
     const quoteItems = generateEngineeringQuoteItems();
-    
+
     const totalAmount = quoteItems.reduce((sum, item) => {
       const itemTotal = isNaN(item.total_price) || item.total_price === null ? 0 : item.total_price;
       return sum + itemTotal;
     }, 0);
-    
+
     const title = `${projectInfo.projectName.trim()} - ${customerInfo.companyName.trim()}`;
-    
+
     // 准备最终报价页面数据
     const quoteData = {
       type: '工程报价',
@@ -614,10 +639,13 @@ const EngineeringQuote = () => {
       }
     };
 
+
+    console.log("Frontend Payload:", JSON.stringify(quoteData.quoteCreateData.items, null, 2));
+    sessionStorage.setItem('debug_quote_items_payload', JSON.stringify(quoteData.quoteCreateData.items));
     sessionStorage.setItem('quoteData', JSON.stringify(quoteData));
     navigate('/quote-result');
   };
-  
+
   // 提交工程机时报价到数据库
   const handleSubmit = async () => {
     try {
@@ -634,7 +662,7 @@ const EngineeringQuote = () => {
       const title = `${projectInfo.projectName || '工程机时报价'} - ${customerInfo.companyName}`;
       
       // 构建API数据格式
-      const quoteCreateData = {
+      const quoteCreateData = { // 显式定义 quoteCreateData 局部变量
         title,
         quote_type: 'engineering',
         customer_name: customerInfo.companyName,
