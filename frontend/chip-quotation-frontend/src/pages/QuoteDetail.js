@@ -1204,7 +1204,13 @@ const QuoteDetail = () => {
             {(() => {
               const ftItems = quote.items.filter(item => 
                 item.itemDescription && item.itemDescription.includes('FT')
-              );
+              ).map(item => ({
+                ...item,
+                displayName: item.machine || item.itemName,
+                originalPrice: item.unitPrice,
+                finalPrice: (item.adjustedPrice !== undefined && item.adjustedPrice !== null) ? item.adjustedPrice : item.unitPrice,
+                isAdjusted: (item.adjustedPrice !== undefined && item.adjustedPrice !== null)
+              }));
               
               return ftItems && ftItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
@@ -1221,13 +1227,19 @@ const QuoteDetail = () => {
                           padding: '12px'
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.machine || item.itemName || '-'}</span>
-                            <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
-                              ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.displayName || '-'}</span>
+                            <span style={{ fontWeight: 'bold', color: item.isAdjusted ? '#f5222d' : '#1890ff', fontSize: '14px' }}>
+                              {item.isAdjusted ? `¥${(item.finalPrice || 0).toFixed(2)}/小时` : `¥${(item.originalPrice || 0).toFixed(2)}/小时`}
                             </span>
                           </div>
                           <div style={{ fontSize: '12px', color: '#666' }}>
-                            设备类型: {item.machineType || '-'}
+                            <div>设备类型: {item.machineType || '-'}</div>
+                            {item.isAdjusted && (
+                              <>
+                                <div>系统报价: <span style={{textDecoration: 'line-through'}}>¥{(item.originalPrice || 0).toFixed(2)}</span></div>
+                                <div style={{color: '#f5222d'}}>调整理由: {item.adjustmentReason || '-'}</div>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1239,7 +1251,7 @@ const QuoteDetail = () => {
                         fontWeight: 'bold',
                         color: '#1890ff'
                       }}>
-                        FT设备小计: ¥{ftItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
+                        FT设备小计: ¥{ftItems.reduce((sum, item) => sum + (item.finalPrice || 0), 0).toFixed(2)}/小时
                       </div>
                     </div>
                   ) : (
@@ -1247,7 +1259,7 @@ const QuoteDetail = () => {
                     <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
                       <div style={{ 
                         display: 'grid', 
-                        gridTemplateColumns: '2fr 2fr 2fr', 
+                        gridTemplateColumns: '1.5fr 1.5fr 1fr 1fr 2fr', 
                         gap: '10px',
                         padding: '8px 12px',
                         backgroundColor: '#fafafa',
@@ -1257,21 +1269,30 @@ const QuoteDetail = () => {
                       }}>
                         <span>设备类型</span>
                         <span>设备型号</span>
-                        <span>小时费率</span>
+                        <span>系统报价</span>
+                        <span>调整后报价</span>
+                        <span>调整理由</span>
                       </div>
                       {ftItems.map((item, index) => (
                         <div key={index} style={{ 
                           display: 'grid', 
-                          gridTemplateColumns: '2fr 2fr 2fr', 
+                          gridTemplateColumns: '1.5fr 1.5fr 1fr 1fr 2fr', 
                           gap: '10px',
                           padding: '8px 12px',
                           borderBottom: index < ftItems.length - 1 ? '1px solid #f0f0f0' : 'none',
-                          fontSize: '12px'
+                          fontSize: '12px',
+                          alignItems: 'center'
                         }}>
                           <span>{item.machineType || '-'}</span>
-                          <span>{item.machine || item.itemName || '-'}</span>
-                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          <span>{item.displayName || '-'}</span>
+                          <span style={{ color: item.isAdjusted ? '#888' : '#1890ff', textDecoration: item.isAdjusted ? 'line-through' : 'none', fontWeight: item.isAdjusted ? 'normal' : 'bold' }}>
+                            ¥{(item.originalPrice || 0).toFixed(2)}/小时
+                          </span>
+                          <span style={{ fontWeight: 'bold', color: item.isAdjusted ? '#f5222d' : '#1890ff' }}>
+                            {item.isAdjusted ? `¥${(item.finalPrice || 0).toFixed(2)}/小时` : '-'}
+                          </span>
+                          <span style={{ color: item.isAdjusted ? '#f5222d' : '#666' }}>
+                            {item.adjustmentReason || '-'}
                           </span>
                         </div>
                       ))}
@@ -1280,17 +1301,13 @@ const QuoteDetail = () => {
                         padding: '8px 12px',
                         backgroundColor: '#f0f9ff',
                         borderTop: '1px solid #d9d9d9',
-                        display: 'grid',
-                        gridTemplateColumns: '2fr 2fr 2fr',
-                        gap: '10px',
+                        display: 'flex',
+                        justifyContent: 'flex-end',
                         fontWeight: 'bold',
-                        fontSize: '12px'
+                        fontSize: '12px',
+                        color: '#1890ff'
                       }}>
-                        <span></span>
-                        <span>FT设备小计:</span>
-                        <span style={{ color: '#1890ff' }}>
-                          ¥{ftItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
-                        </span>
+                        FT设备小计: ¥{ftItems.reduce((sum, item) => sum + (item.finalPrice || 0), 0).toFixed(2)}/小时
                       </div>
                     </div>
                   )}
@@ -1302,7 +1319,13 @@ const QuoteDetail = () => {
             {(() => {
               const cpItems = quote.items.filter(item => 
                 item.itemDescription && item.itemDescription.includes('CP')
-              );
+              ).map(item => ({
+                ...item,
+                displayName: item.machine || item.itemName,
+                originalPrice: item.unitPrice,
+                finalPrice: (item.adjustedPrice !== undefined && item.adjustedPrice !== null) ? item.adjustedPrice : item.unitPrice,
+                isAdjusted: (item.adjustedPrice !== undefined && item.adjustedPrice !== null)
+              }));
               
               return cpItems && cpItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
@@ -1319,13 +1342,19 @@ const QuoteDetail = () => {
                           padding: '12px'
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.machine || item.itemName || '-'}</span>
-                            <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
-                              ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.displayName || '-'}</span>
+                            <span style={{ fontWeight: 'bold', color: item.isAdjusted ? '#f5222d' : '#1890ff', fontSize: '14px' }}>
+                              {item.isAdjusted ? `¥${(item.finalPrice || 0).toFixed(2)}/小时` : `¥${(item.originalPrice || 0).toFixed(2)}/小时`}
                             </span>
                           </div>
                           <div style={{ fontSize: '12px', color: '#666' }}>
-                            设备类型: {item.machineType || '-'}
+                            <div>设备类型: {item.machineType || '-'}</div>
+                            {item.isAdjusted && (
+                              <>
+                                <div>系统报价: <span style={{textDecoration: 'line-through'}}>¥{(item.originalPrice || 0).toFixed(2)}</span></div>
+                                <div style={{color: '#f5222d'}}>调整理由: {item.adjustmentReason || '-'}</div>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1337,7 +1366,7 @@ const QuoteDetail = () => {
                         fontWeight: 'bold',
                         color: '#1890ff'
                       }}>
-                        CP设备小计: ¥{cpItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
+                        CP设备小计: ¥{cpItems.reduce((sum, item) => sum + (item.finalPrice || 0), 0).toFixed(2)}/小时
                       </div>
                     </div>
                   ) : (
@@ -1345,7 +1374,7 @@ const QuoteDetail = () => {
                     <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
                       <div style={{ 
                         display: 'grid', 
-                        gridTemplateColumns: '2fr 2fr 2fr', 
+                        gridTemplateColumns: '1.5fr 1.5fr 1fr 1fr 2fr', 
                         gap: '10px',
                         padding: '8px 12px',
                         backgroundColor: '#fafafa',
@@ -1355,21 +1384,30 @@ const QuoteDetail = () => {
                       }}>
                         <span>设备类型</span>
                         <span>设备型号</span>
-                        <span>小时费率</span>
+                        <span>系统报价</span>
+                        <span>调整后报价</span>
+                        <span>调整理由</span>
                       </div>
                       {cpItems.map((item, index) => (
                         <div key={index} style={{ 
                           display: 'grid', 
-                          gridTemplateColumns: '2fr 2fr 2fr', 
+                          gridTemplateColumns: '1.5fr 1.5fr 1fr 1fr 2fr', 
                           gap: '10px',
                           padding: '8px 12px',
                           borderBottom: index < cpItems.length - 1 ? '1px solid #f0f0f0' : 'none',
-                          fontSize: '12px'
+                          fontSize: '12px',
+                          alignItems: 'center'
                         }}>
                           <span>{item.machineType || '-'}</span>
-                          <span>{item.machine || item.itemName || '-'}</span>
-                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          <span>{item.displayName || '-'}</span>
+                          <span style={{ color: item.isAdjusted ? '#888' : '#1890ff', textDecoration: item.isAdjusted ? 'line-through' : 'none', fontWeight: item.isAdjusted ? 'normal' : 'bold' }}>
+                            ¥{(item.originalPrice || 0).toFixed(2)}/小时
+                          </span>
+                          <span style={{ fontWeight: 'bold', color: item.isAdjusted ? '#f5222d' : '#1890ff' }}>
+                            {item.isAdjusted ? `¥${(item.finalPrice || 0).toFixed(2)}/小时` : '-'}
+                          </span>
+                          <span style={{ color: item.isAdjusted ? '#f5222d' : '#666' }}>
+                            {item.adjustmentReason || '-'}
                           </span>
                         </div>
                       ))}
@@ -1378,17 +1416,13 @@ const QuoteDetail = () => {
                         padding: '8px 12px',
                         backgroundColor: '#f0f9ff',
                         borderTop: '1px solid #d9d9d9',
-                        display: 'grid',
-                        gridTemplateColumns: '2fr 2fr 2fr',
-                        gap: '10px',
+                        display: 'flex',
+                        justifyContent: 'flex-end',
                         fontWeight: 'bold',
-                        fontSize: '12px'
+                        fontSize: '12px',
+                        color: '#1890ff'
                       }}>
-                        <span></span>
-                        <span>CP设备小计:</span>
-                        <span style={{ color: '#1890ff' }}>
-                          ¥{cpItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0).toFixed(2)}/小时
-                        </span>
+                        CP设备小计: ¥{cpItems.reduce((sum, item) => sum + (item.finalPrice || 0), 0).toFixed(2)}/小时
                       </div>
                     </div>
                   )}
@@ -1402,7 +1436,13 @@ const QuoteDetail = () => {
                 item.machineType === '辅助设备' || 
                 (!item.itemName?.includes('FT') && !item.itemName?.includes('CP') && 
                  item.machineType && item.machineType !== '测试机' && item.machineType !== '分选机' && item.machineType !== '探针台')
-              );
+              ).map(item => ({
+                ...item,
+                displayName: item.machine || item.itemName,
+                originalPrice: item.unitPrice,
+                finalPrice: (item.adjustedPrice !== undefined && item.adjustedPrice !== null) ? item.adjustedPrice : item.unitPrice,
+                isAdjusted: (item.adjustedPrice !== undefined && item.adjustedPrice !== null)
+              }));
               
               return auxItems && auxItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
@@ -1419,13 +1459,19 @@ const QuoteDetail = () => {
                           padding: '12px'
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.machine || item.itemName || '-'}</span>
-                            <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
-                              ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.displayName || '-'}</span>
+                            <span style={{ fontWeight: 'bold', color: item.isAdjusted ? '#f5222d' : '#1890ff', fontSize: '14px' }}>
+                              {item.isAdjusted ? `¥${(item.finalPrice || 0).toFixed(2)}/小时` : `¥${(item.originalPrice || 0).toFixed(2)}/小时`}
                             </span>
                           </div>
                           <div style={{ fontSize: '12px', color: '#666' }}>
-                            设备类型: {item.machineType || '-'}
+                            <div>设备类型: {item.machineType || '-'}</div>
+                            {item.isAdjusted && (
+                              <>
+                                <div>系统报价: <span style={{textDecoration: 'line-through'}}>¥{(item.originalPrice || 0).toFixed(2)}</span></div>
+                                <div style={{color: '#f5222d'}}>调整理由: {item.adjustmentReason || '-'}</div>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1435,7 +1481,7 @@ const QuoteDetail = () => {
                     <div style={{ border: '1px solid #d9d9d9', borderRadius: '6px', backgroundColor: '#fff' }}>
                       <div style={{ 
                         display: 'grid', 
-                        gridTemplateColumns: '2fr 2fr 2fr', 
+                        gridTemplateColumns: '2fr 2fr 1fr 1fr 2fr', 
                         gap: '10px',
                         padding: '8px 12px',
                         backgroundColor: '#fafafa',
@@ -1445,21 +1491,30 @@ const QuoteDetail = () => {
                       }}>
                         <span>设备类型</span>
                         <span>设备型号</span>
-                        <span>小时费率</span>
+                        <span>系统报价</span>
+                        <span>调整后报价</span>
+                        <span>调整理由</span>
                       </div>
                       {auxItems.map((item, index) => (
                         <div key={index} style={{ 
                           display: 'grid', 
-                          gridTemplateColumns: '2fr 2fr 2fr', 
+                          gridTemplateColumns: '2fr 2fr 1fr 1fr 2fr', 
                           gap: '10px',
                           padding: '8px 12px',
                           borderBottom: index < auxItems.length - 1 ? '1px solid #f0f0f0' : 'none',
-                          fontSize: '12px'
+                          fontSize: '12px',
+                          alignItems: 'center'
                         }}>
                           <span>{item.machineType || '-'}</span>
-                          <span>{item.machine || item.itemName || '-'}</span>
-                          <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
-                            ¥{(item.unitPrice || 0).toFixed(2)}/小时
+                          <span>{item.displayName || '-'}</span>
+                          <span style={{ color: item.isAdjusted ? '#888' : '#1890ff', textDecoration: item.isAdjusted ? 'line-through' : 'none', fontWeight: item.isAdjusted ? 'normal' : 'bold' }}>
+                            ¥{(item.originalPrice || 0).toFixed(2)}/小时
+                          </span>
+                          <span style={{ fontWeight: 'bold', color: item.isAdjusted ? '#f5222d' : '#1890ff' }}>
+                            {item.isAdjusted ? `¥${(item.finalPrice || 0).toFixed(2)}/小时` : '-'}
+                          </span>
+                          <span style={{ color: item.isAdjusted ? '#f5222d' : '#666' }}>
+                            {item.adjustmentReason || '-'}
                           </span>
                         </div>
                       ))}

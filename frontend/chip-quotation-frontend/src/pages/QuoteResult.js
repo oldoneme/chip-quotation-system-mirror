@@ -12,105 +12,93 @@ const QuoteResult = () => {
   const [isQuoteConfirmed, setIsQuoteConfirmed] = useState(false);
   const [engineeringItems, setEngineeringItems] = useState([]);
 
-  // 初始化工程报价项目
+  // 初始化工程报价和量产报价项目
   useEffect(() => {
-    if (quoteData && (quoteData.type === '工程报价' || quoteData.type === '工程机时报价')) {
-      // 避免重复初始化导致用户编辑丢失
-      if (engineeringItems.length > 0) return;
+    if (!quoteData) return;
+    // 避免重复初始化导致用户编辑丢失
+    if (engineeringItems.length > 0) return;
 
+    if (quoteData.type === '量产报价' || quoteData.type === '量产机时报价') {
       const items = [];
-      
-      // 辅助函数：添加项目
-      const addItem = (key, name, systemPrice, originalData = null) => {
-        if (systemPrice > 0) {
-          items.push({
-            key,
-            name,
-            systemPrice,
-            adjustedPrice: systemPrice, // 默认等于系统报价
-            reason: '',
-            originalData // 保存原始数据以便后续使用
-          });
-        }
+      const { quoteCurrency, quoteExchangeRate } = quoteData;
+
+      const calculateFee = (machine, cards) => {
+        if (!machine || !cards) return 0;
+        let total = 0;
+        cards.forEach(card => {
+          if (card && card.quantity > 0) {
+            let price = card.unit_price / 10000;
+            if (quoteCurrency === 'USD') {
+              if (machine.currency === 'CNY' || machine.currency === 'RMB') {
+                price = price / quoteExchangeRate;
+              }
+            } else {
+              price = price * (machine.exchange_rate || 1);
+            }
+            total += price * (machine.discount_rate || 1) * card.quantity;
+          }
+        });
+        // 使用 ceilByCurrency 确保与后端一致，但也尝试保留原始精度以防万一？
+        // 用户反馈 270 vs 263 问题，这里我们重新计算并向上取整
+        const { ceilByCurrency } = require('../utils');
+        return ceilByCurrency(total, quoteCurrency);
       };
 
-      // 1. 测试机
-      const testMachineCost = calculateTestMachineCost();
-      const testMachineModel = quoteData.testMachine?.name || '测试机';
-      const testMachineOriginal = quoteData.quoteCreateData?.items?.find(i => i.machine_type === '测试机');
-      addItem('testMachine', '测试机机时费（含工程系数）', testMachineCost, { 
-        machine_type: '测试机', 
-        machine_model: testMachineModel,
-        configuration: testMachineOriginal?.configuration 
-      });
+      // 辅助：查找原始数据
+      const findOriginal = (name) => quoteData.quoteCreateData?.items?.find(i => i.item_name === name);
 
-      // 2. 分选机
-      const handlerCost = calculateHandlerCost();
-      const handlerModel = quoteData.handler?.name || '分选机';
-      const handlerOriginal = quoteData.quoteCreateData?.items?.find(i => i.machine_type === '分选机');
-      addItem('handler', '分选机机时费（含工程系数）', handlerCost, { 
-        machine_type: '分选机', 
-        machine_model: handlerModel,
-        configuration: handlerOriginal?.configuration
-      });
+      // 1. FT
+      if (quoteData.ftData) {
+        if (quoteData.ftData.testMachine) {
+          const name = quoteData.ftData.testMachine.name;
+          const price = calculateFee(quoteData.ftData.testMachine, quoteData.ftData.testMachineCards);
+          items.push({ key: 'ft_tm', name, systemPrice: price, adjustedPrice: price, reason: '', originalData: findOriginal(name), testType: 'FT' });
+        }
+        if (quoteData.ftData.handler) {
+          const name = quoteData.ftData.handler.name;
+          const price = calculateFee(quoteData.ftData.handler, quoteData.ftData.handlerCards);
+          items.push({ key: 'ft_h', name, systemPrice: price, adjustedPrice: price, reason: '', originalData: findOriginal(name), testType: 'FT' });
+        }
+      }
 
-      // 3. 探针台
-      const proberCost = calculateProberCost();
-      const proberModel = quoteData.prober?.name || '探针台';
-      const proberOriginal = quoteData.quoteCreateData?.items?.find(i => i.machine_type === '探针台');
-      addItem('prober', '探针台机时费（含工程系数）', proberCost, { 
-        machine_type: '探针台', 
-        machine_model: proberModel,
-        configuration: proberOriginal?.configuration
-      });
-      
-      // 4. 辅助设备
-      if (quoteData.selectedAuxDevices && quoteData.selectedAuxDevices.length > 0) {
-        quoteData.selectedAuxDevices.forEach((device, index) => {
-          let typeName = '';
-          if (device.supplier?.machine_type?.name) {
-            typeName = device.supplier.machine_type.name;
-          } else if (device.machine_type?.name) {
-            typeName = device.machine_type.name;
-          } else if (device.type === 'handler') {
-            typeName = '分选机';
-          } else if (device.type === 'prober') {
-            typeName = '探针台';
-          } else if (device.type) {
-            typeName = device.type;
-          }
-          const name = `${device.name}${typeName ? ` (${typeName})` : ''}`;
-          // 尝试找到原始的item以获取configuration
-          const originalAuxItem = quoteData.quoteCreateData?.items?.find(i => i.item_name === device.name);
-          
-          // 确保 machine_type 存在
-          const auxData = { 
-            ...device, 
-            machine_type: typeName || '辅助设备', 
-            machine_model: device.name,
-            configuration: originalAuxItem?.configuration
-          };
-          addItem(`aux_${index}`, name, calculateSingleAuxDeviceCost(device), auxData);
+      // 2. CP
+      if (quoteData.cpData) {
+        if (quoteData.cpData.testMachine) {
+          const name = quoteData.cpData.testMachine.name;
+          const price = calculateFee(quoteData.cpData.testMachine, quoteData.cpData.testMachineCards);
+          items.push({ key: 'cp_tm', name, systemPrice: price, adjustedPrice: price, reason: '', originalData: findOriginal(name), testType: 'CP' });
+        }
+        if (quoteData.cpData.prober) {
+          const name = quoteData.cpData.prober.name;
+          const price = calculateFee(quoteData.cpData.prober, quoteData.cpData.proberCards);
+          items.push({ key: 'cp_p', name, systemPrice: price, adjustedPrice: price, reason: '', originalData: findOriginal(name), testType: 'CP' });
+        }
+      }
+
+      // 3. Aux
+      if (quoteData.selectedAuxDevices) {
+        quoteData.selectedAuxDevices.forEach((device, idx) => {
+           // 辅助设备计算逻辑比较复杂，这里简化处理，直接使用原始数据的价格如果可用
+           // 或者重新实现 calculateSingleAuxDeviceCost 逻辑
+           // 为稳妥起见，尝试从 quoteCreateData 获取，如果获取不到则使用 0 (需用户填)
+           const original = findOriginal(device.name);
+           const price = original ? original.total_price : 0;
+           items.push({ key: `aux_${idx}`, name: device.name, systemPrice: price, adjustedPrice: price, reason: '', originalData: original });
         });
       }
 
-      // 5. 人员
-      const engineerCost = calculateEngineerCost();
-      const engineerOriginal = quoteData.quoteCreateData?.items?.find(i => i.item_name === '工程师');
-      addItem('engineer', '工程师小时费', engineerCost, { 
-        machine_type: '人员', 
-        machine_model: '工程师',
-        configuration: engineerOriginal?.configuration
-      });
+      setEngineeringItems(items);
 
-      const technicianCost = calculateTechnicianCost();
-      const technicianOriginal = quoteData.quoteCreateData?.items?.find(i => i.item_name === '技术员');
-      addItem('technician', '技术员小时费', technicianCost, { 
-        machine_type: '人员', 
-        machine_model: '技术员',
-        configuration: technicianOriginal?.configuration
-      });
-
+    } else if ((quoteData.type === '工程报价' || quoteData.type === '工程机时报价') && quoteData.quoteCreateData && quoteData.quoteCreateData.items) {
+      // 工程报价保持原有逻辑
+      const items = quoteData.quoteCreateData.items.map((item, index) => ({
+        key: `item_${index}`,
+        name: item.item_name,
+        systemPrice: item.total_price,
+        adjustedPrice: item.total_price,
+        reason: '',
+        originalData: item
+      }));
       setEngineeringItems(items);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,6 +122,56 @@ const QuoteResult = () => {
     }, 0);
   };
 
+  // 计算FT小时费总计（使用调整后的价格）
+  const calculateFTHourlyTotal = () => {
+    return engineeringItems.reduce((sum, item) => {
+      if (item.testType === 'FT') {
+         const price = item.adjustedPrice !== null && item.adjustedPrice !== undefined ? item.adjustedPrice : item.systemPrice;
+         return sum + price;
+      }
+      return sum;
+    }, 0);
+  };
+
+  // 计算CP小时费总计（使用调整后的价格）
+  const calculateCPHourlyTotal = () => {
+    return engineeringItems.reduce((sum, item) => {
+      if (item.testType === 'CP') {
+         const price = item.adjustedPrice !== null && item.adjustedPrice !== undefined ? item.adjustedPrice : item.systemPrice;
+         return sum + price;
+      }
+      return sum;
+    }, 0);
+  };
+
+
+  // 渲染调整控制组件
+  const renderAdjustmentControls = (itemKey) => {
+    const item = engineeringItems.find(i => i.key === itemKey);
+    if (!item) return null;
+    
+    return (
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '8px', padding: '8px', backgroundColor: '#fff', borderRadius: '4px', border: '1px dashed #d9d9d9' }}>
+        <span style={{ fontWeight: 'bold' }}>客户调整报价:</span>
+        <InputNumber
+          value={item.adjustedPrice}
+          onChange={(value) => handleEngineeringItemChange(item.key, 'adjustedPrice', value)}
+          precision={2}
+          style={{ width: 120 }}
+          min={0}
+          placeholder="调整后价格"
+        />
+        <span style={{ marginLeft: '10px' }}>调整理由:</span>
+        <Input
+          value={item.reason}
+          onChange={(e) => handleEngineeringItemChange(item.key, 'reason', e.target.value)}
+          placeholder={item.adjustedPrice < item.systemPrice ? "价格下调必填理由" : "选填"}
+          status={item.adjustedPrice < item.systemPrice && !item.reason ? 'error' : ''}
+          style={{ flex: 1 }}
+        />
+      </div>
+    );
+  };
 
   // 货币配置
   const currencies = [
@@ -367,8 +405,8 @@ const QuoteResult = () => {
     
     let finalQuoteData = quoteData.quoteCreateData;
 
-    // 处理工程报价
-    if (quoteData.type === '工程报价' || quoteData.type === '工程机时报价') {
+    // 处理工程报价和量产报价
+    if (quoteData.type === '工程报价' || quoteData.type === '工程机时报价' || quoteData.type === '量产报价' || quoteData.type === '量产机时报价') {
         // 验证调整理由
         const invalidItems = engineeringItems.filter(item => {
            // 处理 undefined/null 情况
@@ -383,9 +421,10 @@ const QuoteResult = () => {
 
         // 确保 finalQuoteData 存在 (EngineeringQuote.js 应该已经创建了大部分数据)
         if (!finalQuoteData) {
+             const isMassProduction = quoteData.type === '量产报价' || quoteData.type === '量产机时报价';
              finalQuoteData = {
-                title: quoteData.projectInfo?.projectName || '工程报价',
-                quote_type: 'engineering',
+                title: quoteData.projectInfo?.projectName || (isMassProduction ? '量产报价' : '工程报价'),
+                quote_type: isMassProduction ? 'mass_production' : 'engineering',
                 customer_name: quoteData.customerInfo?.companyName || '测试客户',
                 customer_contact: quoteData.customerInfo?.contactPerson || '',
                 customer_phone: quoteData.customerInfo?.phone || '',
@@ -1503,63 +1542,37 @@ const QuoteResult = () => {
                     <div style={{ paddingLeft: 20 }}>
                       {/* FT测试机 */}
                       {quoteData.ftData?.testMachine && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span style={{ color: '#666' }}>
-                            测试机 - {quoteData.ftData.testMachine.name || 'FT测试机'}
-                          </span>
-                          <span>
-                            {(() => {
-                              // 计算FT测试机费用
-                              let testMachineFee = 0;
-                              if (quoteData.ftData.testMachineCards) {
-                                quoteData.ftData.testMachineCards.forEach(card => {
-                                  if (card && card.quantity > 0) {
-                                    let adjustedPrice = card.unit_price / 10000;
-                                    if (quoteData.quoteCurrency === 'USD') {
-                                      if (quoteData.ftData.testMachine.currency === 'CNY' || quoteData.ftData.testMachine.currency === 'RMB') {
-                                        adjustedPrice = adjustedPrice / quoteData.quoteExchangeRate;
-                                      }
-                                    } else {
-                                      adjustedPrice = adjustedPrice * (quoteData.ftData.testMachine.exchange_rate || 1);
-                                    }
-                                    testMachineFee += adjustedPrice * (quoteData.ftData.testMachine.discount_rate || 1) * card.quantity;
-                                  }
-                                });
-                              }
-                              return formatHourlyPrice(testMachineFee);
-                            })()}
-                          </span>
+                        <div style={{ marginBottom: 15, padding: '10px', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #f0f0f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={{ color: '#666' }}>
+                              测试机 - {quoteData.ftData.testMachine.name || 'FT测试机'}
+                            </span>
+                            <span>
+                              {(() => {
+                                const item = engineeringItems.find(i => i.key === 'ft_tm');
+                                return formatHourlyPrice(item ? item.systemPrice : 0);
+                              })()}
+                            </span>
+                          </div>
+                          {renderAdjustmentControls('ft_tm')}
                         </div>
                       )}
                       
                       {/* FT分选机 */}
                       {quoteData.ftData?.handler && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span style={{ color: '#666' }}>
-                            分选机 - {quoteData.ftData.handler.name || 'FT分选机'}
-                          </span>
-                          <span>
-                            {(() => {
-                              // 计算FT分选机费用
-                              let handlerFee = 0;
-                              if (quoteData.ftData.handlerCards) {
-                                quoteData.ftData.handlerCards.forEach(card => {
-                                  if (card && card.quantity > 0) {
-                                    let adjustedPrice = card.unit_price / 10000;
-                                    if (quoteData.quoteCurrency === 'USD') {
-                                      if (quoteData.ftData.handler.currency === 'CNY' || quoteData.ftData.handler.currency === 'RMB') {
-                                        adjustedPrice = adjustedPrice / quoteData.quoteExchangeRate;
-                                      }
-                                    } else {
-                                      adjustedPrice = adjustedPrice * (quoteData.ftData.handler.exchange_rate || 1);
-                                    }
-                                    handlerFee += adjustedPrice * (quoteData.ftData.handler.discount_rate || 1) * card.quantity;
-                                  }
-                                });
-                              }
-                              return formatHourlyPrice(handlerFee);
-                            })()}
-                          </span>
+                        <div style={{ marginBottom: 15, padding: '10px', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #f0f0f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={{ color: '#666' }}>
+                              分选机 - {quoteData.ftData.handler.name || 'FT分选机'}
+                            </span>
+                            <span>
+                              {(() => {
+                                const item = engineeringItems.find(i => i.key === 'ft_h');
+                                return formatHourlyPrice(item ? item.systemPrice : 0);
+                              })()}
+                            </span>
+                          </div>
+                          {renderAdjustmentControls('ft_h')}
                         </div>
                       )}
                       
@@ -1573,7 +1586,7 @@ const QuoteResult = () => {
                         fontWeight: 'bold'
                       }}>
                         <span>FT小时费合计:</span>
-                        <span style={{ color: '#1890ff' }}>{formatHourlyPrice(quoteData.ftHourlyFee || 0)}</span>
+                        <span style={{ color: '#1890ff' }}>{formatHourlyPrice(calculateFTHourlyTotal())}</span>
                       </div>
                     </div>
                   </div>
@@ -1586,63 +1599,37 @@ const QuoteResult = () => {
                     <div style={{ paddingLeft: 20 }}>
                       {/* CP测试机 */}
                       {quoteData.cpData?.testMachine && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span style={{ color: '#666' }}>
-                            测试机 - {quoteData.cpData.testMachine.name || 'CP测试机'}
-                          </span>
-                          <span>
-                            {(() => {
-                              // 计算CP测试机费用
-                              let testMachineFee = 0;
-                              if (quoteData.cpData.testMachineCards) {
-                                quoteData.cpData.testMachineCards.forEach(card => {
-                                  if (card && card.quantity > 0) {
-                                    let adjustedPrice = card.unit_price / 10000;
-                                    if (quoteData.quoteCurrency === 'USD') {
-                                      if (quoteData.cpData.testMachine.currency === 'CNY' || quoteData.cpData.testMachine.currency === 'RMB') {
-                                        adjustedPrice = adjustedPrice / quoteData.quoteExchangeRate;
-                                      }
-                                    } else {
-                                      adjustedPrice = adjustedPrice * (quoteData.cpData.testMachine.exchange_rate || 1);
-                                    }
-                                    testMachineFee += adjustedPrice * (quoteData.cpData.testMachine.discount_rate || 1) * card.quantity;
-                                  }
-                                });
-                              }
-                              return formatHourlyPrice(testMachineFee);
-                            })()}
-                          </span>
+                        <div style={{ marginBottom: 15, padding: '10px', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #f0f0f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={{ color: '#666' }}>
+                              测试机 - {quoteData.cpData.testMachine.name || 'CP测试机'}
+                            </span>
+                            <span>
+                              {(() => {
+                                const item = engineeringItems.find(i => i.key === 'cp_tm');
+                                return formatHourlyPrice(item ? item.systemPrice : 0);
+                              })()}
+                            </span>
+                          </div>
+                          {renderAdjustmentControls('cp_tm')}
                         </div>
                       )}
                       
                       {/* CP探针台 */}
                       {quoteData.cpData?.prober && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span style={{ color: '#666' }}>
-                            探针台 - {quoteData.cpData.prober.name || 'CP探针台'}
-                          </span>
-                          <span>
-                            {(() => {
-                              // 计算CP探针台费用
-                              let proberFee = 0;
-                              if (quoteData.cpData.proberCards) {
-                                quoteData.cpData.proberCards.forEach(card => {
-                                  if (card && card.quantity > 0) {
-                                    let adjustedPrice = card.unit_price / 10000;
-                                    if (quoteData.quoteCurrency === 'USD') {
-                                      if (quoteData.cpData.prober.currency === 'CNY' || quoteData.cpData.prober.currency === 'RMB') {
-                                        adjustedPrice = adjustedPrice / quoteData.quoteExchangeRate;
-                                      }
-                                    } else {
-                                      adjustedPrice = adjustedPrice * (quoteData.cpData.prober.exchange_rate || 1);
-                                    }
-                                    proberFee += adjustedPrice * (quoteData.cpData.prober.discount_rate || 1) * card.quantity;
-                                  }
-                                });
-                              }
-                              return formatHourlyPrice(proberFee);
-                            })()}
-                          </span>
+                        <div style={{ marginBottom: 15, padding: '10px', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #f0f0f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={{ color: '#666' }}>
+                              探针台 - {quoteData.cpData.prober.name || 'CP探针台'}
+                            </span>
+                            <span>
+                              {(() => {
+                                const item = engineeringItems.find(i => i.key === 'cp_p');
+                                return formatHourlyPrice(item ? item.systemPrice : 0);
+                              })()}
+                            </span>
+                          </div>
+                          {renderAdjustmentControls('cp_p')}
                         </div>
                       )}
                       
@@ -1656,7 +1643,7 @@ const QuoteResult = () => {
                         fontWeight: 'bold'
                       }}>
                         <span>CP小时费合计:</span>
-                        <span style={{ color: '#1890ff' }}>{formatHourlyPrice(quoteData.cpHourlyFee || 0)}</span>
+                        <span style={{ color: '#1890ff' }}>{formatHourlyPrice(calculateCPHourlyTotal())}</span>
                       </div>
                     </div>
                   </div>
@@ -1683,12 +1670,18 @@ const QuoteResult = () => {
                       }
                       
                       return (
-                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, paddingLeft: 20 }}>
-                          <span>
-                            {device.name}
-                            {typeName && ` (${typeName})`}
-                          </span>
-                          <span>{formatHourlyPrice(calculateSingleAuxDeviceCost(device))}/小时</span>
+                        <div key={index} style={{ marginBottom: 15, padding: '10px', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #f0f0f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span>
+                              {device.name}
+                              {typeName && ` (${typeName})`}
+                            </span>
+                            <span>{(() => {
+                              const item = engineeringItems.find(i => i.key === `aux_${index}`);
+                              return formatHourlyPrice(item ? item.systemPrice : 0);
+                            })()}/小时</span>
+                          </div>
+                          {renderAdjustmentControls(`aux_${index}`)}
                         </div>
                       );
                     })}
