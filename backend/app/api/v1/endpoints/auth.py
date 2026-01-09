@@ -8,15 +8,49 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from urllib.parse import quote, unquote
 import logging
+import json
 
 from ....database import get_db
 from ....wecom_auth import WeComOAuth as WeComAuth
 from ....models import User
+# 导入认证依赖和Schema
+from app.auth_routes import get_current_user
+from app.auth_schemas import UserResponse
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
 # 初始化企业微信认证
 wecom_auth = WeComAuth()
+
+@router.get("/whoami", response_model=UserResponse)
+async def whoami(current_user: User = Depends(get_current_user)):
+    """
+    获取当前登录用户信息 (兼容前端调用 /api/v1/auth/whoami)
+    """
+    try:
+        department_ids = json.loads(current_user.department_ids or "[]")
+        is_leader_in_dept = json.loads(current_user.is_leader_in_dept or "[]")
+    except (json.JSONDecodeError, TypeError):
+        department_ids = []
+        is_leader_in_dept = []
+    
+    return UserResponse(
+        id=current_user.id,
+        userid=current_user.userid,
+        name=current_user.name,
+        mobile=current_user.mobile,
+        email=current_user.email,
+        department=current_user.department,
+        position=current_user.position,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        avatar=current_user.avatar,
+        department_ids=department_ids,
+        is_leader_in_dept=is_leader_in_dept,
+        direct_leader=current_user.direct_leader,
+        created_at=current_user.created_at,
+        last_login=current_user.last_login
+    )
 
 @router.get("/callback")
 async def auth_callback(
