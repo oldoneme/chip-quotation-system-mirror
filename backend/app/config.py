@@ -100,6 +100,7 @@ class Settings(BaseSettings):
     FRONTEND_BASE_URL: str = os.getenv("FRONTEND_BASE_URL", get_default_frontend_url())
     SNAPSHOT_BROWSER_POOL: int = int(os.getenv("SNAPSHOT_BROWSER_POOL", "2"))
     SNAPSHOT_READY_SELECTOR: str = os.getenv("SNAPSHOT_READY_SELECTOR", "#quote-ready")
+    SNAPSHOT_TIMEOUT_SECONDS: int = int(os.getenv("SNAPSHOT_TIMEOUT_SECONDS", "60"))
     
     # 审批链接配置
     APPROVAL_LINK_EXPIRE_DAYS: int = 7  # 审批链接有效期（天）

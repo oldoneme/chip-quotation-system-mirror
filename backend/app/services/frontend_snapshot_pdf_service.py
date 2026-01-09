@@ -211,7 +211,7 @@ class FrontendSnapshotPDFService:
     def __init__(self) -> None:
         self.media_root = Path("media/quotes")
         self.ready_selector = settings.SNAPSHOT_READY_SELECTOR or "#quote-ready"
-        self.snapshot_timeout_ms = 30_000
+        self.snapshot_timeout_ms = settings.SNAPSHOT_TIMEOUT_SECONDS * 1000
 
     # ---------- 对外接口 ----------
 

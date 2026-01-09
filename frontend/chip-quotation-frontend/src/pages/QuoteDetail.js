@@ -214,6 +214,7 @@ const QuoteDetail = () => {
       };
 
       setQuote(formattedQuote);
+      console.log("DEBUG: formattedQuote.items:", formattedQuote.items); // ADDED DEBUG LOG
 
       // 设置页面标题为报价单号，便于PDF识别
       const newTitle = `${formattedQuote.id} - ${formattedQuote.title || '报价单'}`;
@@ -1202,9 +1203,20 @@ const QuoteDetail = () => {
             
             {/* FT测试设备 */}
             {(() => {
-              const ftItems = quote.items.filter(item => 
-                item.itemDescription && item.itemDescription.includes('FT')
-              ).map(item => ({
+              const ftItems = quote.items.filter(item => {
+                try {
+                  const config = JSON.parse(item.configuration || '{}');
+                  // 优先检查排除条件：如果名字或描述包含'CP'，肯定不是FT设备
+                  if (item.itemName?.includes('CP') || item.itemDescription?.includes('CP')) return false;
+                  
+                  // 包含条件：配置为FT，或者名字/描述包含'FT'
+                  return config.test_type === 'FT' || item.itemName?.includes('FT') || item.itemDescription?.includes('FT');
+                } catch (e) {
+                  // 解析失败兜底：名字/描述包含'FT'且不包含'CP'
+                  return (item.itemName?.includes('FT') || item.itemDescription?.includes('FT')) && 
+                         !(item.itemName?.includes('CP') || item.itemDescription?.includes('CP'));
+                }
+              }).map(item => ({
                 ...item,
                 displayName: item.machine || item.itemName,
                 originalPrice: item.unitPrice,
@@ -1317,9 +1329,20 @@ const QuoteDetail = () => {
             
             {/* CP测试设备 */}
             {(() => {
-              const cpItems = quote.items.filter(item => 
-                item.itemDescription && item.itemDescription.includes('CP')
-              ).map(item => ({
+              const cpItems = quote.items.filter(item => {
+                try {
+                  const config = JSON.parse(item.configuration || '{}');
+                  // 优先检查排除条件：如果名字或描述包含'FT'，肯定不是CP设备
+                  if (item.itemName?.includes('FT') || item.itemDescription?.includes('FT')) return false;
+
+                  // 包含条件：配置为CP，或者名字/描述包含'CP'
+                  return config.test_type === 'CP' || item.itemName?.includes('CP') || item.itemDescription?.includes('CP');
+                } catch (e) {
+                  // 解析失败兜底：名字/描述包含'CP'且不包含'FT'
+                  return (item.itemName?.includes('CP') || item.itemDescription?.includes('CP')) &&
+                         !(item.itemName?.includes('FT') || item.itemDescription?.includes('FT'));
+                }
+              }).map(item => ({
                 ...item,
                 displayName: item.machine || item.itemName,
                 originalPrice: item.unitPrice,

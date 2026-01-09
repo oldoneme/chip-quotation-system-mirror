@@ -910,7 +910,7 @@ const MassProductionQuote = () => {
                 configuration: JSON.stringify({
                   device_type: '测试机',
                   device_model: cpData.testMachine.name,
-                  test_type: 'CP',
+                  test_type: 'CP', // 确保这里是 CP
                   cards: cardsInfo
                 }),
                 quantity: 1,
@@ -970,7 +970,7 @@ const MassProductionQuote = () => {
                 configuration: JSON.stringify({
                   device_type: '探针台',
                   device_model: cpData.prober.name,
-                  test_type: 'CP',
+                  test_type: 'CP', // 确保这里是 CP
                   cards: cardsInfo
                 }),
                 quantity: 1,
