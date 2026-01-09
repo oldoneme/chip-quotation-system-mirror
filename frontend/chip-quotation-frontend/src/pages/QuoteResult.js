@@ -632,10 +632,12 @@ const QuoteResult = () => {
         // 编辑模式：更新现有报价单
         resultQuote = await QuoteApiService.updateQuote(quoteData.editingQuoteId, fixedQuoteData);
         message.success(`报价单更新成功！报价单号：${resultQuote.quote_number}`);
+        navigate(`/quote-detail/${resultQuote.quote_number}`);
       } else {
         // 新建模式：创建新报价单
         resultQuote = await QuoteApiService.createQuote(fixedQuoteData);
         message.success(`报价单创建成功！报价单号：${resultQuote.quote_number}`);
+        navigate(`/quote-detail/${resultQuote.quote_number}`);
       }
 
       setIsQuoteConfirmed(true);
