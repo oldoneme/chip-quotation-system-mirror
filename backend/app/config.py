@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     
     # 数据库配置
     DATABASE_URL: str = "sqlite:///./app/test.db"
+    AUTO_CREATE_DB_TABLES_ON_STARTUP: bool = False # 新增：是否在启动时自动创建数据库表
     
     # JWT配置
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")

@@ -135,10 +135,15 @@ if missing_wecom_keys:
         ", ".join(missing_wecom_keys),
     )
 
-# Create database tables
-if runtime_settings.DEBUG and runtime_settings.DATABASE_URL.startswith("sqlite"):
-    logger.info("开发模式下自动创建SQLite数据表")
+# === INJECTED: MANUAL_DB_TABLE_CREATION ===
+# 在调试模式下自动创建SQLite数据表，但现在仅在显式配置开启时才执行
+# 这有助于避免在无需初始化时意外修改或重新创建数据库表
+if runtime_settings.AUTO_CREATE_DB_TABLES_ON_STARTUP:
+    logger.info("配置开启：在启动时自动创建数据库表 (AUTO_CREATE_DB_TABLES_ON_STARTUP=True)")
     Base.metadata.create_all(bind=engine)
+elif runtime_settings.DEBUG and runtime_settings.DATABASE_URL.startswith("sqlite"):
+    logger.info("调试模式下，但未开启 AUTO_CREATE_DB_TABLES_ON_STARTUP，跳过自动建表。")
+# === END INJECTED ===
 
 app = FastAPI(
     title=core_settings.APP_NAME,
