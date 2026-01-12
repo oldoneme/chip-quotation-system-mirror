@@ -155,19 +155,35 @@ const ProcessQuote = () => {
       );
 
       if (convertedFormData) {
-        setFormData(prev => ({
-          ...prev,
-          ...convertedFormData,
-          // 确保嵌套对象正确合并
-          customerInfo: {
-            ...prev.customerInfo,
-            ...convertedFormData.customerInfo
-          },
-          projectInfo: {
-            ...prev.projectInfo,
-            ...convertedFormData.projectInfo
-          }
-        }));
+        setFormData(prev => {
+          // Merge existing processes with converted ones, ensuring new fields are preserved
+          const updatedCpProcesses = convertedFormData.cpProcesses ? prev.cpProcesses.map(prevProcess => {
+            const convertedProcess = convertedFormData.cpProcesses.find(cp => cp.id === prevProcess.id);
+            return convertedProcess ? { ...prevProcess, ...convertedProcess } : prevProcess;
+          }).concat(convertedFormData.cpProcesses.filter(cp => !prev.cpProcesses.some(prevP => prevP.id === cp.id))) : prev.cpProcesses;
+
+          const updatedFtProcesses = convertedFormData.ftProcesses ? prev.ftProcesses.map(prevProcess => {
+            const convertedProcess = convertedFormData.ftProcesses.find(ft => ft.id === prevProcess.id);
+            return convertedProcess ? { ...prevProcess, ...convertedProcess } : prevProcess;
+          }).concat(convertedFormData.ftProcesses.filter(ft => !prev.ftProcesses.some(prevP => prevP.id === ft.id))) : prev.ftProcesses;
+
+
+          return {
+            ...prev,
+            ...convertedFormData,
+            // 确保嵌套对象正确合并
+            customerInfo: {
+              ...prev.customerInfo,
+              ...convertedFormData.customerInfo
+            },
+            projectInfo: {
+              ...prev.projectInfo,
+              ...convertedFormData.projectInfo
+            },
+            cpProcesses: updatedCpProcesses,
+            ftProcesses: updatedFtProcesses
+          };
+        });
         setEditMessageShown(true); // 标记已加载，防止重复
       }
     }
@@ -185,32 +201,53 @@ const ProcessQuote = () => {
   // 添加工序
   const addProcess = (type) => {
     const processKey = type === 'cp' ? 'cpProcesses' : 'ftProcesses';
-    const newProcess = {
-      id: formData[processKey].length + 1,
-      name: type === 'cp' ? 'CP1测试' : 'FT1测试',
-      // 根据类型设置双设备结构
-      ...(type === 'cp' ? {
-        testMachine: '',
-        testMachineData: null,
-        testMachineCardQuantities: {},
+    const defaultProcessName = type === 'cp' ? 'CP1测试' : 'FT1测试';
+    const newProcessId = formData[processKey].length > 0 ? Math.max(...formData[processKey].map(p => p.id)) + 1 : 1;
+    
+    let baseProcess = {
+      id: newProcessId,
+      name: defaultProcessName,
+      testMachine: '',
+      testMachineData: null,
+      testMachineCardQuantities: {},
+      uph: 1000,
+      unitCost: 0, // Calculated unit cost
+      adjustedUnitPrice: 0 // User adjusted unit cost
+    };
+
+    if (type === 'cp') {
+      baseProcess = {
+        ...baseProcess,
         prober: '',
         proberData: null,
-        proberCardQuantities: {}
-      } : {
-        testMachine: '',
-        testMachineData: null,
-        testMachineCardQuantities: {},
+        proberCardQuantities: {},
+      };
+    } else { // ft
+      baseProcess = {
+        ...baseProcess,
         handler: '',
         handlerData: null,
-        handlerCardQuantities: {}
-      }),
-      uph: 1000,
-      unitCost: 0
-    };
-    
+        handlerCardQuantities: {},
+      };
+    }
+
+    // Initialize specific fields based on default process name
+    if (isTestProcess(defaultProcessName)) {
+      baseProcess.adjustedMachineRate = 0; // for test processes
+    } else if (isBakingProcess(defaultProcessName) || isBurnInProcess(defaultProcessName)) {
+      baseProcess.quantityPerOven = 1000;
+      baseProcess.bakingTime = 60; // minutes
+    } else if (isTapingProcess(defaultProcessName)) {
+      baseProcess.packageType = '';
+      baseProcess.quantityPerReel = 3000;
+    } else if (isAOIProcess(defaultProcessName)) {
+      baseProcess.packageType = '';
+    }
+    // For other processes, uph and unitCost are sufficient initially.
+
     setFormData(prev => ({
       ...prev,
-      [processKey]: [...prev[processKey], newProcess]
+      [processKey]: [...prev[processKey], baseProcess]
     }));
   };
 
@@ -225,7 +262,7 @@ const ProcessQuote = () => {
     }
   };
 
-  // 更新工序 - 支持双设备结构
+  // 更新工序 - 支持双设备结构和不同工序类型
   const updateProcess = (type, processId, field, value) => {
     const processKey = type === 'cp' ? 'cpProcesses' : 'ftProcesses';
     setFormData(prev => ({
@@ -234,22 +271,39 @@ const ProcessQuote = () => {
         if (process.id === processId) {
           let updatedProcess = { ...process, [field]: value };
           
-          // 如果改变了工序名称，重置所有设备选择
+          // 如果改变了工序名称，重置所有设备选择和相关参数
           if (field === 'name') {
-            if (type === 'cp') {
-              updatedProcess.testMachine = '';
-              updatedProcess.testMachineData = null;
-              updatedProcess.testMachineCardQuantities = {};
-              updatedProcess.prober = '';
-              updatedProcess.proberData = null;
-              updatedProcess.proberCardQuantities = {};
-            } else {
-              updatedProcess.testMachine = '';
-              updatedProcess.testMachineData = null;
-              updatedProcess.testMachineCardQuantities = {};
-              updatedProcess.handler = '';
-              updatedProcess.handlerData = null;
-              updatedProcess.handlerCardQuantities = {};
+            updatedProcess = {
+              ...updatedProcess,
+              testMachine: '',
+              testMachineData: null,
+              testMachineCardQuantities: {},
+              prober: type === 'cp' ? '' : undefined,
+              proberData: type === 'cp' ? null : undefined,
+              proberCardQuantities: type === 'cp' ? {} : undefined,
+              handler: type === 'ft' ? '' : undefined,
+              handlerData: type === 'ft' ? null : undefined,
+              handlerCardQuantities: type === 'ft' ? {} : undefined,
+              uph: 1000,
+              adjustedMachineRate: 0,
+              quantityPerOven: 1000,
+              bakingTime: 60,
+              packageType: '',
+              quantityPerReel: 3000,
+              adjustedUnitPrice: 0 // Reset adjusted unit price
+            };
+            // Re-initialize based on new name if it's a known type
+            if (isTestProcess(value)) {
+              updatedProcess.adjustedMachineRate = 0;
+            } else if (isBakingProcess(value) || isBurnInProcess(value)) {
+              updatedProcess.quantityPerOven = 1000;
+              updatedProcess.bakingTime = 60;
+            } else if (isTapingProcess(value)) {
+              updatedProcess.packageType = '';
+              updatedProcess.quantityPerReel = 3000;
+            } else if (isAOIProcess(value)) {
+              updatedProcess.packageType = '';
+              updatedProcess.uph = 1000;
             }
           }
           
@@ -258,6 +312,9 @@ const ProcessQuote = () => {
             const selectedMachine = machines.find(m => m.name === value);
             updatedProcess.testMachineData = selectedMachine;
             updatedProcess.testMachineCardQuantities = {};
+            if (isTestProcess(updatedProcess.name)) {
+              updatedProcess.adjustedMachineRate = 0; // Reset adjusted machine rate when machine changes
+            }
           }
           
           // 处理第二种设备选择 (CP: prober, FT: handler)
@@ -267,12 +324,21 @@ const ProcessQuote = () => {
             const cardField = type === 'cp' ? 'proberCardQuantities' : 'handlerCardQuantities';
             updatedProcess[dataField] = selectedMachine;
             updatedProcess[cardField] = {};
+            if (isTestProcess(updatedProcess.name)) {
+              updatedProcess.adjustedMachineRate = 0; // Reset adjusted machine rate when machine changes
+            }
           }
           
-          // 人工成本设置为0，不进行自动计算
-          if (field === 'uph') {
-            updatedProcess.unitCost = 0;
-          }
+          // UPH改变时，如果不是测试工序，unitCost可以重新计算（人工成本设置为0，不进行自动计算）
+          // if (field === 'uph' && !isTestProcess(updatedProcess.name)) {
+          //   updatedProcess.unitCost = 0; // 这里的0应该被计算函数覆盖
+          // }
+
+          // 如果是测试工序，并且改变的是 adjustedMachineRate 或者 uph，需要更新 unitCost
+          // if (isTestProcess(updatedProcess.name) && (field === 'adjustedMachineRate' || field === 'uph')) {
+          //   // 重新计算 unitCost
+          //   // This will be handled by the cost calculation functions directly in render or handleSubmit
+          // }
           
           return updatedProcess;
         }
@@ -341,54 +407,99 @@ const ProcessQuote = () => {
   };
 
   // 计算单个设备的机器费用（包括板卡成本）- 支持双设备
-  const calculateProcessMachineCostForDevice = (process, deviceName) => {
-    const machineDataKey = `${deviceName}Data`;
-    const cardQuantitiesKey = `${deviceName}CardQuantities`;
-    
-    const machineData = process[machineDataKey];
-    const cardQuantities = process[cardQuantitiesKey];
-
-    if (!machineData || !cardQuantities) {
+  const calculateSystemMachineRate = (machineData, cardQuantities) => {
+    if (!machineData) {
       return 0;
     }
 
-    let totalCost = 0;
-    Object.entries(cardQuantities).forEach(([cardId, quantity]) => {
+    let machineBaseRate = (machineData.unit_price || 0) / 10000; // 假设设备单价也是万分位
+    // 根据报价币种和机器币种进行转换
+    if (formData.currency === 'USD') {
+      if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
+        machineBaseRate = machineBaseRate / formData.exchangeRate;
+      }
+    } else { // 报价币种是CNY
+      if (machineData.currency === 'USD') {
+        machineBaseRate = machineBaseRate * formData.exchangeRate;
+      }
+    }
+    
+    // 应用折扣率
+    const discountedMachineRate = machineBaseRate * (machineData.discount_rate || 1.0);
+
+    let totalCardCost = 0;
+    Object.entries(cardQuantities || {}).forEach(([cardId, quantity]) => {
       const card = cardTypes.find(c => c.id === parseInt(cardId));
       if (card && quantity > 0) {
-        // 计算调整后的板卡价格，参考工程机时的计算逻辑
-        let adjustedPrice = (card.unit_price || 0) / 10000;
+        let adjustedCardPrice = (card.unit_price || 0) / 10000;
 
-        // 根据报价币种和机器币种进行转换（参考EngineeringQuote.js逻辑）
+        // 根据报价币种和机器币种进行转换（假设板卡价格币种与机器币种相同）
         if (formData.currency === 'USD') {
           if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
-            // RMB机器转USD：除以报价汇率
-            adjustedPrice = adjustedPrice / formData.exchangeRate;
+            adjustedCardPrice = adjustedCardPrice / formData.exchangeRate;
           }
-          // USD机器：不做汇率转换，直接使用unit_price
         } else {
-          // 报价币种是CNY，保持原逻辑
-          if (!machineData.exchange_rate) {
-            console.error('机器缺少exchange_rate:', machineData);
-            return 0;
+          if (machineData.currency === 'USD') {
+            adjustedCardPrice = adjustedCardPrice * formData.exchangeRate;
           }
-          adjustedPrice = adjustedPrice * machineData.exchange_rate;
         }
-
-        // 应用折扣率和数量，然后除以UPH得到单颗成本
-        if (!machineData.discount_rate) {
-          console.error('机器缺少discount_rate:', machineData);
-          return 0;
-        }
-        const hourlyCost = adjustedPrice * machineData.discount_rate * quantity;
-
-        if (process.uph > 0) {
-          const unitCost = hourlyCost / process.uph;
-          totalCost += unitCost;
-        }
+        totalCardCost += adjustedCardPrice * quantity;
       }
     });
 
+    return discountedMachineRate + totalCardCost;
+  };
+
+  // 计算单个工序的单颗费用
+  const calculateProcessUnitCost = (process, processType, type) => {
+    // 如果用户输入了调整后的单颗费用，则直接使用该值
+    if (process.adjustedUnitPrice > 0) {
+      return process.adjustedUnitPrice;
+    }
+
+    let totalCost = 0;
+
+    if (isTestProcess(process.name)) {
+      // 测试工序: (adjustedMachineRate / UPH)
+      const testMachineSystemRate = calculateSystemMachineRate(process.testMachineData, process.testMachineCardQuantities);
+      const secondDeviceSystemRate = calculateSystemMachineRate(process[type === 'cp' ? 'proberData' : 'handlerData'], process[type === 'cp' ? 'proberCardQuantities' : 'handlerCardQuantities']);
+      
+      const totalSystemRate = testMachineSystemRate + secondDeviceSystemRate;
+      
+      // 如果用户没有输入 adjustedMachineRate，则使用系统机时
+      // Logic fix: Ensure adjustedMachineRate is used if present, otherwise default to totalSystemRate
+      // Note: In the UI, adjustedMachineRate defaults to 0 initially.
+      // If it's 0, we effectively use the system rate. But the UI input displays the system rate as default value visually.
+      // However, for calculation, we should strictly use the value that represents the final hourly rate.
+      
+      const effectiveMachineRate = process.adjustedMachineRate > 0 ? process.adjustedMachineRate : totalSystemRate;
+      
+      if (effectiveMachineRate > 0 && process.uph > 0) {
+        totalCost = effectiveMachineRate / process.uph;
+      }
+    } else if (isBakingProcess(process.name) || isBurnInProcess(process.name)) {
+      // 烘烤/老化工序: (设备机时 * 烘烤时间 / 60) / 每炉数量
+      const testMachineSystemRate = calculateSystemMachineRate(process.testMachineData, process.testMachineCardQuantities);
+      if (testMachineSystemRate > 0 && process.bakingTime > 0 && process.quantityPerOven > 0) {
+        totalCost = (testMachineSystemRate * (process.bakingTime / 60)) / process.quantityPerOven;
+      }
+    } else if (isTapingProcess(process.name)) {
+      // 编带工序: (设备机时 / UPH) 或 (设备机时 * 时间 / 每卷数量)
+      // 暂时假设编带工序的单颗费用也与设备机时和UPH相关
+      const testMachineSystemRate = calculateSystemMachineRate(process.testMachineData, process.testMachineCardQuantities);
+      if (testMachineSystemRate > 0 && process.uph > 0) { // Assume UPH for now as it's a common metric
+        totalCost = testMachineSystemRate / process.uph;
+      }
+    } else if (isAOIProcess(process.name)) {
+      // AOI工序: (设备机时 / UPH)
+      const testMachineSystemRate = calculateSystemMachineRate(process.testMachineData, process.testMachineCardQuantities);
+      if (testMachineSystemRate > 0 && process.uph > 0) {
+        totalCost = testMachineSystemRate / process.uph;
+      }
+    }
+    // 其他工序暂时返回0，或可在此处添加默认计算逻辑
+
+    // 移除 ceilByCurrency，直接返回原始计算值，避免单颗成本被错误取整
     return totalCost;
   };
 
@@ -398,22 +509,18 @@ const ProcessQuote = () => {
 
     if (formData.selectedTypes.includes('cp')) {
       total += formData.cpProcesses.reduce((sum, process) => {
-        const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
-        const proberCost = calculateProcessMachineCostForDevice(process, 'prober');
-        return sum + testMachineCost + proberCost;
+        return sum + calculateProcessUnitCost(process, 'cp', 'cp');
       }, 0);
     }
 
     if (formData.selectedTypes.includes('ft')) {
       total += formData.ftProcesses.reduce((sum, process) => {
-        const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
-        const handlerCost = calculateProcessMachineCostForDevice(process, 'handler');
-        return sum + testMachineCost + handlerCost;
+        return sum + calculateProcessUnitCost(process, 'ft', 'ft');
       }, 0);
     }
 
-    // 根据货币类型向上取整
-    return ceilByCurrency(total, formData.currency);
+    // 保留4位小数，与单颗费用显示保持一致，避免不必要的取整
+    return parseFloat(total.toFixed(4));
   };
 
   const calculateTotalProjectCost = () => {
@@ -465,18 +572,32 @@ const ProcessQuote = () => {
 
     // 1. 处理CP工序
     if (formData.selectedTypes.includes('cp')) {
-      formData.cpProcesses.forEach((process, index) => {
-        if (process.testMachine || process.prober) {
-          // 计算工序单颗成本（设备成本）
-          const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
-          const proberCost = calculateProcessMachineCostForDevice(process, 'prober');
-          const totalUnitCost = testMachineCost + proberCost;
-          // 保留4位小数
-          const unitCost = parseFloat(formatUnitPrice(totalUnitCost).replace(/[￥$,]/g, ''));
+      formData.cpProcesses.forEach((process) => {
+        if (!process.name || (!process.testMachineData && !process.proberData && !process.testMachine)) {
+          return; // Skip if no name or device selected
+        }
+        
+        // 计算工序单颗成本
+        const unitCost = calculateProcessUnitCost(process, 'cp', 'cp');
 
-          // 准备工序配置JSON
-          const configuration = {
-            process_type: process.name,
+        // 准备工序配置JSON
+        let configuration = {
+          process_type: process.name,
+          uph: process.uph,
+          adjusted_unit_price: process.adjustedUnitPrice // Always include adjustedUnitPrice
+        };
+
+        let itemDescription = `${process.name}`;
+        let deviceType = '-';
+        let deviceModel = '-';
+
+        if (isTestProcess(process.name)) {
+          const testMachineSystemRate = calculateSystemMachineRate(process.testMachineData, process.testMachineCardQuantities);
+          const proberSystemRate = calculateSystemMachineRate(process.proberData, process.proberCardQuantities);
+          const totalSystemRate = testMachineSystemRate + proberSystemRate;
+
+          configuration = {
+            ...configuration,
             test_machine: process.testMachineData ? {
               id: process.testMachineData.id,
               name: process.testMachine,
@@ -487,53 +608,121 @@ const ProcessQuote = () => {
               name: process.prober,
               cards: getCardsInfo(process.proberCardQuantities)
             } : null,
-            uph: process.uph
+            system_machine_rate: parseFloat(totalSystemRate.toFixed(4)),
+            adjusted_machine_rate: process.adjustedMachineRate // Include adjusted machine rate
           };
-
-          // 构建设备类型和型号
-          const deviceType = (process.testMachine && process.prober)
+          itemDescription += ` (UPH: ${process.uph})`;
+          deviceType = (process.testMachine && process.prober)
             ? '测试机/探针台'
             : (process.testMachine ? '测试机' : (process.prober ? '探针台' : '-'));
-          const deviceModel = (process.testMachine && process.prober)
+          deviceModel = (process.testMachine && process.prober)
             ? `${process.testMachine}/${process.prober}`
             : (process.testMachine || process.prober || '-');
-
-          items.push({
-            item_name: `CP工序 - ${process.name}`,
-            item_description: `${process.name} (UPH: ${process.uph})`,
-            machine_type: deviceType,
-            supplier: process.testMachineData?.supplier
-              ? (typeof process.testMachineData.supplier === 'object'
-                  ? process.testMachineData.supplier.name
-                  : process.testMachineData.supplier)
-              : '',
-            machine_model: deviceModel,
-            configuration: JSON.stringify(configuration),
-            quantity: 1,
-            unit: '颗',
-            unit_price: unitCost,
-            total_price: unitCost, // 工序报价单颗成本即总价
-            machine_id: process.testMachineData?.id || null,
-            category_type: 'process'
-          });
+        } else if (isBakingProcess(process.name) || isBurnInProcess(process.name)) {
+          configuration = {
+            ...configuration,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            quantity_per_oven: process.quantityPerOven,
+            baking_time: process.bakingTime,
+          };
+          itemDescription += ` (每炉数量: ${process.quantityPerOven}, 时间: ${process.bakingTime}分钟)`;
+          deviceType = process.testMachine ? '烘烤炉' : '-';
+          deviceModel = process.testMachine || '-';
+        } else if (isTapingProcess(process.name)) {
+          configuration = {
+            ...configuration,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            package_type: process.packageType,
+            quantity_per_reel: process.quantityPerReel,
+          };
+          itemDescription += ` (封装: ${process.packageType}, 每卷数量: ${process.quantityPerReel})`;
+          deviceType = process.testMachine ? '编带机' : '-';
+          deviceModel = process.testMachine || '-';
+        } else if (isAOIProcess(process.name)) {
+          configuration = {
+            ...configuration,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            package_type: process.packageType,
+            uph: process.uph,
+          };
+          itemDescription += ` (封装: ${process.packageType}, UPH: ${process.uph})`;
+          deviceType = process.testMachine ? 'AOI设备' : '-';
+          deviceModel = process.testMachine || '-';
+        } else {
+           // For other processes, still include test_machine if selected
+           configuration = {
+            ...configuration,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+          };
+          deviceType = process.testMachine ? '设备' : '-';
+          deviceModel = process.testMachine || '-';
         }
+        
+        items.push({
+          item_name: `CP工序 - ${process.name}`,
+          item_description: itemDescription,
+          machine_type: deviceType,
+          supplier: process.testMachineData?.supplier
+            ? (typeof process.testMachineData.supplier === 'object'
+                ? process.testMachineData.supplier.name
+                : process.testMachineData.supplier)
+            : '',
+          machine_model: deviceModel,
+          configuration: JSON.stringify(configuration),
+          quantity: 1,
+          unit: '颗',
+          unit_price: unitCost,
+          total_price: unitCost,
+          machine_id: process.testMachineData?.id || null,
+          category_type: 'process'
+        });
       });
     }
 
     // 2. 处理FT工序
     if (formData.selectedTypes.includes('ft')) {
-      formData.ftProcesses.forEach((process, index) => {
-        if (process.testMachine || process.handler) {
-          // 计算工序单颗成本（设备成本）
-          const testMachineCost = calculateProcessMachineCostForDevice(process, 'testMachine');
-          const handlerCost = calculateProcessMachineCostForDevice(process, 'handler');
-          const totalUnitCost = testMachineCost + handlerCost;
-          // 保留4位小数
-          const unitCost = parseFloat(formatUnitPrice(totalUnitCost).replace(/[￥$,]/g, ''));
+      formData.ftProcesses.forEach((process) => {
+        if (!process.name || (!process.testMachineData && !process.handlerData && !process.testMachine)) {
+          return; // Skip if no name or device selected
+        }
 
-          // 准备工序配置JSON
-          const configuration = {
-            process_type: process.name,
+        // 计算工序单颗成本
+        const unitCost = calculateProcessUnitCost(process, 'ft', 'ft');
+
+        // 准备工序配置JSON
+        let configuration = {
+          process_type: process.name,
+          uph: process.uph,
+          adjusted_unit_price: process.adjustedUnitPrice // Always include adjustedUnitPrice
+        };
+
+        let itemDescription = `${process.name}`;
+        let deviceType = '-';
+        let deviceModel = '-';
+
+        if (isTestProcess(process.name)) {
+          const testMachineSystemRate = calculateSystemMachineRate(process.testMachineData, process.testMachineCardQuantities);
+          const handlerSystemRate = calculateSystemMachineRate(process.handlerData, process.handlerCardQuantities);
+          const totalSystemRate = testMachineSystemRate + handlerSystemRate;
+
+          configuration = {
+            ...configuration,
             test_machine: process.testMachineData ? {
               id: process.testMachineData.id,
               name: process.testMachine,
@@ -544,36 +733,90 @@ const ProcessQuote = () => {
               name: process.handler,
               cards: getCardsInfo(process.handlerCardQuantities)
             } : null,
-            uph: process.uph
+            system_machine_rate: parseFloat(totalSystemRate.toFixed(4)),
+            adjusted_machine_rate: process.adjustedMachineRate // Include adjusted machine rate
           };
-
-          // 构建设备类型和型号
-          const deviceType = (process.testMachine && process.handler)
+          itemDescription += ` (UPH: ${process.uph})`;
+          deviceType = (process.testMachine && process.handler)
             ? '测试机/分选机'
             : (process.testMachine ? '测试机' : (process.handler ? '分选机' : '-'));
-          const deviceModel = (process.testMachine && process.handler)
+          deviceModel = (process.testMachine && process.handler)
             ? `${process.testMachine}/${process.handler}`
             : (process.testMachine || process.handler || '-');
-
-          items.push({
-            item_name: `FT工序 - ${process.name}`,
-            item_description: `${process.name} (UPH: ${process.uph})`,
-            machine_type: deviceType,
-            supplier: process.testMachineData?.supplier
-              ? (typeof process.testMachineData.supplier === 'object'
-                  ? process.testMachineData.supplier.name
-                  : process.testMachineData.supplier)
-              : '',
-            machine_model: deviceModel,
-            configuration: JSON.stringify(configuration),
-            quantity: 1,
-            unit: '颗',
-            unit_price: unitCost,
-            total_price: unitCost, // 工序报价单颗成本即总价
-            machine_id: process.testMachineData?.id || null,
-            category_type: 'process'
-          });
+        } else if (isBakingProcess(process.name) || isBurnInProcess(process.name)) {
+          configuration = {
+            ...configuration,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            quantity_per_oven: process.quantityPerOven,
+            baking_time: process.bakingTime,
+          };
+          itemDescription += ` (每炉数量: ${process.quantityPerOven}, 时间: ${process.bakingTime}分钟)`;
+          deviceType = process.testMachine ? '烘烤炉' : '-';
+          deviceModel = process.testMachine || '-';
+        } else if (isTapingProcess(process.name)) {
+          configuration = {
+            ...configuration,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            package_type: process.packageType,
+            quantity_per_reel: process.quantityPerReel,
+          };
+          itemDescription += ` (封装: ${process.packageType}, 每卷数量: ${process.quantityPerReel})`;
+          deviceType = process.testMachine ? '编带机' : '-';
+          deviceModel = process.testMachine || '-';
+        } else if (isAOIProcess(process.name)) {
+          configuration = {
+            ...configuration,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+            package_type: process.packageType,
+            uph: process.uph,
+          };
+          itemDescription += ` (封装: ${process.packageType}, UPH: ${process.uph})`;
+          deviceType = process.testMachine ? 'AOI设备' : '-';
+          deviceModel = process.testMachine || '-';
+        } else {
+           // For other processes, still include test_machine if selected
+           configuration = {
+            ...configuration,
+            test_machine: process.testMachineData ? {
+              id: process.testMachineData.id,
+              name: process.testMachine,
+              cards: getCardsInfo(process.testMachineCardQuantities)
+            } : null,
+          };
+          deviceType = process.testMachine ? '设备' : '-';
+          deviceModel = process.testMachine || '-';
         }
+
+        items.push({
+          item_name: `FT工序 - ${process.name}`,
+          item_description: itemDescription,
+          machine_type: deviceType,
+          supplier: process.testMachineData?.supplier
+            ? (typeof process.testMachineData.supplier === 'object'
+                ? process.testMachineData.supplier.name
+                : process.testMachineData.supplier)
+            : '',
+          machine_model: deviceModel,
+          configuration: JSON.stringify(configuration),
+          quantity: 1,
+          unit: '颗',
+          unit_price: unitCost,
+          total_price: unitCost,
+          machine_id: process.testMachineData?.id || null,
+          category_type: 'process'
+        });
       });
     }
 
@@ -606,7 +849,7 @@ const ProcessQuote = () => {
       quote_unit: formData.projectInfo.quoteUnit,
       currency: formData.currency,
       exchange_rate: formData.exchangeRate,
-      total_amount: calculateTotalUnitCost(),
+      total_amount: calculateTotalUnitCost(), // 使用新的总成本计算
       description: projectDescription || '',
       notes: formData.remarks || '',
       items: quoteItems
@@ -691,11 +934,56 @@ const ProcessQuote = () => {
 
 
 
-  // 判断是否为测试工序（需要双设备）
   const isTestProcess = (processName) => {
     if (!processName) return false;
     return (processName.includes('CP') && (processName.includes('1') || processName.includes('2') || processName.includes('3'))) ||
            (processName.includes('FT') && (processName.includes('1') || processName.includes('2') || processName.includes('3')));
+  };
+
+  const isBakingProcess = (processName) => processName === '烘烤';
+  const isTapingProcess = (processName) => processName === '编带';
+  const isAOIProcess = (processName) => processName === 'AOI检测';
+  const isBurnInProcess = (processName) => processName === '老化测试';
+  const isXRayProcess = (processName) => processName === 'X-Ray检测';
+  const isAppearanceProcess = (processName) => processName === '外观检查' || processName === '包装';
+
+  const packageTypeOptions = [
+    'QFN', 'BGA', 'SOP', 'SSOP', 'TSSOP', 'MSOP', 'DFN', 'TO', 'SOT', 'FC', 'WLCSP', 'Others'
+  ];
+
+  const getFilteredMachinesForProcess = (processName, allMachines) => {
+    if (!processName) return [];
+    let requiredMachineTypes = [];
+
+    if (isTestProcess(processName)) {
+      // For test processes, the specific device selection handlers already filter by '测试机', '探针台', '分选机'.
+      // This helper is mainly for the single device selector below.
+      // So for simplicity, we return all machines for 'Test Process' if it's not handled specifically
+      // by the dedicated test machine/prober/handler selectors.
+      // However, if the general selector is used, it should filter relevant test machines.
+      // For this context, it will likely be covered by the specific selectors.
+      // If a generic "test machine" needs to be selected, it's usually '测试机'.
+      return allMachines.filter(m => m.supplier?.machine_type?.name?.includes('测试机'));
+    } else if (isBakingProcess(processName)) {
+      requiredMachineTypes = ['烘烤设备', '烤箱']; // Add any other relevant types
+    } else if (isAOIProcess(processName)) {
+      requiredMachineTypes = ['AOI', 'AOI设备'];
+    } else if (isTapingProcess(processName)) {
+      requiredMachineTypes = ['编带机'];
+    } else if (isBurnInProcess(processName)) {
+      requiredMachineTypes = ['老化设备'];
+    } else if (isXRayProcess(processName)) {
+      requiredMachineTypes = ['X-Ray', 'X-Ray检测设备'];
+    } else if (isAppearanceProcess(processName)) {
+      requiredMachineTypes = ['外观检查设备', 'AOI', 'AOI设备']; // Appearance check might use AOI or dedicated equipment
+    } else {
+      // Default for other non-test processes, e.g., general auxiliary equipment
+      return allMachines; // Or a more specific default if available
+    }
+
+    return allMachines.filter(machine => 
+      requiredMachineTypes.some(type => machine.supplier?.machine_type?.name?.includes(type))
+    );
   };
 
   // 工序表格列定义
@@ -717,167 +1005,233 @@ const ProcessQuote = () => {
             ))}
           </select>
         )
+      },
+      {
+        title: '设备选择',
+        key: 'equipment',
+        render: (_, record) => {
+          const isTest = isTestProcess(record.name);
+          
+          if (isTest) {
+            // 测试工序：显示两个设备选择器
+            return (
+              <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
+                <div>
+                  <label style={{ fontSize: '12px', color: '#666' }}>测试机:</label>
+                  <select
+                    value={record.testMachine || ''}
+                    onChange={(e) => updateProcess(type, record.id, 'testMachine', e.target.value)}
+                    style={{ width: '100%', padding: '4px', marginTop: '2px' }}
+                    disabled={!record.name}
+                  >
+                    <option value="">请选择测试机</option>
+                    {machines.filter(m => m.supplier?.machine_type?.name?.includes('测试机')).map(machineData => (
+                      <option key={machineData.id} value={machineData.name}>
+                        {machineData.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', color: '#666' }}>{type === 'cp' ? '探针台:' : '分选机:'}</label>
+                  <select
+                    value={record[type === 'cp' ? 'prober' : 'handler'] || ''}
+                    onChange={(e) => updateProcess(type, record.id, type === 'cp' ? 'prober' : 'handler', e.target.value)}
+                    style={{ width: '100%', padding: '4px', marginTop: '2px' }}
+                    disabled={!record.name}
+                  >
+                    <option value="">{`请选择${type === 'cp' ? '探针台' : '分选机'}`}</option>
+                    {machines.filter(m => {
+                      const machineTypeName = m.supplier?.machine_type?.name || '';
+                      return type === 'cp' ? machineTypeName.includes('探针台') : machineTypeName.includes('分选机');
+                    }).map(machineData => (
+                      <option key={machineData.id} value={machineData.name}>
+                        {machineData.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+          } else if (record.name) {
+            // 非测试工序：显示单设备选择器
+            const filteredMachines = getFilteredMachinesForProcess(record.name, machines);
+            return (
+              <select
+                value={record.testMachine || ''}
+                onChange={(e) => updateProcess(type, record.id, 'testMachine', e.target.value)}
+                style={{ width: '100%', padding: '4px' }}
+                disabled={!record.name}
+              >
+                <option value="">请选择设备</option>
+                {filteredMachines.map(machineData => (
+                  <option key={machineData.id} value={machineData.name}>
+                    {machineData.name}
+                  </option>
+                ))}
+              </select>
+            );
+          } else {
+            return <span style={{ color: '#ccc' }}>请先选择工序</span>;
+          }
+        }
       }
     ];
 
-
-    // 动态添加设备列的逻辑需要在render时处理，这里先添加一个固定的设备列结构
+    // 新增“规格参数”列
     baseColumns.push({
-      title: '设备选择',
-      key: 'equipment',
+      title: '规格参数',
+      key: 'specs',
       render: (_, record) => {
-        const isTest = isTestProcess(record.name);
-        
-        if (isTest) {
-          // 测试工序：显示两个设备选择器
+        if (isTestProcess(record.name)) {
+          const testMachineSystemRate = calculateSystemMachineRate(record.testMachineData, record.testMachineCardQuantities);
+          const secondDeviceSystemRate = calculateSystemMachineRate(record[type === 'cp' ? 'proberData' : 'handlerData'], record[type === 'cp' ? 'proberCardQuantities' : 'handlerCardQuantities']);
+          const totalSystemRate = testMachineSystemRate + secondDeviceSystemRate;
           return (
-            <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <div>
-                <label style={{ fontSize: '12px', color: '#666' }}>测试机:</label>
-                <select
-                  value={record.testMachine || ''}
-                  onChange={(e) => updateProcess(type, record.id, 'testMachine', e.target.value)}
-                  style={{ width: '100%', padding: '4px', marginTop: '2px' }}
-                  disabled={!record.name}
-                >
-                  <option value="">请选择测试机</option>
-                  {machines.filter(m => m.supplier?.machine_type?.name?.includes('测试机')).map(machineData => (
-                    <option key={machineData.id} value={machineData.name}>
-                      {machineData.name}
-                    </option>
-                  ))}
-                </select>
+                <label style={{ fontSize: '12px', color: '#666' }}>系统机时:</label>
+                <InputNumber
+                  value={parseFloat(totalSystemRate.toFixed(4))}
+                  formatter={(value) => `${formData.currency === 'USD' ? '$' : '￥'}${value}`}
+                  parser={(value) => value.replace(/[^0-9.]/g, '')}
+                  disabled
+                  style={{ width: '100%' }}
+                  size="small"
+                />
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: '#666' }}>{type === 'cp' ? '探针台:' : '分选机:'}</label>
-                <select
-                  value={record[type === 'cp' ? 'prober' : 'handler'] || ''}
-                  onChange={(e) => updateProcess(type, record.id, type === 'cp' ? 'prober' : 'handler', e.target.value)}
-                  style={{ width: '100%', padding: '4px', marginTop: '2px' }}
-                  disabled={!record.name}
-                >
-                  <option value="">{`请选择${type === 'cp' ? '探针台' : '分选机'}`}</option>
-                  {machines.filter(m => {
-                    const machineTypeName = m.supplier?.machine_type?.name || '';
-                    return type === 'cp' ? machineTypeName.includes('探针台') : machineTypeName.includes('分选机');
-                  }).map(machineData => (
-                    <option key={machineData.id} value={machineData.name}>
-                      {machineData.name}
-                    </option>
-                  ))}
-                </select>
+                <label style={{ fontSize: '12px', color: '#666' }}>调整机时:</label>
+                <InputNumber
+                  value={record.adjustedMachineRate > 0 ? record.adjustedMachineRate : parseFloat(totalSystemRate.toFixed(4))}
+                  onChange={(value) => updateProcess(type, record.id, 'adjustedMachineRate', value || 0)}
+                  min={0}
+                  style={{ width: '100%' }}
+                  size="small"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', color: '#666' }}>UPH ({type === 'cp' ? '片' : '颗'}/小时):</label>
+                <InputNumber
+                  value={record.uph}
+                  onChange={(value) => updateProcess(type, record.id, 'uph', value || 0)}
+                  min={0}
+                  style={{ width: '100%' }}
+                  size="small"
+                />
               </div>
             </div>
           );
-        } else if (record.name) {
-          // 非测试工序：显示单设备选择器
+        } else if (isBakingProcess(record.name) || isBurnInProcess(record.name)) {
           return (
-            <select
-              value={record.testMachine || ''}
-              onChange={(e) => updateProcess(type, record.id, 'testMachine', e.target.value)}
-              style={{ width: '100%', padding: '4px' }}
-              disabled={!record.name}
-            >
-              <option value="">请选择设备</option>
-              {machines.map(machineData => (
-                <option key={machineData.id} value={machineData.name}>
-                  {machineData.name}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: '#666' }}>每炉数量:</label>
+                <InputNumber
+                  value={record.quantityPerOven}
+                  onChange={(value) => updateProcess(type, record.id, 'quantityPerOven', value || 0)}
+                  min={0}
+                  style={{ width: '100%' }}
+                  size="small"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', color: '#666' }}>烘烤时间 (分钟):</label>
+                <InputNumber
+                  value={record.bakingTime}
+                  onChange={(value) => updateProcess(type, record.id, 'bakingTime', value || 0)}
+                  min={0}
+                  style={{ width: '100%' }}
+                  size="small"
+                />
+              </div>
+            </div>
           );
-        } else {
-          return <span style={{ color: '#ccc' }}>请先选择工序</span>;
-        }
-      }
-    });
-
-    baseColumns.push({
-      title: 'UPH',
-      dataIndex: 'uph',
-      render: (uph, record) => (
-        <InputNumber
-          value={uph}
-          onChange={(value) => updateProcess(type, record.id, 'uph', value || 0)}
-          min={0}
-          style={{ width: '100%' }}
-        />
-      )
-    });
-
-    baseColumns.push({
-      title: '单颗费用',
-      dataIndex: 'unitCost',
-      render: (unitCost, record) => {
-        const isTest = isTestProcess(record.name);
-
-        if (isTest) {
-          // 测试工序：计算双设备成本
-          const testMachineCost = calculateProcessMachineCostForDevice(record, 'testMachine');
-          const secondDeviceCost = calculateProcessMachineCostForDevice(record, type === 'cp' ? 'prober' : 'handler');
-          const totalCost = testMachineCost + secondDeviceCost;
-
+        } else if (isTapingProcess(record.name) || isAOIProcess(record.name)) {
           return (
-            <div>
-              <div>{formatUnitPrice(totalCost)}</div>
-              {totalCost > 0 && (
-                <div style={{ fontSize: '11px', color: '#666' }}>
-                  {testMachineCost > 0 && <>测试机: {formatUnitPrice(testMachineCost)}<br/></>}
-                  {secondDeviceCost > 0 && <>{type === 'cp' ? '探针台' : '分选机'}: {formatUnitPrice(secondDeviceCost)}</>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: '#666' }}>封装形式:</label>
+                <select
+                  value={record.packageType || ''}
+                  onChange={(e) => updateProcess(type, record.id, 'packageType', e.target.value)}
+                  style={{ width: '100%', padding: '4px', marginTop: '2px' }}
+                >
+                  <option value="">请选择封装形式</option>
+                  {packageTypeOptions.map(pkgType => (
+                    <option key={pkgType} value={pkgType}>
+                      {pkgType}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {isTapingProcess(record.name) && (
+                <div>
+                  <label style={{ fontSize: '12px', color: '#666' }}>每卷数量:</label>
+                  <InputNumber
+                    value={record.quantityPerReel}
+                    onChange={(value) => updateProcess(type, record.id, 'quantityPerReel', value || 0)}
+                    min={0}
+                    style={{ width: '100%' }}
+                    size="small"
+                  />
+                </div>
+              )}
+              {isAOIProcess(record.name) && (
+                <div>
+                  <label style={{ fontSize: '12px', color: '#666' }}>UPH (颗/小时):</label>
+                  <InputNumber
+                    value={record.uph}
+                    onChange={(value) => updateProcess(type, record.id, 'uph', value || 0)}
+                    min={0}
+                    style={{ width: '100%' }}
+                    size="small"
+                  />
                 </div>
               )}
             </div>
           );
         } else {
-          // 非测试工序：计算单设备成本
-          const machineCost = calculateProcessMachineCostForDevice(record, 'testMachine');
-
-          return (
-            <div>
-              <div>{formatUnitPrice(machineCost)}</div>
-              {machineCost > 0 && (
-                <div style={{ fontSize: '11px', color: '#666' }}>
-                  设备: {formatUnitPrice(machineCost)}
-                </div>
-              )}
-            </div>
-          );
+          return <span style={{ color: '#ccc' }}>无特定参数</span>;
         }
       }
     });
 
     baseColumns.push({
-      title: '板卡配置',
-      dataIndex: 'cardQuantities',
-      render: (cardQuantities, record) => {
-        // 获取双设备的板卡信息
-        const testMachineCards = record.testMachineData ? 
-          cardTypes.filter(card => card.machine_id === record.testMachineData.id) : [];
-        const secondDeviceCards = record[`${type === 'cp' ? 'prober' : 'handler'}Data`] ? 
-          cardTypes.filter(card => card.machine_id === record[`${type === 'cp' ? 'prober' : 'handler'}Data`].id) : [];
-        
-        const totalAvailableCards = testMachineCards.length + secondDeviceCards.length;
-        if (totalAvailableCards === 0) {
-          return <span style={{ color: '#999' }}>请先选择设备</span>;
-        }
-        
-        const testMachineSelectedCount = Object.keys(record.testMachineCardQuantities || {}).length;
-        const secondDeviceSelectedCount = Object.keys(record[`${type === 'cp' ? 'prober' : 'handler'}CardQuantities`] || {}).length;
-        const totalSelectedCount = testMachineSelectedCount + secondDeviceSelectedCount;
+      title: type === 'cp' ? '单片费用' : '单颗费用',
+      key: 'unit_cost_display',
+      render: (_, record) => {
+        const calculatedCost = calculateProcessUnitCost(record, type, type);
         
         return (
-          <div>
-            <div style={{ color: totalSelectedCount > 0 ? '#1890ff' : '#999', fontSize: '12px' }}>
-              已选择 {totalSelectedCount} / {totalAvailableCards} 张板卡
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <div>
+              <label style={{ fontSize: '12px', color: '#666' }}>计算费用:</label>
+              <InputNumber
+                value={parseFloat(calculatedCost.toFixed(4))}
+                formatter={(value) => `${formData.currency === 'USD' ? '$' : '￥'}${value}`}
+                parser={(value) => value.replace(/[^0-9.]/g, '')}
+                disabled
+                style={{ width: '100%' }}
+                size="small"
+              />
             </div>
-            {testMachineCards.length > 0 && (
-              <div style={{ fontSize: '11px', color: '#666' }}>
-                测试机: {testMachineSelectedCount} / {testMachineCards.length}
+            {!isTestProcess(record.name) && ( // 只有非测试工序才有调整单颗费用
+              <div>
+                <label style={{ fontSize: '12px', color: '#666' }}>调整费用:</label>
+                <InputNumber
+                  value={record.adjustedUnitPrice > 0 ? record.adjustedUnitPrice : parseFloat(calculatedCost.toFixed(4))}
+                  onChange={(value) => updateProcess(type, record.id, 'adjustedUnitPrice', value || 0)}
+                  min={0}
+                  style={{ width: '100%' }}
+                  size="small"
+                />
               </div>
             )}
-            {secondDeviceCards.length > 0 && (
-              <div style={{ fontSize: '11px', color: '#666' }}>
-                {type === 'cp' ? '探针台' : '分选机'}: {secondDeviceSelectedCount} / {secondDeviceCards.length}
+            {isTestProcess(record.name) && (
+              <div style={{ fontSize: '11px', color: '#666', marginTop: '5px' }}>
+                <span style={{ fontWeight: 'bold' }}>{type === 'cp' ? '最终单片价' : '最终单价'}: </span>
+                {formatUnitPrice(calculatedCost)}
               </div>
             )}
           </div>

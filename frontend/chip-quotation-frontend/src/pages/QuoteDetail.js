@@ -1551,17 +1551,14 @@ const QuoteDetail = () => {
           (() => {
             // 解析工序配置，从configuration JSON中提取UPH和机时费率
             const parseProcessItem = (item) => {
-              let uph = null;
+              let config = {};
               let hourlyRate = null;
 
               if (item.configuration) {
                 try {
-                  const config = typeof item.configuration === 'string'
+                  config = typeof item.configuration === 'string'
                     ? JSON.parse(item.configuration)
                     : item.configuration;
-
-                  // 提取UPH
-                  uph = config.uph || null;
 
                   // 辅助函数：计算设备的板卡费用
                   const calculateDeviceCost = (deviceConfig, deviceType) => {
@@ -1638,8 +1635,9 @@ const QuoteDetail = () => {
 
               return {
                 ...item,
-                uph: uph,
-                hourlyRate: hourlyRate || '-'
+                ...config, // 展开所有配置参数
+                hourlyRate: hourlyRate || '-',
+                adjusted_machine_rate: config.adjusted_machine_rate // 显式提取调整机时
               };
             };
 
@@ -1662,48 +1660,101 @@ const QuoteDetail = () => {
               })
               .map(parseProcessItem);
 
-            // 定义工序表格列（仅桌面端使用）
-            const processColumns = [
-              {
-                title: '工序名称',
-                dataIndex: 'itemName',
-                key: 'itemName',
-                render: (text) => text || '-'
-              },
-              {
-                title: '设备类型',
-                dataIndex: 'machineType',
-                key: 'machineType',
-                render: (text) => text || '-'
-              },
-              {
-                title: '设备型号',
-                dataIndex: 'machine',
-                key: 'machine',
-                render: (text, record) => text || record.itemName?.split('-')[1] || '-'
-              },
-              {
-                title: '机时费率',
-                dataIndex: 'hourlyRate',
-                key: 'hourlyRate',
-                render: (rate) => rate || '¥0.00/小时'
-              },
-              {
-                title: 'UPH',
-                dataIndex: 'uph',
-                key: 'uph',
-                render: (text) => text || '-'
-              },
-              {
-                title: '单颗报价',
+            // 获取单个工序的专用列定义
+            const getProcessItemColumns = (item, type) => {
+              // 基础列
+              const columns = [
+                {
+                  title: '设备型号',
+                  dataIndex: 'machine',
+                  key: 'machine',
+                  render: (text, record) => text || record.itemName?.split('-')[1] || '-'
+                },
+                {
+                  title: '系统机时',
+                  dataIndex: 'hourlyRate',
+                  key: 'hourlyRate',
+                  render: (rate) => {
+                    if (!rate || rate === '-') return '-';
+                    // 如果有调整机时，则系统机时加删除线
+                    const hasAdjustment = item.adjusted_machine_rate !== undefined && item.adjusted_machine_rate !== null && item.adjusted_machine_rate !== '';
+                    return (
+                      <span style={{ 
+                        textDecoration: hasAdjustment ? 'line-through' : 'none',
+                        color: hasAdjustment ? '#999' : 'inherit'
+                      }}>
+                        {rate}
+                      </span>
+                    );
+                  }
+                }
+              ];
+
+              // 动态添加调整机时列
+              if (item.adjusted_machine_rate !== undefined && item.adjusted_machine_rate !== null && item.adjusted_machine_rate !== '') {
+                columns.push({
+                  title: '调整机时',
+                  dataIndex: 'adjusted_machine_rate',
+                  key: 'adjusted_machine_rate',
+                  render: (rate) => {
+                    if (rate === undefined || rate === null || rate === '') return '-';
+                    const currencySymbol = quote.currency === 'USD' ? '$' : '¥';
+                    return `${currencySymbol}${parseFloat(rate).toFixed(2)}/小时`;
+                  }
+                });
+              }
+
+              // 根据数据动态添加列
+              if (item.uph !== undefined && item.uph !== null) {
+                columns.push({
+                  title: 'UPH',
+                  dataIndex: 'uph',
+                  key: 'uph'
+                });
+              }
+              if (item.baking_time !== undefined && item.baking_time !== null) {
+                columns.push({
+                  title: '烘烤时间(分)',
+                  dataIndex: 'baking_time',
+                  key: 'baking_time'
+                });
+              }
+              if (item.quantity_per_oven !== undefined && item.quantity_per_oven !== null) {
+                columns.push({
+                  title: '每炉数量',
+                  dataIndex: 'quantity_per_oven',
+                  key: 'quantity_per_oven'
+                });
+              }
+              if (item.package_type) {
+                columns.push({
+                  title: '封装形式',
+                  dataIndex: 'package_type',
+                  key: 'package_type'
+                });
+              }
+              if (item.quantity_per_reel !== undefined && item.quantity_per_reel !== null) {
+                columns.push({
+                  title: '每卷数量',
+                  dataIndex: 'quantity_per_reel',
+                  key: 'quantity_per_reel'
+                });
+              }
+
+              // 价格列
+              columns.push({
+                title: type === 'CP' ? '单片报价' : '单颗报价',
                 dataIndex: 'unitPrice',
                 key: 'unitPrice',
-                render: (price) => price ? `¥${price.toFixed(4)}` : '¥0.0000'
-              }
-            ];
+                render: (price) => price ? `¥${price.toFixed(4)}` : '¥0.0000',
+                align: 'right'
+              });
+
+              return columns;
+            };
 
             // 移动端卡片渲染函数
-            const renderProcessCards = (processes, title, color, emoji) => {
+            const renderProcessCards = (processes, title, color, emoji, type) => {
               if (processes.length === 0) return null;
               
               return (
@@ -1711,75 +1762,65 @@ const QuoteDetail = () => {
                   <h5 style={{ marginBottom: '12px', color: color, fontSize: isMobile ? '13px' : '14px' }}>
                     {emoji} {title}
                   </h5>
-                  {isMobile ? (
-                    // 移动端：卡片布局
-                    <div>
-                      {processes.map((item, index) => (
-                        <div key={index} style={{
+                  {/* 为每个工序渲染独立的表格/卡片 */}
+                  {processes.map((item, index) => (
+                    <div key={index} style={{ marginBottom: '16px' }}>
+                      <div style={{ 
+                        fontWeight: 'bold', 
+                        fontSize: '13px', 
+                        marginBottom: '8px',
+                        paddingLeft: '8px',
+                        borderLeft: `3px solid ${color}`
+                      }}>
+                        {item.itemName || `工序 ${index + 1}`}
+                        <span style={{ fontWeight: 'normal', color: '#666', marginLeft: '8px', fontSize: '12px' }}>
+                          ({item.machineType || '-'})
+                        </span>
+                      </div>
+
+                      {isMobile ? (
+                        // 移动端：卡片布局
+                        <div style={{
                           border: '1px solid #d9d9d9',
                           borderRadius: '6px',
                           backgroundColor: '#fff',
-                          marginBottom: '8px',
                           padding: '12px'
                         }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                            <div>
-                              <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>
-                                {item.itemName || '-'}
-                              </div>
-                              <div style={{ fontSize: '11px', color: '#666' }}>
-                                {item.machineType || '-'}
-                              </div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
-                                {item.unitPrice ? `¥${item.unitPrice.toFixed(4)}` : '¥0.0000'}
-                              </div>
-                              <div style={{ fontSize: '10px', color: '#999' }}>
-                                单颗报价
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#666', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div style={{ fontSize: '11px', color: '#666', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                             <div>设备: {item.machine || item.itemName?.split('-')[1] || '-'}</div>
-                            <div>UPH: {item.uph || '-'}</div>
+                            {item.hourlyRate && <div>费率: {item.hourlyRate}</div>}
+                            {item.uph && <div>UPH: {item.uph}</div>}
+                            {item.baking_time && <div>时间: {item.baking_time}分</div>}
+                            {item.quantity_per_oven && <div>每炉: {item.quantity_per_oven}</div>}
+                            {item.package_type && <div>封装: {item.package_type}</div>}
+                            {item.quantity_per_reel && <div>每卷: {item.quantity_per_reel}</div>}
                           </div>
-                          {item.hourlyRate && (
-                            <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
-                              机时费率: {item.hourlyRate}
+                          <div style={{ textAlign: 'right', borderTop: '1px dashed #eee', paddingTop: '8px' }}>
+                            <div style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                              {item.unitPrice ? `¥${item.unitPrice.toFixed(4)}` : '¥0.0000'}
                             </div>
-                          )}
+                            <div style={{ fontSize: '10px', color: '#999' }}>
+                              {type === 'CP' ? '单片报价' : '单颗报价'}
+                            </div>
+                          </div>
                         </div>
-                      ))}
-                      <div style={{
-                        padding: '10px',
-                        backgroundColor: '#f0f9ff',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        color: '#666',
-                        fontStyle: 'italic',
-                        textAlign: 'center'
-                      }}>
-                        💡 注：{title}各道工序报价不可直接相加，请根据实际工艺流程选择
-                      </div>
+                      ) : (
+                        // 桌面端：为每个工序单独渲染表格
+                        <Table
+                          columns={getProcessItemColumns(item, type)}
+                          dataSource={[item]} // 每个表格只有一行数据
+                          pagination={false}
+                          size="small"
+                          bordered
+                          rowKey={() => `${title.toLowerCase()}_${index}`}
+                        />
+                      )}
                     </div>
-                  ) : (
-                    // 桌面端：表格布局
-                    <div>
-                      <Table
-                        columns={processColumns}
-                        dataSource={processes}
-                        pagination={false}
-                        size="small"
-                        bordered
-                        rowKey={(item, index) => `${title.toLowerCase()}_${index}`}
-                        style={{ marginBottom: '8px' }}
-                      />
-                      <div style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
-                        💡 注：{title}各道工序报价不可直接相加，请根据实际工艺流程选择
-                      </div>
-                    </div>
-                  )}
+                  ))}
+                  
+                  <div style={{ fontSize: '12px', color: '#666', fontStyle: 'italic', marginTop: '8px', paddingLeft: '8px' }}>
+                    💡 注：{title}各道工序报价不可直接相加，请根据实际工艺流程选择
+                  </div>
                 </div>
               );
             };
@@ -1789,10 +1830,10 @@ const QuoteDetail = () => {
                 <h4 style={{ marginBottom: '16px', color: '#1890ff', fontSize: isMobile ? '14px' : '16px' }}>报价明细</h4>
                 
                 {/* CP工序 */}
-                {renderProcessCards(cpProcesses, 'CP工序', '#52c41a', '🔬')}
+                {renderProcessCards(cpProcesses, 'CP工序', '#52c41a', '🔬', 'CP')}
                 
                 {/* FT工序 */}
-                {renderProcessCards(ftProcesses, 'FT工序', '#1890ff', '📱')}
+                {renderProcessCards(ftProcesses, 'FT工序', '#1890ff', '📱', 'FT')}
               </div>
             );
           })()

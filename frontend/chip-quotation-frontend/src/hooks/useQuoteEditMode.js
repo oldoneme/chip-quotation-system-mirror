@@ -1448,33 +1448,37 @@ const useQuoteEditMode = () => {
     items.forEach((item) => {
       let configData = null;
       let processType = null;
+      let adjustedUnitPrice = item.unit_price; // Default to item's unit_price
 
-      // 尝试解析 configuration（新格式）
+      // Try to parse configuration (new format)
       if (item.configuration) {
         try {
           configData = JSON.parse(item.configuration);
           processType = configData.process_type;
+          if (configData.adjusted_unit_price !== undefined) {
+            adjustedUnitPrice = configData.adjusted_unit_price;
+          }
         } catch (e) {
           console.warn('无法解析工序configuration JSON:', item.configuration);
         }
       }
 
-      // 如果没有 configuration JSON，尝试从其他字段推断（旧格式）
+      // If no configuration JSON, try to infer from other fields (old format)
       if (!processType && item.item_name) {
-        // 旧格式1: "CP工序 - CP1测试" -> "CP1测试"
+        // Old format 1: "CP工序 - CP1测试" -> "CP1测试"
         let match = item.item_name.match(/(?:CP|FT)工序\s*-\s*(.+)/);
         if (match) {
           processType = match[1];
         } else {
-          // 旧格式2: "CP-CP1测试" -> "CP1测试"
+          // Old format 2: "CP-CP1测试" -> "CP1测试"
           match = item.item_name.match(/^(?:CP|FT)-(.+)/);
           if (match) {
             processType = match[1];
           }
         }
 
-        // 如果是旧格式，尝试解析旧的configuration文本字段
-        // 格式: "测试机:ETS-88, 探针台:AP3000, UPH:10"
+        // If it's an old format, try to parse the old configuration text field
+        // Format: "测试机:ETS-88, 探针台:AP3000, UPH:10"
         if (processType && item.configuration && typeof item.configuration === 'string') {
           try {
             const oldConfig = {};
@@ -1487,13 +1491,13 @@ const useQuoteEditMode = () => {
               else if (key === 'UPH') oldConfig.uph = parseInt(value) || 1000;
             });
 
-            // 将旧格式转换为新格式结构
+            // Convert old format to new format structure
             configData = {
               process_type: processType,
               uph: oldConfig.uph || 1000
             };
 
-            // 解析测试机
+            // Parse test machine
             if (oldConfig.testMachine) {
               const testMachine = availableMachines.find(m => m.name === oldConfig.testMachine);
               if (testMachine) {
@@ -1507,7 +1511,7 @@ const useQuoteEditMode = () => {
               }
             }
 
-            // 解析探针台/分选机
+            // Parse prober/handler
             if (oldConfig.prober) {
               const prober = availableMachines.find(m => m.name === oldConfig.prober);
               if (prober) {
@@ -1539,34 +1543,53 @@ const useQuoteEditMode = () => {
       }
 
       if (!processType) {
-        return; // 跳过无法识别的项
+        return; // Skip unrecognizable items
       }
 
-      // 判断是CP还是FT工序（根据item_name判断，而不是processType）
+      // Determine if it's CP or FT process (based on item_name, not processType)
       const itemName = item.item_name || '';
       const isCPProcess = itemName.includes('CP工序') || itemName.startsWith('CP-');
       const isFTProcess = itemName.includes('FT工序') || itemName.startsWith('FT-');
+
+      const commonProcessFields = {
+        name: processType,
+        uph: configData?.uph || 1000,
+        unitCost: item.unit_price || 0, // Calculated unit cost from stored item
+        adjustedUnitPrice: adjustedUnitPrice // User adjusted unit cost
+      };
+
+      // Add process-specific fields
+      if (isTestProcess(processType)) {
+        commonProcessFields.adjustedMachineRate = configData?.adjusted_machine_rate || 0; // or calculate system rate if not available
+      } else if (isBakingProcess(processType) || isBurnInProcess(processType)) {
+        commonProcessFields.quantityPerOven = configData?.quantity_per_oven || 1000;
+        commonProcessFields.bakingTime = configData?.baking_time || 60;
+      } else if (isTapingProcess(processType)) {
+        commonProcessFields.packageType = configData?.package_type || '';
+        commonProcessFields.quantityPerReel = configData?.quantity_per_reel || 3000;
+      } else if (isAOIProcess(processType)) {
+        commonProcessFields.packageType = configData?.package_type || '';
+      }
+
 
       if (isCPProcess) {
         if (!config.selectedTypes.includes('cp')) {
           config.selectedTypes.push('cp');
         }
 
-        // 构建CP工序对象
+        // Construct CP process object
         const process = {
           id: config.cpProcesses.length + 1,
-          name: processType,
+          ...commonProcessFields,
           testMachine: '',
           testMachineData: null,
           testMachineCardQuantities: {},
           prober: '',
           proberData: null,
           proberCardQuantities: {},
-          uph: configData?.uph || 1000,
-          unitCost: 0  // 编辑时人工成本重置为0，让用户重新输入
         };
 
-        // 解析测试机信息
+        // Parse test machine info
         if (configData?.test_machine) {
           const testMachineId = configData.test_machine.id;
           const fullMachine = availableMachines.find(m => m.id === testMachineId);
@@ -1574,18 +1597,18 @@ const useQuoteEditMode = () => {
             process.testMachine = fullMachine.name;
             process.testMachineData = fullMachine;
           } else {
-            // 使用 machine_id 查找
+            // Use machine_id to find
             const machineById = availableMachines.find(m => m.id === item.machine_id);
             if (machineById) {
               process.testMachine = machineById.name;
               process.testMachineData = machineById;
             } else {
-              // 最后使用名称匹配
+              // Finally use name matching
               process.testMachine = configData.test_machine.name || item.machine_model || '';
             }
           }
 
-          // 解析测试机板卡
+          // Parse test machine cards
           if (configData.test_machine.cards && Array.isArray(configData.test_machine.cards)) {
             configData.test_machine.cards.forEach(cardInfo => {
               process.testMachineCardQuantities[cardInfo.id] = cardInfo.quantity || 1;
@@ -1593,7 +1616,7 @@ const useQuoteEditMode = () => {
           }
         }
 
-        // 解析探针台信息
+        // Parse prober info
         if (configData?.prober) {
           const proberId = configData.prober.id;
           const fullProber = availableMachines.find(m => m.id === proberId);
@@ -1604,7 +1627,7 @@ const useQuoteEditMode = () => {
             process.prober = configData.prober.name || '';
           }
 
-          // 解析探针台板卡
+          // Parse prober cards
           if (configData.prober.cards && Array.isArray(configData.prober.cards)) {
             configData.prober.cards.forEach(cardInfo => {
               process.proberCardQuantities[cardInfo.id] = cardInfo.quantity || 1;
@@ -1618,21 +1641,19 @@ const useQuoteEditMode = () => {
           config.selectedTypes.push('ft');
         }
 
-        // 构建FT工序对象
+        // Construct FT process object
         const process = {
           id: config.ftProcesses.length + 1,
-          name: processType,
+          ...commonProcessFields,
           testMachine: '',
           testMachineData: null,
           testMachineCardQuantities: {},
           handler: '',
           handlerData: null,
           handlerCardQuantities: {},
-          uph: configData?.uph || 1000,
-          unitCost: 0  // 编辑时人工成本重置为0，让用户重新输入
         };
 
-        // 解析测试机信息
+        // Parse test machine info
         if (configData?.test_machine) {
           const testMachineId = configData.test_machine.id;
           const fullMachine = availableMachines.find(m => m.id === testMachineId);
@@ -1640,18 +1661,18 @@ const useQuoteEditMode = () => {
             process.testMachine = fullMachine.name;
             process.testMachineData = fullMachine;
           } else {
-            // 使用 machine_id 查找
+            // Use machine_id to find
             const machineById = availableMachines.find(m => m.id === item.machine_id);
             if (machineById) {
               process.testMachine = machineById.name;
               process.testMachineData = machineById;
             } else {
-              // 最后使用名称匹配
+              // Finally use name matching
               process.testMachine = configData.test_machine.name || item.machine_model || '';
             }
           }
 
-          // 解析测试机板卡
+          // Parse test machine cards
           if (configData.test_machine.cards && Array.isArray(configData.test_machine.cards)) {
             configData.test_machine.cards.forEach(cardInfo => {
               process.testMachineCardQuantities[cardInfo.id] = cardInfo.quantity || 1;
@@ -1659,7 +1680,7 @@ const useQuoteEditMode = () => {
           }
         }
 
-        // 解析分选机信息
+        // Parse handler info
         if (configData?.handler) {
           const handlerId = configData.handler.id;
           const fullHandler = availableMachines.find(m => m.id === handlerId);
@@ -1670,7 +1691,7 @@ const useQuoteEditMode = () => {
             process.handler = configData.handler.name || '';
           }
 
-          // 解析分选机板卡
+          // Parse handler cards
           if (configData.handler.cards && Array.isArray(configData.handler.cards)) {
             configData.handler.cards.forEach(cardInfo => {
               process.handlerCardQuantities[cardInfo.id] = cardInfo.quantity || 1;
