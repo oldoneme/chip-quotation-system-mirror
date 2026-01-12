@@ -124,6 +124,20 @@ const useQuoteEditMode = () => {
   };
 
   /**
+   * Helper functions for process types (same as in ProcessQuote.js)
+   */
+  const isTestProcess = (processName) => {
+    if (!processName) return false;
+    return (processName.includes('CP') && (processName.includes('1') || processName.includes('2') || processName.includes('3'))) ||
+           (processName.includes('FT') && (processName.includes('1') || processName.includes('2') || processName.includes('3')));
+  };
+
+  const isBakingProcess = (processName) => processName === '烘烤';
+  const isTapingProcess = (processName) => processName === '编带';
+  const isAOIProcess = (processName) => processName === 'AOI检测';
+  const isBurnInProcess = (processName) => processName === '老化测试';
+
+  /**
    * 将后端报价数据转换为前端表单数据格式
    * @param {Object} quote - 后端报价数据或前端展示数据
    * @param {string} quoteType - 报价类型 (tooling, inquiry, engineering, etc.)

@@ -217,6 +217,26 @@ const QuoteResult = () => {
     });
   };
 
+  // Handle changes in Engineering Quote items
+  const handleEngineeringItemChange = (key, field, value) => {
+    setEngineeringItems(prevItems => {
+      return prevItems.map(item => {
+        if (item.key === key) {
+          return { ...item, [field]: value };
+        }
+        return item;
+      });
+    });
+  };
+
+  // Calculate Engineering Quote Total
+  const calculateEngineeringTotal = () => {
+    return engineeringItems.reduce((sum, item) => {
+      const price = item.adjustedPrice !== undefined && item.adjustedPrice !== null ? item.adjustedPrice : item.systemPrice;
+      return sum + (Number(price) || 0);
+    }, 0);
+  };
+
   // Calculate Process Quote Total
   const calculateProcessTotal = () => {
     return processItems.reduce((sum, item) => sum + (Number(item.finalUnitPrice) || 0), 0);
