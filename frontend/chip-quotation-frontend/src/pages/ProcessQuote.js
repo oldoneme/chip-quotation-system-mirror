@@ -609,7 +609,8 @@ const ProcessQuote = () => {
               cards: getCardsInfo(process.proberCardQuantities)
             } : null,
             system_machine_rate: parseFloat(totalSystemRate.toFixed(4)),
-            adjusted_machine_rate: process.adjustedMachineRate // Include adjusted machine rate
+            // 保存 effective machine rate: 如果用户显式调整了 adjustedMachineRate (且不为0),则用调整后的值, 否则用系统机时
+            adjusted_machine_rate: parseFloat((process.adjustedMachineRate !== 0 ? process.adjustedMachineRate : totalSystemRate).toFixed(4))
           };
           itemDescription += ` (UPH: ${process.uph})`;
           deviceType = (process.testMachine && process.prober)
@@ -734,7 +735,8 @@ const ProcessQuote = () => {
               cards: getCardsInfo(process.handlerCardQuantities)
             } : null,
             system_machine_rate: parseFloat(totalSystemRate.toFixed(4)),
-            adjusted_machine_rate: process.adjustedMachineRate // Include adjusted machine rate
+            // 保存 effective machine rate: 如果用户显式调整了 adjustedMachineRate (且不为0),则用调整后的值, 否则用系统机时
+            adjusted_machine_rate: parseFloat((process.adjustedMachineRate !== 0 ? process.adjustedMachineRate : totalSystemRate).toFixed(4))
           };
           itemDescription += ` (UPH: ${process.uph})`;
           deviceType = (process.testMachine && process.handler)
