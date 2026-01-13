@@ -967,40 +967,57 @@ const QuoteManagement = () => {
 
               const machine = machines.find(m => m.id === deviceConfig.id);
               if (!machine) {
-                return 0;
+                // 如果找不到机器数据，但有板卡，则尝试使用item中的货币/汇率/折扣信息，或默认值
+                console.warn(`WARN: calculateDeviceCost 找不到机器数据 (ID: ${deviceConfig.id})，尝试使用默认值`);
+                // Fallback to default values if machine not found for card calculation
+                const defaultCurrency = record.currency || 'CNY';
+                const defaultExchangeRate = record.exchange_rate || 7.2;
+                const defaultDiscountRate = 1.0;
+                
+                let totalCardCostFallback = 0;
+                deviceConfig.cards.forEach(cardInfo => {
+                  const card = cardTypes.find(c => c.id === cardInfo.id);
+                  if (card && cardInfo.quantity > 0) {
+                    let adjustedPrice = (card.unit_price || 0) / 10000;
+                    if (defaultCurrency === 'USD') {
+                      adjustedPrice = adjustedPrice / defaultExchangeRate;
+                    }
+                    totalCardCostFallback += adjustedPrice * defaultDiscountRate * (cardInfo.quantity || 1);
+                  }
+                });
+                return totalCardCostFallback;
               }
 
-              let deviceCost = 0;
+              let totalCardCost = 0;
               deviceConfig.cards.forEach(cardInfo => {
                 const card = cardTypes.find(c => c.id === cardInfo.id);
                 if (card && cardInfo.quantity > 0) {
-                  // 板卡单价 / 10000
                   let adjustedPrice = (card.unit_price || 0) / 10000;
 
-                  // 汇率转换
-                  if (record.currency === 'USD') {
-                    if (machine.currency === 'CNY' || machine.currency === 'RMB') {
-                      adjustedPrice = adjustedPrice / (record.exchange_rate || 7.2);
+                  // 优先使用机器自身定义的汇率，如果机器没有定义，则退回到报价单的全局汇率
+                  const effectiveExchangeRate = machine.exchange_rate || record.exchange_rate || 7.2; // Fallback to record.exchange_rate then default
+
+                  if (record.currency === 'USD') { // 如果报价币种是 USD
+                    if (machine.currency === 'CNY' || machine.currency === 'RMB') { // 并且机器币种是 CNY/RMB
+                      adjustedPrice = adjustedPrice / effectiveExchangeRate; // 将 CNY/RMB 机器价格转换为 USD 报价
                     }
-                  } else {
-                    if (!machine.exchange_rate) {
-                      console.error(`设备 ${machine.name} 缺少 exchange_rate`);
-                      return;
+                  } else { // 如果报价币种是 CNY
+                    if (machine.currency === 'USD') { // 并且机器币种是 USD
+                      adjustedPrice = adjustedPrice * effectiveExchangeRate; // 将 USD 机器价格转换为 CNY 报价
                     }
-                    adjustedPrice = adjustedPrice * machine.exchange_rate;
                   }
 
-                  // 应用折扣率和数量
                   if (!machine.discount_rate) {
                     console.error(`设备 ${machine.name} 缺少 discount_rate`);
                     return;
                   }
-                  const hourlyCost = adjustedPrice * machine.discount_rate * (cardInfo.quantity || 1);
-                  deviceCost += hourlyCost;
+                  // 应用折扣率到板卡费用
+                  const discountRate = machine.discount_rate || 1.0;
+                  totalCardCost += adjustedPrice * discountRate * (cardInfo.quantity || 1);
                 }
               });
-
-              return deviceCost;
+              
+              return totalCardCost;
             };
 
             // 计算机时费率（基于所选板卡）

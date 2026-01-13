@@ -409,45 +409,55 @@ const ProcessQuote = () => {
   // 计算单个设备的机器费用（包括板卡成本）- 支持双设备
   const calculateSystemMachineRate = (machineData, cardQuantities) => {
     if (!machineData) {
+      console.log('DEBUG_CALC_ERROR: machineData is null or undefined, returning 0.');
       return 0;
     }
 
-    let machineBaseRate = (machineData.unit_price || 0) / 10000; // 假设设备单价也是万分位
-    // 根据报价币种和机器币种进行转换
-    if (formData.currency === 'USD') {
-      if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
-        machineBaseRate = machineBaseRate / formData.exchangeRate;
-      }
-    } else { // 报价币种是CNY
-      if (machineData.currency === 'USD') {
-        machineBaseRate = machineBaseRate * formData.exchangeRate;
-      }
-    }
-    
-    // 应用折扣率
-    const discountedMachineRate = machineBaseRate * (machineData.discount_rate || 1.0);
+    console.log(`DEBUG_CALC: --- Calculating System Machine Rate for Machine: ${machineData.name} (ID: ${machineData.id}) ---`);
+    console.log('DEBUG_CALC: Machine Data:', machineData);
+    console.log('DEBUG_CALC: Selected Card Quantities:', cardQuantities);
+    console.log('DEBUG_CALC: Form Data Currency:', formData.currency, 'Exchange Rate:', formData.exchangeRate);
 
     let totalCardCost = 0;
     Object.entries(cardQuantities || {}).forEach(([cardId, quantity]) => {
       const card = cardTypes.find(c => c.id === parseInt(cardId));
       if (card && quantity > 0) {
-        let adjustedCardPrice = (card.unit_price || 0) / 10000;
+        console.log(`DEBUG_CALC: Processing Card: ${card.board_name} (ID: ${card.id})`);
+        console.log('DEBUG_CALC: Raw Card Data:', card);
 
-        // 根据报价币种和机器币种进行转换（假设板卡价格币种与机器币种相同）
-        if (formData.currency === 'USD') {
-          if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
-            adjustedCardPrice = adjustedCardPrice / formData.exchangeRate;
+        let cardUnitPriceRaw = (card.unit_price || 0); // 从数据库获取的原始板卡单价
+        console.log(`DEBUG_CALC: Card Raw Unit Price (original currency): ${cardUnitPriceRaw}`);
+        
+        // 根据您的业务逻辑，这里进行除以10000的操作
+        let adjustedPrice = cardUnitPriceRaw / 10000; 
+        console.log(`DEBUG_CALC: Card Price after /10000: ${adjustedPrice}`);
+
+        // 汇率转换
+        // 优先使用机器自身定义的汇率，如果机器没有定义，则退回到报价单的全局汇率
+        const effectiveExchangeRate = machineData.exchange_rate || formData.exchangeRate;
+
+        if (formData.currency === 'USD') { // 如果报价币种是 USD
+          if (machineData.currency === 'CNY' || machineData.currency === 'RMB') { // 并且机器币种是 CNY/RMB
+            adjustedPrice = adjustedPrice / effectiveExchangeRate; // 将 CNY/RMB 机器价格转换为 USD 报价
           }
-        } else {
-          if (machineData.currency === 'USD') {
-            adjustedCardPrice = adjustedCardPrice * formData.exchangeRate;
+        } else { // 如果报价币种是 CNY
+          if (machineData.currency === 'USD') { // 并且机器币种是 USD
+            adjustedPrice = adjustedPrice * effectiveExchangeRate; // 将 USD 机器价格转换为 CNY 报价
           }
         }
-        totalCardCost += adjustedCardPrice * quantity;
+        
+        // 应用折扣率到板卡费用
+        const discountRate = machineData.discount_rate || 1.0; // 分选机的折扣也从这里应用
+        adjustedPrice = adjustedPrice * discountRate; // 将折扣率应用到调整后的板卡价格
+        console.log(`DEBUG_CALC: Card Price after Discount (${discountRate}): ${adjustedPrice}`);
+
+        totalCardCost += adjustedPrice * quantity; // 累加总的板卡费用
+        console.log(`DEBUG_CALC: Current totalCardCost: ${totalCardCost} (after adding ${adjustedPrice * quantity})`);
       }
     });
+    console.log(`DEBUG_CALC: Final totalCardCost for machine ${machineData.name}: ${totalCardCost}`);
 
-    return discountedMachineRate + totalCardCost;
+    return totalCardCost; // 总费用就是所有板卡费用之和
   };
 
   // 计算单个工序的单颗费用
