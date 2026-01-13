@@ -17,10 +17,18 @@ export const getCardTypes = async () => {
     const response = await api.get('/card-configs/');
     console.log('Card configs fetched successfully:', response.data);
     
+    // 清洗板卡数据：强制移除 currency 和 exchange_rate 字段，避免对前端逻辑产生误导
+    const cleanedData = response.data.map(card => {
+      const newCard = { ...card };
+      delete newCard.currency;
+      delete newCard.exchange_rate;
+      return newCard;
+    });
+
     // 保存到缓存
-    dataCache.set(cacheKey, response.data);
+    dataCache.set(cacheKey, cleanedData);
     
-    return response.data;
+    return cleanedData;
   } catch (error) {
     console.error('Error fetching card configs:', error);
     // 提供更具体的错误信息
