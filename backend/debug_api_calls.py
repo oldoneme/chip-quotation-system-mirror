@@ -49,20 +49,19 @@ def test_api_calls():
     # 2. 检查可用的API端点
     print("\n2. 检查可用的审批API端点...")
     endpoints_to_check = [
-        "/api/v1/wecom-approval/submit",
-        "/api/v1/wecom-approval/approve",
-        "/api/v1/wecom-approval/reject",
-        "/api/v1/quote-approval/submit",
-        "/api/v1/quote-approval/approve",
-        "/api/v1/quote-approval/reject",
-        "/api/v2/approval/submit",
-        "/api/v2/approval/approve",
-        "/api/v2/approval/reject"
+        f"/api/v1/approval/status/{quote_id}",
+        f"/api/v1/approval/history/{quote_id}",
+        f"/api/v1/quotes/{quote_id}/submit",
+        f"/api/v1/quotes/{quote_id}/approve",
+        f"/api/v1/quotes/{quote_id}/reject",
+        f"/api/v1/quotes/{quote_id}/approval-records",
+        f"/api/v1/wecom-approval/generate-approval-link/{quote_id}",
+        f"/api/v1/wecom-approval/sync-status/{quote_id}"
     ]
 
     for endpoint in endpoints_to_check:
         try:
-            response = requests.options(f"{base_url}{endpoint}")
+            response = requests.options(f"{base_url}{endpoint}", headers=auth_headers)
             if response.status_code in [200, 405]:  # 405 = Method Not Allowed，说明端点存在
                 print(f"✅ {endpoint} - 可用")
             else:
@@ -74,44 +73,24 @@ def test_api_calls():
     if quote_data.get('status') == 'pending':
         print(f"\n3. 尝试拒绝操作 (报价单ID: {quote_id})...")
 
-        # 尝试V1 API
+        # 尝试当前报价审批 API
         try:
             reject_data = {
                 "reason": "诊断测试拒绝",
                 "comments": "这是一个API诊断测试"
             }
             response = requests.post(
-                f"{base_url}/api/v1/wecom-approval/reject/{quote_id}",
+                f"{base_url}/api/v1/quotes/{quote_id}/reject",
                 json=reject_data,
                 headers={**auth_headers, "Content-Type": "application/json"}
             )
-            print(f"V1 拒绝API响应: {response.status_code}")
+            print(f"报价审批拒绝 API 响应: {response.status_code}")
             if response.status_code == 200:
-                print(f"✅ V1 拒绝成功: {response.json()}")
+                print(f"✅ 报价审批拒绝成功: {response.json()}")
             else:
-                print(f"❌ V1 拒绝失败: {response.text}")
+                print(f"❌ 报价审批拒绝失败: {response.text}")
         except Exception as e:
-            print(f"❌ V1 拒绝异常: {e}")
-
-        # 尝试V2 API
-        try:
-            reject_data = {
-                "action": "reject",
-                "reason": "诊断测试拒绝",
-                "comments": "这是一个API诊断测试"
-            }
-            response = requests.post(
-                f"{base_url}/api/v2/approval/{quote_id}/operation",
-                json=reject_data,
-                headers={**auth_headers, "Content-Type": "application/json"}
-            )
-            print(f"V2 拒绝API响应: {response.status_code}")
-            if response.status_code == 200:
-                print(f"✅ V2 拒绝成功: {response.json()}")
-            else:
-                print(f"❌ V2 拒绝失败: {response.text}")
-        except Exception as e:
-            print(f"❌ V2 拒绝异常: {e}")
+            print(f"❌ 报价审批拒绝异常: {e}")
 
 if __name__ == "__main__":
     test_api_calls()
