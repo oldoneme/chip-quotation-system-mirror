@@ -4,7 +4,7 @@
  * 自动检测和切换审批方式，统一状态显示
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Button,
@@ -13,20 +13,13 @@ import {
   Modal,
   Form,
   Input,
-  Select,
   message,
   Alert,
-  Descriptions,
-  Spin,
-  Row,
-  Col,
-  Divider
+  Descriptions
 } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
-  EditOutlined,
-  ClockCircleOutlined,
   SendOutlined,
   ExclamationCircleOutlined,
   RollbackOutlined
@@ -35,7 +28,6 @@ import UnifiedApprovalApiV3 from '../services/unifiedApprovalApi_v3';
 import ApprovalHistory from './ApprovalHistory';
 
 const { TextArea } = Input;
-const { Option } = Select;
 const { confirm } = Modal;
 
 const UnifiedApprovalPanel = ({
@@ -66,28 +58,48 @@ const UnifiedApprovalPanel = ({
     reason: ''
   });
 
+  // 获取审批状态
+  const fetchApprovalStatus = useCallback(async (silent = false) => {
+    try {
+      const status = await UnifiedApprovalApiV3.getApprovalStatus(quote.quoteId || quote.id);
+      setApprovalStatus(status);
+      setLastUpdated(new Date());
+
+      // 更新权限状态
+      const newPermissions = UnifiedApprovalApiV3.checkApprovalPermissions(status, currentUser);
+      setPermissions(newPermissions);
+
+      // 处理审批历史 - V2 API已包含历史记录在状态响应中
+      if (showHistory && status?.approval_history) {
+        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(status.approval_history);
+        setApprovalHistory(formattedHistory);
+      }
+    } catch (error) {
+      console.error('获取审批状态失败:', error);
+      if (!silent) {
+        message.error(error.message || '获取审批状态失败');
+      }
+    }
+  }, [currentUser, quote, showHistory]);
+
   useEffect(() => {
     if (quote?.id) {
       fetchApprovalStatus();
     }
-  }, [quote?.id, showHistory]);
+  }, [quote?.id, showHistory, fetchApprovalStatus]);
 
   // 实时更新 useEffect - 优化性能
   useEffect(() => {
     let intervalId;
 
-    // 只有在启用实时更新、有报价ID、非加载状态，且页面可见时才启动轮询
     if (enableRealTimeUpdate && quote?.id && !loading && !document.hidden) {
-      // 增加轮询间隔到60秒以减少服务器负载
       intervalId = setInterval(() => {
-        // 检查页面是否仍然可见
         if (!document.hidden) {
-          fetchApprovalStatus(true); // 静默刷新
+          fetchApprovalStatus(true);
         }
-      }, Math.max(updateInterval, 60000)); // 最小60秒间隔
+      }, Math.max(updateInterval, 60000));
     }
 
-    // 监听页面可见性变化
     const handleVisibilityChange = () => {
       if (document.hidden && intervalId) {
         clearInterval(intervalId);
@@ -111,37 +123,7 @@ const UnifiedApprovalPanel = ({
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enableRealTimeUpdate, quote?.id, loading, updateInterval]);
-
-  // 获取审批状态
-  const fetchApprovalStatus = async (silent = false) => {
-    try {
-      const status = await UnifiedApprovalApiV3.getApprovalStatus(quote.quoteId || quote.id);
-      setApprovalStatus(status);
-      setLastUpdated(new Date());
-
-      // 更新权限状态
-      const newPermissions = UnifiedApprovalApiV3.checkApprovalPermissions(status, currentUser);
-      setPermissions(newPermissions);
-
-      // 处理审批历史 - V2 API已包含历史记录在状态响应中
-      if (showHistory && status?.approval_history) {
-        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(status.approval_history);
-        setApprovalHistory(formattedHistory);
-      }
-    } catch (error) {
-      console.error('获取审批状态失败:', error);
-      if (!silent) {
-        message.error(error.message || '获取审批状态失败');
-      }
-    }
-  };
-
-  // 获取审批历史 - 已废弃，直接从fetchApprovalStatus中处理
-  const fetchApprovalHistory = async () => {
-    // 此函数已整合到fetchApprovalStatus中，保留仅为兼容性
-    console.log('fetchApprovalHistory: 审批历史已从fetchApprovalStatus中获取');
-  };
+  }, [enableRealTimeUpdate, quote?.id, loading, updateInterval, fetchApprovalStatus]);
 
   // 处理审批操作
   const handleApprovalAction = async (action, data) => {
@@ -172,9 +154,6 @@ const UnifiedApprovalPanel = ({
 
       // 刷新状态
       await fetchApprovalStatus();
-      if (showHistory) {
-        await fetchApprovalHistory();
-      }
 
       // 通知父组件状态变化
       if (onApprovalStatusChange) {

@@ -202,7 +202,7 @@ const Dashboard = () => {
               type="primary" 
               icon={<FileAddOutlined />}
               size="large"
-              onClick={() => navigate('/quote-types')}
+              onClick={() => navigate('/quote-type-selection')}
             >
               新建报价
             </Button>

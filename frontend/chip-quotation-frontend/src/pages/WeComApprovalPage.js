@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Descriptions,
@@ -6,13 +6,11 @@ import {
   Space,
   Tag,
   Spin,
-  Empty,
   Result,
   message,
   Modal,
   Form,
   Input,
-  Select,
   DatePicker
 } from 'antd';
 import {
@@ -25,14 +23,14 @@ import {
   ArrowLeftOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import ApprovalApiService from '../services/approvalApi';
 import ApprovalHistory from '../components/ApprovalHistory';
+import useIsMobile from '../hooks/useIsMobile';
 import moment from 'moment';
 import '../styles/QuoteDetail.css';
 
 const { TextArea } = Input;
-const { Option } = Select;
 const { confirm } = Modal;
 
 /**
@@ -41,7 +39,6 @@ const { confirm } = Modal;
  */
 const WeComApprovalPage = () => {
   const { token } = useParams();
-  const [searchParams] = useSearchParams();
   
   const [loading, setLoading] = useState(true);
   const [approvalLoading, setApprovalLoading] = useState(false);
@@ -51,31 +48,10 @@ const WeComApprovalPage = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [actionType, setActionType] = useState('');
   const [form] = Form.useForm();
-  const [isMobile, setIsMobile] = useState(true); // 企业微信默认移动端
-
-  // 检测移动端
-  useEffect(() => {
-    const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkIsMobile();
-    window.addEventListener('resize', checkIsMobile);
-    
-    return () => window.removeEventListener('resize', checkIsMobile);
-  }, []);
-
-  useEffect(() => {
-    if (token) {
-      fetchApprovalData();
-    } else {
-      setError('无效的审批链接');
-      setLoading(false);
-    }
-  }, [token]);
+  const isMobile = useIsMobile(768, true); // 企业微信默认移动端
 
   // 获取审批数据
-  const fetchApprovalData = async () => {
+  const fetchApprovalData = useCallback(async () => {
     setLoading(true);
     try {
       const data = await ApprovalApiService.getApprovalByToken(token);
@@ -93,7 +69,16 @@ const WeComApprovalPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      fetchApprovalData();
+    } else {
+      setError('无效的审批链接');
+      setLoading(false);
+    }
+  }, [token, fetchApprovalData]);
 
   // 获取审批状态标签
   const getApprovalStatusTag = (status) => {

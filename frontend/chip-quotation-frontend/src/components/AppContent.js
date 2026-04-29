@@ -1,11 +1,12 @@
-import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Layout, Spin } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import Navigation from './Navigation';
 import Breadcrumb from './Breadcrumb';
 import ErrorBoundary from './ErrorBoundary';
+import { PermissionGuard } from './PermissionGuard';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { PERMISSIONS } from '../config/permissions';
 import QuoteTypeSelection from '../pages/QuoteTypeSelection';
 import EngineeringQuote from '../pages/EngineeringQuote';
 import MassProductionQuote from '../pages/MassProductionQuote';
@@ -24,6 +25,7 @@ import QuoteDetail from '../pages/QuoteDetail';
 import ApprovalWorkflow from '../pages/ApprovalWorkflow';
 import WeComApprovalPage from '../pages/WeComApprovalPage';
 import UserManagement from '../pages/UserManagement';
+import ApiTest from '../pages/ApiTest';
 import DebugPanel from './DebugPanel';
 
 const { Header, Content, Footer } = Layout;
@@ -72,13 +74,14 @@ const AppContent = () => {
                 <Route path="/quotes" element={<QuoteManagement />} />
                 <Route path="/quote-detail/:id" element={<QuoteDetail />} />
                 <Route path="/approval/:token" element={<WeComApprovalPage />} />
-                <Route path="/approval-workflow" element={<ApprovalWorkflow />} />
-                <Route path="/analytics" element={<AnalyticsDashboard />} />
-                <Route path="/version-control" element={<VersionControl />} />
-                <Route path="/database-management" element={<DatabaseManagement />} />
-                <Route path="/hierarchical-database-management" element={<HierarchicalDatabaseManagement />} />
-                <Route path="/admin/database-quote-management" element={<DatabaseQuoteManagement />} />
-                <Route path="/user-management" element={<UserManagement />} />
+                <Route path="/approval-workflow" element={<PermissionGuard permission={PERMISSIONS.SYSTEM_MANAGE}><ApprovalWorkflow /></PermissionGuard>} />
+                <Route path="/analytics" element={<PermissionGuard permission={PERMISSIONS.SYSTEM_MANAGE}><AnalyticsDashboard /></PermissionGuard>} />
+                <Route path="/version-control" element={<PermissionGuard permission={PERMISSIONS.SYSTEM_MANAGE}><VersionControl /></PermissionGuard>} />
+                <Route path="/database-management" element={<PermissionGuard permission={PERMISSIONS.DATABASE_MANAGE}><DatabaseManagement /></PermissionGuard>} />
+                <Route path="/hierarchical-database-management" element={<PermissionGuard permission={PERMISSIONS.DATABASE_MANAGE}><HierarchicalDatabaseManagement /></PermissionGuard>} />
+                <Route path="/admin/database-quote-management" element={<PermissionGuard permission={PERMISSIONS.DATABASE_MANAGE}><DatabaseQuoteManagement /></PermissionGuard>} />
+                <Route path="/user-management" element={<PermissionGuard permission={PERMISSIONS.NAV_USER_MANAGEMENT}><UserManagement /></PermissionGuard>} />
+                <Route path="/api-test" element={<PermissionGuard permission={PERMISSIONS.API_TEST}><ApiTest /></PermissionGuard>} />
               </Routes>
             </ErrorBoundary>
           </div>

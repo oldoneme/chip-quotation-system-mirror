@@ -1,28 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, Button, Dropdown, Avatar, Space, Drawer } from 'antd';
 import { HomeOutlined, DatabaseOutlined, CalculatorOutlined, BarChartOutlined, SearchOutlined, SettingOutlined, UnorderedListOutlined, ToolOutlined, UserOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import HelpModal from './HelpModal';
+import useIsMobile from '../hooks/useIsMobile';
 
 const Navigation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile(768);
   const [drawerVisible, setDrawerVisible] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      // 只根据屏幕宽度判断，不再强制企业微信使用移动端布局
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
   
   // 根据用户角色过滤菜单项
   const menuItems = React.useMemo(() => {

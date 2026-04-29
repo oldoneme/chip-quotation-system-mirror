@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
+import useIsMobile from '../hooks/useIsMobile';
 import '../styles/QuoteManagement.css';
 
 const { confirm } = Modal;
@@ -19,7 +20,7 @@ const QuoteManagement = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [quotes, setQuotes] = useState([]);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
   const [machines, setMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
 
@@ -78,18 +79,6 @@ const QuoteManagement = () => {
       message.error('获取统计信息失败');
     }
   };
-
-  // 检测移动端
-  useEffect(() => {
-    const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkIsMobile();
-    window.addEventListener('resize', checkIsMobile);
-    
-    return () => window.removeEventListener('resize', checkIsMobile);
-  }, []);
 
   useEffect(() => {
     fetchQuotes();
@@ -995,15 +984,18 @@ const QuoteManagement = () => {
                   let adjustedPrice = (card.unit_price || 0) / 10000;
 
                   // 优先使用机器自身定义的汇率，如果机器没有定义，则退回到报价单的全局汇率
-                  const effectiveExchangeRate = machine.exchange_rate || record.exchange_rate || 7.2; // Fallback to record.exchange_rate then default
+                  const effectiveExchangeRate = machine.exchange_rate || record.exchange_rate || 7.2;
 
                   if (record.currency === 'USD') { // 如果报价币种是 USD
                     if (machine.currency === 'CNY' || machine.currency === 'RMB') { // 并且机器币种是 CNY/RMB
-                      adjustedPrice = adjustedPrice / effectiveExchangeRate; // 将 CNY/RMB 机器价格转换为 USD 报价
+                      // 严格符合逻辑: b). 对于币种是RMB的设备 -> 使用报价单汇率进行转换
+                      const quoteRate = record.exchange_rate || 7.2;
+                      adjustedPrice = adjustedPrice / quoteRate;
                     }
                   } else { // 如果报价币种是 CNY
                     if (machine.currency === 'USD') { // 并且机器币种是 USD
-                      adjustedPrice = adjustedPrice * effectiveExchangeRate; // 将 USD 机器价格转换为 CNY 报价
+                      // 严格符合逻辑: a). 对于币种是USD的设备 -> 使用设备汇率进行转换 (优先)
+                      adjustedPrice = adjustedPrice * effectiveExchangeRate;
                     }
                   }
 
