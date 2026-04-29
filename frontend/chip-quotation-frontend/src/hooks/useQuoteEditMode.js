@@ -150,7 +150,6 @@ const useQuoteEditMode = () => {
 
 
     // 检测数据格式：后端原始格式 vs 前端展示格式
-    const isRawFormat = quote.customer_name !== undefined; // 后端格式有 customer_name
     const isDisplayFormat = quote.customer !== undefined && quote.customer_name === undefined; // 前端格式有 customer 但没有 customer_name
 
 

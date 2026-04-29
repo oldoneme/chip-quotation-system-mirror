@@ -68,36 +68,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from pydantic import ValidationError
 from Crypto.Cipher import AES
-from starlette.requests import Request as StarletteRequest
-
-# 3) HTML导航识别工具函数
-HTML_EXTS = {".html", ""}
-
-def is_html_navigation(req: StarletteRequest) -> bool:
-    """
-    判定是否是 HTML 导航请求：
-    - Accept 含 text/html 或 mode==navigate
-    - 路径没有扩展名或以 .html 结尾
-    - 排除典型 API/静态资源/管理页面前缀
-    """
-    p = req.url.path
-    # 扩展名
-    import os
-    ext = os.path.splitext(p)[1].lower()
-
-    # 排除不应该重定向的路径
-    excluded_paths = [
-        "/static/", "/assets/", "/api/", "/__", 
-        "/admin/", "/auth/", "/wecom/", "/dashboard", "/test-"
-    ]
-    
-    if any(p.startswith(path) for path in excluded_paths):
-        return False
-
-    accept = req.headers.get("accept", "")
-    if "text/html" in accept or ext in HTML_EXTS or p == "/":
-        return True
-    return False
 from app.database import engine, Base
 from app.api.v1.api import api_router
 from app.api.v2.api import api_router as api_v2_router
@@ -117,6 +87,15 @@ from app.core.exceptions import (
 
 # 设置日志
 logger = setup_logging()
+
+
+def apply_no_cache_headers(resp: Response, *, clear_site_data: bool = False) -> Response:
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    if clear_site_data:
+        resp.headers.setdefault("Clear-Site-Data", '"cache", "storage"')
+    return resp
 
 missing_wecom_keys = [
     key for key in [
@@ -241,25 +220,16 @@ async def test_route():
 @app.get("/cache-test.html")
 async def cache_test_page():
     """缓存测试页面"""
-    fp = os.path.join(PUBLIC_DIR, "cache-test.html")
-    if os.path.exists(fp):
-        resp = FileResponse(fp, media_type="text/html; charset=utf-8")
-        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-        resp.headers["Pragma"] = "no-cache"
-        resp.headers["Expires"] = "0"
-        return resp
+    fp = PUBLIC_DIR / "cache-test.html"
+    if fp.exists():
+        resp = FileResponse(str(fp), media_type="text/html; charset=utf-8")
+        return apply_no_cache_headers(resp)
     return {"error": "cache-test.html not found"}
-
-# 5) 显式HTML路由确保no-store
-PUBLIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 
 @app.get("/")
 async def root_html():
-    fp = os.path.join(PUBLIC_DIR, "index.html")
-    resp = FileResponse(fp, media_type="text/html; charset=utf-8")
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
+    resp = FileResponse(str(INDEX_FILE), media_type="text/html; charset=utf-8")
+    apply_no_cache_headers(resp)
     resp.headers["X-App-Version"] = APP_VERSION
     resp.headers["X-Content-Type"] = "HTML-Direct-Route"
     return resp
@@ -358,12 +328,7 @@ async def force_versioned_path_and_cache_headers(request: Request, call_next):
                 new_path = (f"{VERSION_PREFIX}" + (p if p.startswith("/") else f"/{p}")).replace("//","/")
                 new_url = urlunparse((scheme, netloc, new_path, "", urlencode(q, doseq=True), ""))
                 resp = RedirectResponse(new_url, status_code=302)
-                resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-                resp.headers["Pragma"] = "no-cache"
-                resp.headers["Expires"] = "0"
-                if is_wework(request):
-                    resp.headers["Clear-Site-Data"] = '"cache", "storage"'
-                return resp
+                return apply_no_cache_headers(resp, clear_site_data=is_wework(request))
             elif m.group(1) != APP_VERSION:
                 # 版本化路径但版本不匹配，需要重定向到正确版本
                 rest = m.group(2) or "/"
@@ -372,22 +337,13 @@ async def force_versioned_path_and_cache_headers(request: Request, call_next):
                 new_path = f"{VERSION_PREFIX}{rest}"
                 new_url = urlunparse((scheme, netloc, new_path, "", urlencode(q, doseq=True), ""))
                 resp = RedirectResponse(new_url, status_code=302)
-                resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-                resp.headers["Pragma"] = "no-cache"
-                resp.headers["Expires"] = "0"
-                if is_wework(request):
-                    resp.headers["Clear-Site-Data"] = '"cache", "storage"'
-                return resp
+                return apply_no_cache_headers(resp, clear_site_data=is_wework(request))
             # else: 正确的版本化路径，继续处理
 
         resp = await call_next(request)
 
         if is_html_nav(request):
-            resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-            resp.headers["Pragma"] = "no-cache"
-            resp.headers["Expires"] = "0"
-            if is_wework(request):
-                resp.headers.setdefault("Clear-Site-Data", '"cache", "storage"')
+            apply_no_cache_headers(resp, clear_site_data=is_wework(request))
         else:
             path = request.url.path
             if (path.startswith("/static/") or path.startswith("/assets/")) and (path.endswith(".js") or path.endswith(".css")):
@@ -412,10 +368,7 @@ async def versioned_index(ver: str, path: str = ""):
     if not fp.exists():
         return Response("index.html not found", status_code=404)
     resp = FileResponse(str(fp), media_type="text/html; charset=utf-8")
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
-    return resp
+    return apply_no_cache_headers(resp)
 
 
 

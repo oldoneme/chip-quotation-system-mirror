@@ -50,7 +50,7 @@ class ExportService:
                 detail="PDF导出功能不可用，请安装reportlab库: pip install reportlab"
             )
 
-        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        quote = self.db.query(Quote).filter(Quote.id == quote_id, Quote.is_deleted == False).first()
         if not quote:
             raise HTTPException(status_code=404, detail="报价单不存在")
 
@@ -138,13 +138,14 @@ class ExportService:
             
             # 明细数据
             for i, item in enumerate(quote.items, 1):
+                display_unit_price = item.adjusted_price if item.adjusted_price is not None else item.unit_price
                 items_data.append([
                     str(i),
                     item.item_name,
                     item.machine_type or '',
                     f'{item.quantity:.2f}',
                     item.unit,
-                    f'¥{item.unit_price:.2f}',
+                    f'¥{display_unit_price:.2f}',
                     f'¥{item.total_price:.2f}'
                 ])
             
@@ -230,7 +231,7 @@ class ExportService:
                 detail="Excel导出功能不可用，请安装pandas和openpyxl库: pip install pandas openpyxl"
             )
 
-        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        quote = self.db.query(Quote).filter(Quote.id == quote_id, Quote.is_deleted == False).first()
         if not quote:
             raise HTTPException(status_code=404, detail="报价单不存在")
 
@@ -267,6 +268,7 @@ class ExportService:
             if quote.items:
                 items_data = []
                 for i, item in enumerate(quote.items, 1):
+                    display_unit_price = item.adjusted_price if item.adjusted_price is not None else item.unit_price
                     items_data.append({
                         '序号': i,
                         '项目名称': item.item_name,
@@ -277,7 +279,7 @@ class ExportService:
                         '配置': item.configuration or '',
                         '数量': item.quantity,
                         '单位': item.unit,
-                        '单价': item.unit_price,
+                        '单价': display_unit_price,
                         '小计': item.total_price
                     })
                 

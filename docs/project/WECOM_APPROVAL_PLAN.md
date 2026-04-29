@@ -214,11 +214,12 @@ quotes {
 
 ### 2025-08-30 (下午)
 - ✅ **路由兼容性修复完成** - 解决了前端访问问题，实现智能参数识别
-- ✅ **按ID查询API端点** - 新增 `/quotes/detail/by-id/{quote_id}` 支持数字ID访问
+- ✅ **按ID查询API端点** - 新增 `/quotes/detail/by-id/{quote_id}` 支持数字ID访问；该接口现为受保护接口，调用方必须携带登录态/`Authorization` 认证信息
 - ✅ **智能参数识别逻辑** - 前端自动识别ID或报价单号，调用对应API
 - ✅ **双路由支持验证** - 确保以下两种访问方式都正常：
   - `http://localhost:3000/quote-detail/31` (按ID访问)
   - `http://localhost:3000/quote-detail/CIS-KS20250830002` (按报价单号访问)
+- 🔐 **访问前置条件** - 以上报价详情页面需要用户已登录；后端 `/api/v1/quotes/detail/*` 路由会执行认证和报价单访问权限校验
 - ✅ **ID重用风险分析** - 确认SQLite自增机制避免了ID重用问题
 - ✅ **企业微信审批页面路由** - 验证 `/approval/{token}` 正常工作
 - ✅ **全面功能测试通过** - 前后端服务正常，API端点验证成功

@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Select, Button, Space, Card, Descriptions, Tag, Switch } from 'antd';
+import { Modal, Button, Space, Card, Descriptions, Tag } from 'antd';
 import { BugOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
-
-const { Option } = Select;
 
 const DebugPanel = () => {
   const { user, setUser } = useAuth();
@@ -27,20 +25,6 @@ const DebugPanel = () => {
       setDebugMode(false);
     }
   }, []);
-
-  // 模拟用户角色切换
-  const handleRoleChange = (newRole) => {
-    const updatedUser = {
-      ...user,
-      role: newRole,
-      name: user?.name || '调试用户'
-    };
-    
-    // 更新AuthContext中的用户信息
-    setUser(updatedUser);
-    
-    console.log(`🔄 角色已切换为: ${newRole}`, updatedUser);
-  };
 
   // 模拟不同的用户数据
   const mockUsers = {

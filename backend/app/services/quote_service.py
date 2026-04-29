@@ -69,6 +69,32 @@ class QuoteService:
     def _quantize_money(self, value: Decimal) -> Decimal:
         return value.quantize(self.MONEY_QUANTIZE, rounding=ROUND_HALF_UP)
 
+    def _get_effective_unit_price(self, item, field_prefix: str) -> Decimal:
+        adjusted_raw = getattr(item, 'adjusted_price', None)
+        if adjusted_raw is not None:
+            adjusted_price = self._to_decimal(adjusted_raw, f"{field_prefix}.adjusted_price")
+            if adjusted_price < 0:
+                raise ValueError("调整后单价不能为负数")
+            return adjusted_price
+
+        unit_price = self._to_decimal(getattr(item, 'unit_price', 0), f"{field_prefix}.unit_price")
+        if unit_price < 0:
+            raise ValueError("单价不能为负数")
+        return unit_price
+
+    def _get_effective_unit_price_from_dict(self, item_dict: Dict[str, Any], field_prefix: str) -> Decimal:
+        adjusted_raw = item_dict.get("adjusted_price")
+        if adjusted_raw is not None:
+            adjusted_price = self._to_decimal(adjusted_raw, f"{field_prefix}.adjusted_price")
+            if adjusted_price < 0:
+                raise ValueError("调整后单价不能为负数")
+            return adjusted_price
+
+        unit_price = self._to_decimal(item_dict.get("unit_price", 0), f"{field_prefix}.unit_price")
+        if unit_price < 0:
+            raise ValueError("单价不能为负数")
+        return unit_price
+
     def _normalize_discount(self, subtotal: Decimal, discount_value, field_name: str = "discount") -> Decimal:
         discount = self._to_decimal(discount_value, field_name)
         if discount < 0:
@@ -91,10 +117,8 @@ class QuoteService:
             quantity = self._to_decimal(item.quantity, f"items[{index}].quantity")
             if quantity < 0:
                 raise ValueError("数量不能为负数")
-            unit_price = self._to_decimal(item.unit_price, f"items[{index}].unit_price")
-            if unit_price < 0:
-                raise ValueError("单价不能为负数")
-            total_price = self._quantize_money(quantity * unit_price)
+            effective_unit_price = self._get_effective_unit_price(item, f"items[{index}]")
+            total_price = self._quantize_money(quantity * effective_unit_price)
             item.total_price = float(total_price)
             subtotal += total_price
 
@@ -129,7 +153,9 @@ class QuoteService:
             if unit_price < 0:
                 raise ValueError("单价不能为负数")
 
-            total_price = self._quantize_money(quantity * unit_price)
+            effective_unit_price = self._get_effective_unit_price_from_dict(item_dict, f"items[{index}]")
+
+            total_price = self._quantize_money(quantity * effective_unit_price)
 
             item_dict["quantity"] = float(quantity)
             item_dict["unit_price"] = float(unit_price)
@@ -482,6 +508,19 @@ class QuoteService:
                 selectinload(Quote.pdf_cache),
             )
             .filter(Quote.quote_number == quote_number, Quote.is_deleted == False)
+            .first()
+        )
+
+    def get_quote_by_approval_token(self, approval_token: str) -> Optional[Quote]:
+        """根据审批链接 token 获取报价单"""
+        return (
+            self.db.query(Quote)
+            .options(
+                selectinload(Quote.items),
+                selectinload(Quote.creator),
+                selectinload(Quote.pdf_cache),
+            )
+            .filter(Quote.approval_link_token == approval_token, Quote.is_deleted == False)
             .first()
         )
 

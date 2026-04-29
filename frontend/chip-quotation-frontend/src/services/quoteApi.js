@@ -47,8 +47,7 @@ export class QuoteApiService {
    */
   static async getQuotes(params = {}) {
     try {
-      // 暂时使用测试端点
-      const response = await api.get(`${QUOTE_BASE_URL}/test`);
+      const response = await api.get(`${QUOTE_BASE_URL}/`, { params });
       return response.data;
     } catch (error) {
       console.error('获取报价单列表失败:', error);

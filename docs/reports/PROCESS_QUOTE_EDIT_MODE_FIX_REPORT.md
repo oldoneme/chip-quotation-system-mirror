@@ -28,7 +28,7 @@
 - 报价单位始终显示"昆山芯信安"，实际应该是"苏州芯昱安"
 
 **根本原因**:
-1. API端点`/quotes/detail/by-id/{id}`遗漏`quote_unit`字段
+1. API端点`/quotes/detail/by-id/{id}`遗漏`quote_unit`字段（该详情端点当前需要认证并会执行报价单访问权限校验）
 2. 测试类型提取逻辑只检查第一个item，未检查所有items
 3. 前端数据合并逻辑使用简单spread，导致嵌套对象被覆盖
 
@@ -52,7 +52,7 @@ customer_email: formData.customerInfo.email || '',
 
 ### 修复2: API返回数据补充 (quotes.py:332)
 
-在`/quotes/detail/by-id/{id}`端点返回数据中添加缺失的`quote_unit`字段：
+在`/quotes/detail/by-id/{id}`端点返回数据中添加缺失的`quote_unit`字段。该端点当前属于受保护报价详情接口，调用方必须携带有效认证信息：
 
 ```python
 return {
@@ -165,7 +165,7 @@ WHERE quote_number = 'CIS-SZ20251006003'
 
 ### API变更
 
-**新增响应字段**: `/api/v1/quotes/detail/by-id/{id}`
+**新增响应字段**: `/api/v1/quotes/detail/by-id/{id}`（需认证访问）
 ```json
 {
   "quote_unit": "苏州芯昱安",

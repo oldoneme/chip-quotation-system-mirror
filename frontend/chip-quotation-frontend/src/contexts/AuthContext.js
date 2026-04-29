@@ -79,15 +79,10 @@ export const AuthProvider = ({ children }) => {
           return;
         }
         
-        // 非企业微信环境：模拟用户登录（临时方案）
-        console.log('🌐 非企业微信环境：使用临时认证');
-        setUser({
-          id: 1,
-          userid: 'temp_user',
-          name: '临时用户（开发模式）',
-          role: 'admin'  // 开发环境下给admin权限
-        });
-        setAuthenticated(true);
+        // 非企业微信环境：保持未认证状态，不再提供管理员兜底
+        console.log('🌐 非企业微信环境：保持未认证状态');
+        setUser(null);
+        setAuthenticated(false);
         return;
       }
       

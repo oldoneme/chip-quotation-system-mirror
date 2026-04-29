@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, message, Alert, Space } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
+import api from '../services/api';
 
 const SubmitApprovalModal = ({ visible, onCancel, onSuccess, quoteData }) => {
   const [loading, setLoading] = useState(false);
@@ -9,15 +10,8 @@ const SubmitApprovalModal = ({ visible, onCancel, onSuccess, quoteData }) => {
     try {
       setLoading(true);
 
-      // 调用简化的审批API
-      const response = await fetch(`/api/v1/quote-approval/submit/${quoteData.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      const result = await response.json();
+      const response = await api.post(`/quotes/${quoteData.id}/submit`);
+      const result = response.data;
 
       if (result.success) {
         message.success('审批申请已提交到企业微信，审批人将收到通知');

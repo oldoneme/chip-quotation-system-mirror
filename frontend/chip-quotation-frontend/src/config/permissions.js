@@ -113,14 +113,14 @@ export const hasAnyPermission = (userRole, permissions) => {
 export const canAccessRoute = (userRole, route) => {
   const routePermissionMap = {
     '/': PERMISSIONS.NAV_DASHBOARD,
-    '/quote-types': PERMISSIONS.NAV_QUOTE_TYPES,
+    '/quote-type-selection': PERMISSIONS.NAV_QUOTE_TYPES,
     '/inquiry-quote': PERMISSIONS.QUOTE_INQUIRY,
     '/tooling-quote': PERMISSIONS.QUOTE_TOOLING,
     '/engineering-quote': PERMISSIONS.QUOTE_ENGINEERING,
     '/mass-production-quote': PERMISSIONS.QUOTE_MASS_PRODUCTION,
     '/process-quote': PERMISSIONS.QUOTE_PROCESS,
     '/comprehensive-quote': PERMISSIONS.QUOTE_COMPREHENSIVE,
-    '/orders': PERMISSIONS.NAV_ORDERS,
+    '/quote-management': PERMISSIONS.NAV_ORDERS,
     '/hierarchical-database-management': PERMISSIONS.DATABASE_MANAGE,
     '/api-test': PERMISSIONS.API_TEST,
     '/user-management': PERMISSIONS.NAV_USER_MANAGEMENT
@@ -142,8 +142,8 @@ export const ROLE_LABELS = {
 export const getAccessibleNavItems = (userRole) => {
   const allNavItems = [
     { key: '/', permission: PERMISSIONS.NAV_DASHBOARD },
-    { key: '/quote-types', permission: PERMISSIONS.NAV_QUOTE_TYPES },
-    { key: '/orders', permission: PERMISSIONS.NAV_ORDERS },
+    { key: '/quote-type-selection', permission: PERMISSIONS.NAV_QUOTE_TYPES },
+    { key: '/quote-management', permission: PERMISSIONS.NAV_ORDERS },
     { key: '/hierarchical-database-management', permission: PERMISSIONS.NAV_DATABASE },
     { key: '/api-test', permission: PERMISSIONS.NAV_API_TEST },
     { key: '/user-management', permission: PERMISSIONS.NAV_USER_MANAGEMENT }

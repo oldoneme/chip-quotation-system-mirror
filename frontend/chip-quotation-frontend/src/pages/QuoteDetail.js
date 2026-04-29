@@ -1,26 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Card, Descriptions, Table, Button, Space, Tag,
-  Divider, Row, Col, Modal, message, List,
+  Divider, Row, Col, Modal, message,
   Spin, Empty
 } from 'antd';
 import {
   ArrowLeftOutlined, DownloadOutlined, EyeOutlined,
-  EditOutlined, DeleteOutlined, SendOutlined,
+  EditOutlined, DeleteOutlined,
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
   FileTextOutlined
 } from '@ant-design/icons';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import QuoteApiService from '../services/quoteApi';
 import api from '../services/api';
-import ApprovalApiService from '../services/approvalApi';
 import UnifiedApprovalPanel from '../components/UnifiedApprovalPanel';
-import ApprovalHistory from '../components/ApprovalHistory';
-import SubmitApprovalModal from '../components/SubmitApprovalModal';
 import { useAuth } from '../contexts/AuthContext';
-import { getColumnsForPDF } from '../utils/columnConfigurations';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
+import useIsMobile from '../hooks/useIsMobile';
 import '../styles/QuoteDetail.css';
 
 const { confirm } = Modal;
@@ -31,11 +28,8 @@ const QuoteDetail = () => {
   const location = useLocation();
   const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [approvalLoading, setApprovalLoading] = useState(false);
   const [quote, setQuote] = useState(null);
-  const [isMobile, setIsMobile] = useState(false);
-  const [approvers, setApprovers] = useState([]);
-  const [submitApprovalModalVisible, setSubmitApprovalModalVisible] = useState(false);
+  const isMobile = useIsMobile();
   const [machines, setMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
 
@@ -56,18 +50,6 @@ const QuoteDetail = () => {
     return searchParams.get('userid') === 'snapshot-bot';
   }, [location.search]);
 
-  // 检测移动端
-  useEffect(() => {
-    const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkIsMobile();
-    window.addEventListener('resize', checkIsMobile);
-
-    return () => window.removeEventListener('resize', checkIsMobile);
-  }, []);
-
   // 加载设备和板卡数据（用于工序报价显示机时费率）
   useEffect(() => {
     const loadData = async () => {
@@ -85,61 +67,7 @@ const QuoteDetail = () => {
     loadData();
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        // 1) 处理一次性鉴权token（JWT 或 __snapshot_token），并清理URL
-        const searchParams = new URLSearchParams(location.search);
-        let urlMutated = false;
-
-        if (urlJwt) {
-          console.log('🔑 发现URL中的JWT，正在保存...');
-          localStorage.setItem('jwt_token', urlJwt);
-          searchParams.delete('jwt');
-          urlMutated = true;
-        }
-
-        if (snapshotToken) {
-          console.log('🪟 发现前端快照token，写入Cookie与请求头');
-          document.cookie = `auth_token=${snapshotToken}; path=/; SameSite=Lax`;
-          api.defaults.headers.common['Authorization'] = `Bearer ${snapshotToken}`;
-          sessionStorage.setItem('__snapshot_token', snapshotToken);
-          searchParams.delete('__snapshot_token');
-          urlMutated = true;
-        } else {
-          const storedSnapshot = sessionStorage.getItem('__snapshot_token');
-          if (storedSnapshot) {
-            api.defaults.headers.common['Authorization'] = `Bearer ${storedSnapshot}`;
-          }
-        }
-
-        if (urlMutated) {
-          const cleanUrl = `${location.pathname}${searchParams.toString() ? `?${searchParams}` : ''}`;
-          window.history.replaceState({}, '', cleanUrl);
-          console.log('✅ 鉴权参数已处理，URL已清理');
-        }
-
-        // 2) 先探测登录状态（可选但推荐）
-        try {
-          console.log('🔍 检查认证状态...');
-          await QuoteApiService.checkAuth();
-          console.log('✅ 认证状态正常');
-        } catch (e) {
-          console.log('⚠️ 认证状态检查失败，将使用JWT兜底:', e.message);
-        }
-
-        // 3) 获取报价单详情，同时传递jwt作为兜底
-        console.log('📋 开始获取报价单详情...');
-        await fetchQuoteDetail();
-        
-      } catch (error) {
-        console.error('❌ 初始化失败:', error);
-        setLoading(false);
-      }
-    })();
-  }, [id, urlJwt]); // 移除 location.pathname 和 location.search 以避免过度刷新
-
-  const fetchQuoteDetail = async () => {
+  const fetchQuoteDetail = useCallback(async () => {
     setLoading(true);
     try {
       // 识别三类：UUID / 纯数字ID / 报价单号
@@ -235,7 +163,59 @@ const QuoteDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    let urlMutated = false;
+
+    if (urlJwt) {
+      console.log('🔑 发现URL中的JWT，正在保存...');
+      localStorage.setItem('jwt_token', urlJwt);
+      searchParams.delete('jwt');
+      urlMutated = true;
+    }
+
+    if (snapshotToken) {
+      console.log('🪟 发现前端快照token，写入Cookie与请求头');
+      document.cookie = `auth_token=${snapshotToken}; path=/; SameSite=Lax`;
+      api.defaults.headers.common['Authorization'] = `Bearer ${snapshotToken}`;
+      sessionStorage.setItem('__snapshot_token', snapshotToken);
+      searchParams.delete('__snapshot_token');
+      urlMutated = true;
+    } else {
+      const storedSnapshot = sessionStorage.getItem('__snapshot_token');
+      if (storedSnapshot) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${storedSnapshot}`;
+      }
+    }
+
+    if (urlMutated) {
+      const cleanUrl = `${location.pathname}${searchParams.toString() ? `?${searchParams}` : ''}`;
+      window.history.replaceState({}, '', cleanUrl);
+      console.log('✅ 鉴权参数已处理，URL已清理');
+    }
+  }, [location.pathname, location.search, urlJwt, snapshotToken]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        try {
+          console.log('🔍 检查认证状态...');
+          await QuoteApiService.checkAuth();
+          console.log('✅ 认证状态正常');
+        } catch (e) {
+          console.log('⚠️ 认证状态检查失败，将使用JWT兜底:', e.message);
+        }
+
+        console.log('📋 开始获取报价单详情...');
+        await fetchQuoteDetail();
+      } catch (error) {
+        console.error('❌ 初始化失败:', error);
+        setLoading(false);
+      }
+    })();
+  }, [fetchQuoteDetail]);
 
   const getStatusTag = (status, approvalStatus) => {
     console.log('getStatusTag called with:', { status, approvalStatus });
@@ -447,62 +427,6 @@ const QuoteDetail = () => {
     }
   };
 
-  const handleSubmitApproval = () => {
-    setSubmitApprovalModalVisible(true);
-  };
-
-  const handleSubmitApprovalSuccess = (result) => {
-    setSubmitApprovalModalVisible(false);
-    
-    // 立即更新本地状态，显示为审批中
-    setQuote(prevQuote => ({
-      ...prevQuote,
-      status: 'pending', // 更新为审批中
-      approval_status: 'pending' // 设置为审批中
-    }));
-    
-    // 然后重新获取最新数据
-    fetchQuoteDetail();
-  };
-
-  const handleSubmitApprovalCancel = () => {
-    setSubmitApprovalModalVisible(false);
-  };
-
-  // 处理审批操作
-  const handleApprovalAction = async (action, data) => {
-    setApprovalLoading(true);
-    try {
-      await ApprovalApiService.performApprovalAction(action, quote.quoteId, data);
-      message.success(`${ApprovalApiService.getActionText(action)}成功`);
-      await fetchQuoteDetail(); // 重新获取报价单数据
-    } catch (error) {
-      console.error(`${action}操作失败:`, error);
-      throw error; // 重新抛出错误让组件处理
-    } finally {
-      setApprovalLoading(false);
-    }
-  };
-
-  // 获取可用的审批人列表
-  const fetchApprovers = async () => {
-    try {
-      // 这里应该调用API获取审批人列表
-      // 暂时使用模拟数据
-      setApprovers([
-        { id: 1, name: '张经理', role: 'manager' },
-        { id: 2, name: '李主管', role: 'supervisor' },
-        { id: 3, name: '王总监', role: 'director' }
-      ]);
-    } catch (error) {
-      console.error('获取审批人列表失败:', error);
-    }
-  };
-
-  useEffect(() => {
-    fetchApprovers();
-  }, []);
-
   const itemColumns = [
     {
       title: '测试类型',
@@ -529,55 +453,6 @@ const QuoteDetail = () => {
       render: (price) => price ? `¥${price.toLocaleString()}/小时` : '-'
     }
   ];
-
-  // 移动端列表渲染
-  const renderMobileItemList = (items) => {
-    if (!items || items.length === 0) {
-      return <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>暂无数据</div>;
-    }
-
-    return (
-      <List
-        dataSource={items}
-        size="small"
-        renderItem={(item, index) => (
-          <List.Item 
-            key={index}
-            style={{ 
-              padding: '12px 0',
-              borderBottom: index < items.length - 1 ? '1px solid #f0f0f0' : 'none'
-            }}
-          >
-            <div style={{ width: '100%' }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between',
-                marginBottom: '4px'
-              }}>
-                <span style={{ 
-                  fontWeight: 'bold', 
-                  color: '#1890ff',
-                  fontSize: '14px'
-                }}>
-                  {item.itemName || '-'}
-                </span>
-                <span style={{ 
-                  fontWeight: 'bold', 
-                  color: '#52c41a' 
-                }}>
-                  {item.unitPrice ? `¥${item.unitPrice.toLocaleString()}/小时` : '-'}
-                </span>
-              </div>
-              <div style={{ fontSize: '12px', color: '#666' }}>
-                <div>设备类型：{item.machineType || '-'}</div>
-                <div>设备型号：{item.machine || '-'}</div>
-              </div>
-            </div>
-          </List.Item>
-        )}
-      />
-    );
-  };
 
   if (loading) {
     return (
@@ -1595,19 +1470,21 @@ const QuoteDetail = () => {
                       if (card && cardInfo.quantity > 0) {
                         let adjustedPrice = (card.unit_price || 0) / 10000;
 
-                                                // 优先使用机器自身定义的汇率，如果机器没有定义，则退回到报价单的全局汇率
-                                                const effectiveExchangeRate = machine.exchange_rate || quote.exchange_rate || 7.2; // Fallback to quote.exchange_rate then default
-                        
-                                                if (quote.currency === 'USD') { // 如果报价币种是 USD
-                                                  if (machine.currency === 'CNY' || machine.currency === 'RMB') { // 并且机器币种是 CNY/RMB
-                                                    adjustedPrice = adjustedPrice / effectiveExchangeRate; // 将 CNY/RMB 机器价格转换为 USD 报价
-                                                  }
-                                                } else { // 如果报价币种是 CNY
-                                                  if (machine.currency === 'USD') { // 并且机器币种是 USD
-                                                    adjustedPrice = adjustedPrice * effectiveExchangeRate; // 将 USD 机器价格转换为 CNY 报价
-                                                  }
-                                                }
-                        
+                                                                        // 优先使用机器自身定义的汇率，如果机器没有定义，则退回到报价单的全局汇率
+                                                                        const effectiveExchangeRate = machine.exchange_rate || quote.exchange_rate || 7.2;
+
+                                                                        if (quote.currency === 'USD') { // 如果报价币种是 USD
+                                                                          if (machine.currency === 'CNY' || machine.currency === 'RMB') { // 并且机器币种是 CNY/RMB
+                                                                            // 严格符合逻辑: b). 对于币种是RMB的设备 -> 使用报价单汇率进行转换
+                                                                            const quoteRate = quote.exchange_rate || 7.2;
+                                                                            adjustedPrice = adjustedPrice / quoteRate;
+                                                                          }
+                                                                        } else { // 如果报价币种是 CNY
+                                                                          if (machine.currency === 'USD') { // 并且机器币种是 USD
+                                                                            // 严格符合逻辑: a). 对于币种是USD的设备 -> 使用设备汇率进行转换 (优先)
+                                                                            adjustedPrice = adjustedPrice * effectiveExchangeRate;
+                                                                          }
+                                                                        }
                                                 if (!machine.discount_rate) {                          console.error(`设备 ${machine.name} 缺少 discount_rate`);
                           return;
                         }
@@ -1928,21 +1805,6 @@ const QuoteDetail = () => {
           showHistory={true}
         />
       )}
-
-      {/* 提交审批模态框 */}
-      <SubmitApprovalModal
-        visible={submitApprovalModalVisible}
-        onCancel={handleSubmitApprovalCancel}
-        onSuccess={handleSubmitApprovalSuccess}
-        quoteData={{
-          id: quote?.quoteId,
-          quote_number: quote?.id,
-          customer_name: quote?.customer,
-          total_amount: quote?.totalAmount,
-          quote_type: quote?.type
-        }}
-      />
-
       <div id="quote-ready" style={{ display: "none" }} />
 
     </div>

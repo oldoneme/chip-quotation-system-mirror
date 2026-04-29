@@ -36,14 +36,14 @@ def test_approval_api():
             "expect_auth": True
         },
         {
-            "name": "企业微信审批状态查询",
-            "endpoint": "/api/v1/wecom-approval/status/1",
+            "name": "统一审批状态查询",
+            "endpoint": "/api/v1/approval/status/1",
             "method": "GET",
             "expect_auth": True
         },
         {
-            "name": "企业微信审批历史",
-            "endpoint": "/api/v1/wecom-approval/history/1",
+            "name": "统一审批历史",
+            "endpoint": "/api/v1/approval/history/1",
             "method": "GET",
             "expect_auth": True
         },

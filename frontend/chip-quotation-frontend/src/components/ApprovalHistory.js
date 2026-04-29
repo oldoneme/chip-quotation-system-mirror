@@ -1,15 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Card,
   Timeline,
   Tag,
-  Space,
-  Button,
   Collapse,
   Typography,
   Empty,
-  Spin,
-  Tooltip
+  Spin
 } from 'antd';
 import {
   CheckCircleOutlined,
@@ -26,7 +22,7 @@ import {
 import moment from 'moment';
 
 const { Panel } = Collapse;
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 const ApprovalHistory = ({
   quoteId,
@@ -37,19 +33,8 @@ const ApprovalHistory = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState([]);
-  const [expanded, setExpanded] = useState(true);
 
-  // 如果传递了外部的history，使用外部history；否则通过API获取
-  useEffect(() => {
-    if (externalHistory) {
-      setHistory(externalHistory);
-    } else if (quoteId && approvalService) {
-      fetchApprovalHistory();
-    }
-  }, [quoteId, externalHistory, approvalService]);
-
-  // 获取审批历史
-  const fetchApprovalHistory = async () => {
+  const fetchApprovalHistory = useCallback(async () => {
     if (!approvalService) {
       console.warn('未提供approvalService，无法获取审批历史');
       return;
@@ -64,7 +49,16 @@ const ApprovalHistory = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [approvalService, quoteId]);
+
+  // 如果传递了外部的history，使用外部history；否则通过API获取
+  useEffect(() => {
+    if (externalHistory) {
+      setHistory(externalHistory);
+    } else if (quoteId && approvalService) {
+      fetchApprovalHistory();
+    }
+  }, [externalHistory, quoteId, approvalService, fetchApprovalHistory]);
 
   // 获取操作类型配置
   const getActionConfig = (action) => {

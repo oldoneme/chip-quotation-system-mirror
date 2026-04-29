@@ -1,12 +1,14 @@
 /**
  * 统一审批API服务 V3 - Step 4实施
- * 对接Step 3创建的V2 API端点 (/api/v2/approval/)
+ * 对接当前 /api/v1/approval 与 /api/v1/quotes/* 审批端点
  * 提供完整的统一审批操作接口
  */
 
-import axios from 'axios';
+import api from './api';
 
-const BASE_URL = '/api/v2/approval';
+const APPROVAL_BASE_URL = '/approval';
+const QUOTE_BASE_URL = '/quotes';
+const OPS_BASE_URL = '/wecom-ops/internal';
 
 class UnifiedApprovalApiV3 {
   /**
@@ -16,7 +18,16 @@ class UnifiedApprovalApiV3 {
    */
   async getApprovalStatus(quoteId) {
     try {
-      const response = await axios.get(`${BASE_URL}/${quoteId}/status`);
+      const response = await api.get(`${APPROVAL_BASE_URL}/status/${quoteId}`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getApprovalHistory(quoteId) {
+    try {
+      const response = await api.get(`${APPROVAL_BASE_URL}/history/${quoteId}`);
       return response.data;
     } catch (error) {
       throw this.handleError(error);
@@ -32,17 +43,7 @@ class UnifiedApprovalApiV3 {
    * @returns {Promise} 审批列表
    */
   async getApprovalList(params = {}) {
-    try {
-      const queryParams = new URLSearchParams();
-      if (params.statusFilter) queryParams.append('status_filter', params.statusFilter);
-      if (params.page) queryParams.append('page', params.page);
-      if (params.pageSize) queryParams.append('page_size', params.pageSize);
-
-      const response = await axios.get(`${BASE_URL}/list?${queryParams.toString()}`);
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error);
-    }
+    throw new Error('当前后端未提供统一审批列表接口');
   }
 
   /**
@@ -58,7 +59,29 @@ class UnifiedApprovalApiV3 {
    */
   async executeOperation(quoteId, operation) {
     try {
-      const response = await axios.post(`${BASE_URL}/${quoteId}/operate`, operation);
+      let response;
+
+      switch (operation.action) {
+        case 'submit':
+          response = await api.post(`${QUOTE_BASE_URL}/${quoteId}/submit`);
+          break;
+        case 'approve':
+          response = await api.post(`${QUOTE_BASE_URL}/${quoteId}/approve`, {
+            comments: operation.comments || '批准'
+          });
+          break;
+        case 'reject':
+          response = await api.post(`${QUOTE_BASE_URL}/${quoteId}/reject`, {
+            comments: operation.reason || operation.comments || '拒绝'
+          });
+          break;
+        case 'withdraw':
+        case 'delegate':
+          throw new Error('当前后端尚未提供该统一审批操作');
+        default:
+          throw new Error(`不支持的审批操作: ${operation.action}`);
+      }
+
       return response.data;
     } catch (error) {
       throw this.handleError(error);
@@ -164,14 +187,7 @@ class UnifiedApprovalApiV3 {
    * @returns {Promise} 操作结果
    */
   async quickApprove(quoteId, comments = null) {
-    try {
-      const response = await axios.post(`${BASE_URL}/${quoteId}/approve`, {
-        comments: comments || '批准'
-      });
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error);
-    }
+    return this.approveQuote(quoteId, { comments });
   }
 
   /**
@@ -182,15 +198,7 @@ class UnifiedApprovalApiV3 {
    * @returns {Promise} 操作结果
    */
   async quickReject(quoteId, reason, comments = null) {
-    try {
-      const response = await axios.post(`${BASE_URL}/${quoteId}/reject`, {
-        reason: reason,
-        comments: comments
-      });
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error);
-    }
+    return this.rejectQuote(quoteId, { reason, comments });
   }
 
   /**
@@ -200,14 +208,7 @@ class UnifiedApprovalApiV3 {
    * @returns {Promise} 操作结果
    */
   async quickSubmit(quoteId, comments = null) {
-    try {
-      const response = await axios.post(`${BASE_URL}/${quoteId}/submit`, {
-        comments: comments
-      });
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error);
-    }
+    return this.submitApproval(quoteId, { comments });
   }
 
   /**
@@ -216,7 +217,7 @@ class UnifiedApprovalApiV3 {
    */
   async checkHealth() {
     try {
-      const response = await axios.get(`${BASE_URL}/health`);
+      const response = await api.get(`${OPS_BASE_URL}/health`);
       return response.data;
     } catch (error) {
       throw this.handleError(error);
@@ -315,12 +316,14 @@ class UnifiedApprovalApiV3 {
     }
 
     // 提交权限：草稿状态或被拒绝状态的创建者可以提交/重新提交
-    if (approvalData.current_status === 'draft' ||
-        approvalData.approval_status === 'draft' ||
-        approvalData.current_status === 'rejected' ||
-        approvalData.approval_status === 'rejected') {
+     if (approvalData.current_status === 'draft' ||
+         approvalData.status === 'draft' ||
+         approvalData.approval_status === 'draft' ||
+         approvalData.current_status === 'rejected' ||
+         approvalData.status === 'rejected' ||
+         approvalData.approval_status === 'rejected') {
       result.canSubmit = true;
-    }
+     }
 
     if (hasWeComApproval || isSubmittedToExternalFlow) {
       result.canApprove = false;
@@ -463,4 +466,6 @@ class UnifiedApprovalApiV3 {
 }
 
 // 导出单例实例
-export default new UnifiedApprovalApiV3();
+const unifiedApprovalApiV3 = new UnifiedApprovalApiV3();
+
+export default unifiedApprovalApiV3;

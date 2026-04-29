@@ -470,6 +470,7 @@ class Quote(QuoteBase):
     id: int
     quote_number: str
     status: str
+    approval_status: str
     pdf_url: Optional[str] = None
     submitted_at: Optional[datetime] = None
     approved_at: Optional[datetime] = None
@@ -495,6 +496,7 @@ class QuoteList(BaseModel):
     currency: str
     total_amount: float
     status: str
+    approval_status: Optional[str] = None
     pdf_url: Optional[str] = None
     version: str
     created_by: int

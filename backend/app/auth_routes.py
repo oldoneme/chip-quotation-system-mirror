@@ -5,21 +5,69 @@
 import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from .database import get_db
+from .auth import decode_jwt
 from .wecom_auth import AuthService, WeComOAuth
 from .auth_schemas import UserResponse, LoginResponse
 from .models import User
 from .middleware.session_manager import is_session_invalidated
 
 router = APIRouter()
+bearer_security = HTTPBearer(auto_error=False)
 
 # 依赖注入
 def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
     return AuthService(db)
+
+
+def _refresh_and_validate_user(user: Optional[User], auth_service: AuthService) -> User:
+    """刷新用户并校验权限。"""
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    fresh_user = auth_service.db.query(User).filter(User.id == user.id).first()
+    if fresh_user:
+        user = fresh_user
+
+    if not auth_service.check_user_permission(user):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return user
+
+
+def _resolve_user_from_bearer_or_jwt(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials],
+    auth_service: AuthService,
+) -> Optional[User]:
+    """从Bearer、auth_token Cookie或jwt查询参数中解析用户。"""
+    token: Optional[str] = None
+
+    if credentials and credentials.credentials:
+        token = credentials.credentials
+    elif request.cookies.get("auth_token"):
+        token = request.cookies.get("auth_token")
+    elif request.query_params.get("jwt"):
+        token = request.query_params.get("jwt")
+
+    if not token:
+        return None
+
+    payload = decode_jwt(token)
+    userid = payload.get("sub")
+    if not userid:
+        raise HTTPException(status_code=401, detail="认证令牌中缺少用户标识")
+
+    user = auth_service.db.query(User).filter(User.userid == userid).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在，请重新登录")
+
+    return _refresh_and_validate_user(user, auth_service)
 
 def get_current_user(
     request: Request,
@@ -36,14 +84,6 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid session")
     
     user = session.user
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid session")
-    
-    # 方案2：实时获取最新用户信息（角色更改立即生效）
-    # 重新从数据库获取最新的用户信息，确保角色和状态是最新的
-    fresh_user = auth_service.db.query(User).filter(User.id == user.id).first()
-    if fresh_user:
-        user = fresh_user
     
     # 方案1：角色更改需要重新登录（已禁用）
     # 检查会话是否已失效（角色变更后需要重新登录）
@@ -52,11 +92,26 @@ def get_current_user(
     #     auth_service.invalidate_session(session_token)
     #     raise HTTPException(status_code=401, detail="Session invalidated due to role change. Please login again.")
     
-    # 检查权限
-    if not auth_service.check_user_permission(user):
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    return user
+    return _refresh_and_validate_user(user, auth_service)
+
+
+def get_current_user_strict_multi_source(
+    request: Request,
+    session_token: Optional[str] = Cookie(None, alias="session_token"),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_security),
+    auth_service: AuthService = Depends(get_auth_service)
+) -> User:
+    """严格多来源认证：优先session_token，同时兼容Bearer/auth_token/jwt。"""
+    if session_token:
+        session = auth_service.get_session_by_token(session_token)
+        if session:
+            return _refresh_and_validate_user(session.user, auth_service)
+
+    resolved_user = _resolve_user_from_bearer_or_jwt(request, credentials, auth_service)
+    if resolved_user:
+        return resolved_user
+
+    raise HTTPException(status_code=401, detail="Not authenticated")
 
 def get_current_user_optional(
     request: Request,

@@ -12,6 +12,13 @@ import requests
 import json
 from datetime import datetime
 
+
+def get_auth_headers():
+    token = os.getenv("CHIP_QUOTE_AUTH_TOKEN")
+    if not token:
+        return None
+    return {"Authorization": f"Bearer {token}"}
+
 def check_uuid_tokens():
     """检查数据库中的UUID token状态"""
     print("🔍 检查数据库中的UUID token状态...")
@@ -108,9 +115,18 @@ def test_api_endpoints():
 
     quote_id = result[0]
 
+    headers = get_auth_headers()
+    if headers is None:
+        print("⚠️ 未设置 CHIP_QUOTE_AUTH_TOKEN，跳过受保护审批状态接口校验")
+        return True
+
     # 测试审批状态查询
     try:
-        response = requests.get(f"http://localhost:8000/api/v1/wecom-approval/status/{quote_id}", timeout=10)
+        response = requests.get(
+            f"http://localhost:8000/api/v1/approval/status/{quote_id}",
+            headers=headers,
+            timeout=10,
+        )
         if response.status_code == 200:
             print(f"✅ 审批状态查询API正常 (报价单ID: {quote_id})")
         else:

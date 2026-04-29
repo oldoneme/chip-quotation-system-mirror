@@ -1,4 +1,3 @@
-import React from 'react';
 import { Button, Card, Form, Input, InputNumber, Select, Spin, Empty } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
 
@@ -174,7 +173,7 @@ export const ActionBar = ({ children, style, ...props }) => (
   </div>
 );
 
-export default {
+const CommonComponents = {
   PrimaryButton,
   SecondaryButton,
   DangerButton,
@@ -189,3 +188,5 @@ export default {
   PageTitle,
   ActionBar
 };
+
+export default CommonComponents;
