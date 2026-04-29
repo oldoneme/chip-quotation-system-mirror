@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
 
-from ....auth_routes import get_current_user
+from ....auth_routes import get_current_user, get_current_user_strict_multi_source
 from ....database import get_db
 from ....models import User, Quote as QuoteModel
 from ....schemas import (
@@ -223,7 +223,7 @@ async def get_quotes_test(
 @router.get("/by-uuid/{quote_uuid}")
 async def get_quote_by_uuid(
     quote_uuid: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_strict_multi_source),
     db: Session = Depends(get_db)
 ):
     """
@@ -247,7 +247,7 @@ async def get_quote_by_uuid(
 async def get_quote_detail_by_id(
     quote_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_strict_multi_source)
 ):
     """按ID获取报价单详情（包含创建者姓名）"""
     try:
@@ -351,7 +351,7 @@ async def get_quote_detail_by_id(
 async def get_quote_detail_test(
     quote_number: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_strict_multi_source)
 ):
     """测试端点 - 获取报价单详情（包含创建者姓名）"""
     try:
@@ -473,7 +473,7 @@ async def get_quote_statistics(
 async def get_quote(
     quote_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_strict_multi_source)
 ):
     """根据ID或报价单号获取报价单详情"""
     try:
@@ -495,7 +495,7 @@ async def get_quote(
 async def get_quote_by_number(
     quote_number: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_strict_multi_source)
 ):
     """根据报价单号获取报价单详情"""
     try:

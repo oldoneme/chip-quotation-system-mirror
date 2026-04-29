@@ -4,13 +4,17 @@ from types import SimpleNamespace
 import asyncio
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, '/home/qixin/projects/chip-quotation-system/backend')
 
 from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
+from starlette.requests import Request
 
 from app.main import app
 from app.api.v1.endpoints.quotes import get_quote_detail_by_id, get_quote_detail_test
+from app.auth_routes import get_current_user_strict_multi_source
 from app.api.v1.endpoints.quote_route_helpers import ensure_quote_access, get_quote_by_identifier
 from app.schemas import Quote as QuoteSchema, QuoteList
 from app.services.quote_service import QuoteService
@@ -64,6 +68,42 @@ class FailingSession:
         raise RuntimeError("database password leaked")
 
 
+class StubUserQuery:
+    def __init__(self, user):
+        self.user = user
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return self.user
+
+
+class StubAuthDb:
+    def __init__(self, user):
+        self.user = user
+
+    def query(self, model):
+        return StubUserQuery(self.user)
+
+
+class StubAuthService:
+    def __init__(self, session_user=None, token_user=None, session_exists=True, permission=True):
+        self.session_user = session_user
+        self.token_user = token_user if token_user is not None else session_user
+        self.session_exists = session_exists
+        self.permission = permission
+        self.db = StubAuthDb(self.token_user)
+
+    def get_session_by_token(self, token):
+        if not self.session_exists or not self.session_user:
+            return None
+        return SimpleNamespace(user=self.session_user)
+
+    def check_user_permission(self, user):
+        return self.permission
+
+
 def build_quote(**overrides):
     values = {
         "id": 10,
@@ -105,7 +145,98 @@ def build_quote(**overrides):
     return SimpleNamespace(**values)
 
 
+def build_request(path="/api/v1/quotes/detail/by-id/10", headers=None, cookies=None, query_string=""):
+    raw_headers = []
+    for key, value in (headers or {}).items():
+        raw_headers.append((key.lower().encode("latin-1"), value.encode("latin-1")))
+
+    if cookies:
+        cookie_header = "; ".join(f"{key}={value}" for key, value in cookies.items())
+        raw_headers.append((b"cookie", cookie_header.encode("latin-1")))
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "headers": raw_headers,
+        "query_string": query_string.encode("latin-1"),
+        "client": ("127.0.0.1", 8000),
+        "scheme": "http",
+        "server": ("testserver", 80),
+    }
+    return Request(scope)
+
+
 class QuoteLogicRegressionTests(unittest.TestCase):
+    def test_strict_multi_source_auth_accepts_session_token(self):
+        user = SimpleNamespace(id=1, userid="owner", role="user")
+        request = build_request(cookies={"session_token": "session-123"})
+
+        resolved = get_current_user_strict_multi_source(
+            request,
+            session_token="session-123",
+            credentials=None,
+            auth_service=StubAuthService(session_user=user),
+        )
+
+        self.assertEqual(resolved.userid, "owner")
+
+    def test_strict_multi_source_auth_accepts_bearer_token(self):
+        user = SimpleNamespace(id=2, userid="snapshot-user", role="user")
+        request = build_request(headers={"authorization": "Bearer snapshot-token"})
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="snapshot-token")
+
+        with patch("app.auth_routes.decode_jwt", return_value={"sub": "snapshot-user"}):
+            resolved = get_current_user_strict_multi_source(
+                request,
+                session_token=None,
+                credentials=credentials,
+                auth_service=StubAuthService(session_user=None, token_user=user, session_exists=False),
+            )
+
+        self.assertEqual(resolved.userid, "snapshot-user")
+
+    def test_strict_multi_source_auth_accepts_auth_token_cookie(self):
+        user = SimpleNamespace(id=3, userid="cookie-user", role="user")
+        request = build_request(cookies={"auth_token": "cookie-token"})
+
+        with patch("app.auth_routes.decode_jwt", return_value={"sub": "cookie-user"}):
+            resolved = get_current_user_strict_multi_source(
+                request,
+                session_token=None,
+                credentials=None,
+                auth_service=StubAuthService(session_user=None, token_user=user, session_exists=False),
+            )
+
+        self.assertEqual(resolved.userid, "cookie-user")
+
+    def test_strict_multi_source_auth_accepts_jwt_query_param(self):
+        user = SimpleNamespace(id=4, userid="query-user", role="user")
+        request = build_request(query_string="jwt=query-token")
+
+        with patch("app.auth_routes.decode_jwt", return_value={"sub": "query-user"}):
+            resolved = get_current_user_strict_multi_source(
+                request,
+                session_token=None,
+                credentials=None,
+                auth_service=StubAuthService(session_user=None, token_user=user, session_exists=False),
+            )
+
+        self.assertEqual(resolved.userid, "query-user")
+
+    def test_strict_multi_source_auth_rejects_missing_credentials(self):
+        request = build_request()
+
+        with self.assertRaises(HTTPException) as ctx:
+            get_current_user_strict_multi_source(
+                request,
+                session_token=None,
+                credentials=None,
+                auth_service=StubAuthService(session_user=None, token_user=None, session_exists=False),
+            )
+
+        self.assertEqual(ctx.exception.status_code, 401)
+
     def test_quote_identifier_routes_to_correct_lookup(self):
         service = StubQuoteService()
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
-from ....auth_routes import get_current_user
+from ....auth_routes import get_current_user_strict_multi_source
 from ....database import get_db
 from ....models import User
 from ....services.quote_service import QuoteService, PDFGenerationInProgress
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/quotes", tags=["报价单导出"])
 async def export_quote_pdf(
     quote_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_strict_multi_source)
 ):
     """导出报价单PDF - 占位实现"""
     try:
@@ -45,7 +45,7 @@ async def export_quote_pdf(
 async def export_quote_excel(
     quote_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_strict_multi_source)
 ):
     """导出报价单Excel - 占位实现"""
     try:
@@ -71,7 +71,7 @@ async def get_quote_pdf(
     download: bool = Query(False, description="是否下载文件"),
     columns: Optional[str] = Query(None, description="前端列配置JSON"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_strict_multi_source)
 ):
     """获取报价单PDF，优先使用前端快照缓存，必要时兜底WeasyPrint"""
     logger = logging.getLogger("app.api.quotes")
