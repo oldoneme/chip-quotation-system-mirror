@@ -24,7 +24,7 @@ class SimpleExportService:
 
     def export_quote_json(self, quote_id: int) -> Response:
         """导出报价单为JSON格式"""
-        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        quote = self.db.query(Quote).filter(Quote.id == quote_id, Quote.is_deleted == False).first()
         if not quote:
             raise HTTPException(status_code=404, detail="报价单不存在")
 
@@ -68,6 +68,7 @@ class SimpleExportService:
         # 添加明细项目
         if quote.items:
             for item in quote.items:
+                display_unit_price = item.adjusted_price if item.adjusted_price is not None else item.unit_price
                 export_data["items"].append({
                     "item_name": item.item_name,
                     "item_description": item.item_description,
@@ -77,7 +78,7 @@ class SimpleExportService:
                     "configuration": item.configuration,
                     "quantity": item.quantity,
                     "unit": item.unit,
-                    "unit_price": item.unit_price,
+                    "unit_price": display_unit_price,
                     "total_price": item.total_price
                 })
 
@@ -92,7 +93,7 @@ class SimpleExportService:
 
     def export_quote_csv(self, quote_id: int) -> StreamingResponse:
         """导出报价单为CSV格式"""
-        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        quote = self.db.query(Quote).filter(Quote.id == quote_id, Quote.is_deleted == False).first()
         if not quote:
             raise HTTPException(status_code=404, detail="报价单不存在")
 
@@ -130,6 +131,7 @@ class SimpleExportService:
             writer.writerow(["序号", "项目名称", "设备类型", "供应商", "设备型号", "数量", "单位", "单价", "小计"])
             
             for i, item in enumerate(quote.items, 1):
+                display_unit_price = item.adjusted_price if item.adjusted_price is not None else item.unit_price
                 writer.writerow([
                     i,
                     item.item_name,
@@ -138,7 +140,7 @@ class SimpleExportService:
                     item.machine_model or '',
                     item.quantity,
                     item.unit,
-                    item.unit_price,
+                    display_unit_price,
                     item.total_price
                 ])
             writer.writerow([])
@@ -176,7 +178,7 @@ class SimpleExportService:
 
     def export_quote_html(self, quote_id: int) -> Response:
         """导出报价单为HTML格式"""
-        quote = self.db.query(Quote).filter(Quote.id == quote_id).first()
+        quote = self.db.query(Quote).filter(Quote.id == quote_id, Quote.is_deleted == False).first()
         if not quote:
             raise HTTPException(status_code=404, detail="报价单不存在")
 
@@ -272,6 +274,7 @@ class SimpleExportService:
 """
             
             for i, item in enumerate(quote.items, 1):
+                display_unit_price = item.adjusted_price if item.adjusted_price is not None else item.unit_price
                 html_content += f"""
                 <tr>
                     <td>{i}</td>
@@ -281,7 +284,7 @@ class SimpleExportService:
                     <td>{item.machine_model or ''}</td>
                     <td>{item.quantity:.2f}</td>
                     <td>{item.unit}</td>
-                    <td>¥{item.unit_price:.2f}</td>
+                    <td>¥{display_unit_price:.2f}</td>
                     <td>¥{item.total_price:.2f}</td>
                 </tr>
 """
