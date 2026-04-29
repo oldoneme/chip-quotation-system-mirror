@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import os
 import httpx
 from datetime import datetime
 
@@ -15,15 +16,33 @@ TEST_CONFIG = {
     "approver_userid": "test_user",  # 您可以改为实际的企业微信用户ID
 }
 
+
+def get_auth_headers():
+    token = os.getenv("CHIP_QUOTE_AUTH_TOKEN")
+    if not token:
+        return None
+    return {"Authorization": f"Bearer {token}"}
+
+
+def print_auth_required(test_name):
+    print(f"⚠️  {test_name} 需要认证 token，已跳过受保护请求")
+    print("   请先设置环境变量: export CHIP_QUOTE_AUTH_TOKEN=<token>")
+
 async def test_quote_detail():
     """测试1: 获取报价单详情"""
     print("📋 测试1: 获取报价单详情")
     print("-" * 40)
+
+    headers = get_auth_headers()
+    if headers is None:
+        print_auth_required("报价单详情接口")
+        return False
     
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{TEST_CONFIG['api_base']}/quotes/detail/CIS-KS20250830001"
+                f"{TEST_CONFIG['api_base']}/quotes/detail/CIS-KS20250830001",
+                headers=headers,
             )
             
             if response.status_code == 200:
@@ -52,12 +71,18 @@ async def test_submit_approval():
         "urgency": "normal",
         "notes": "完整流程测试 - 请审批"
     }
+
+    headers = get_auth_headers()
+    if headers is None:
+        print_auth_required("审批提交接口")
+        return False
     
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{TEST_CONFIG['api_base']}/quote-approval/submit/{TEST_CONFIG['quote_id']}",
                 json=approval_data,
+                headers=headers,
                 timeout=30.0
             )
             
@@ -97,11 +122,17 @@ async def test_approval_history():
     """测试3: 查看审批历史"""
     print("\n📋 测试3: 查看审批历史")
     print("-" * 40)
+
+    headers = get_auth_headers()
+    if headers is None:
+        print_auth_required("审批历史接口")
+        return False
     
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{TEST_CONFIG['api_base']}/wecom-approval/history/{TEST_CONFIG['quote_id']}"
+                f"{TEST_CONFIG['api_base']}/wecom-approval/history/{TEST_CONFIG['quote_id']}",
+                headers=headers,
             )
             
             if response.status_code == 200:

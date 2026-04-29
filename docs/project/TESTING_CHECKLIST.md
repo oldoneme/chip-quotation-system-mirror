@@ -5,6 +5,10 @@
 ### 1. 报价详情页面测试
 访问 http://localhost:3000/quote-detail/31
 
+**前置条件：**
+- 已登录系统，浏览器或 API 客户端具备有效认证信息
+- 当前用户对报价单 31 有访问权限（创建者、当前审批人、超级管理员或符合规则的管理员）
+
 **预期结果：**
 - ✅ 页面正常加载，显示报价单基本信息
 - ✅ 页面底部应该显示"审批操作"面板（如果有审批权限）
@@ -36,13 +40,15 @@ http://localhost:3000/quote-detail/31
 
 ```bash
 # Step 1: 生成审批链接
-curl -X POST http://127.0.0.1:8000/api/v1/wecom-approval/generate-approval-link/31
+curl -X POST http://127.0.0.1:8000/api/v1/wecom-approval/generate-approval-link/31 \
+  -H "Authorization: Bearer ${CHIP_QUOTE_AUTH_TOKEN}"
 
 # Step 2: 使用返回的token访问审批信息
 curl -X GET http://127.0.0.1:8000/api/v1/wecom-approval/approval-link/{返回的token}
 
 # Step 3: 测试各种审批操作（会因为权限失败，这是正常的）
 curl -X POST http://127.0.0.1:8000/api/v1/wecom-approval/approve/31 \
+  -H "Authorization: Bearer ${CHIP_QUOTE_AUTH_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"comments": "测试批准操作"}'
 ```

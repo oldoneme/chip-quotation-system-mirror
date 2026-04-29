@@ -7,17 +7,32 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import requests
 import json
 
+
+def get_auth_headers():
+    token = os.getenv("CHIP_QUOTE_AUTH_TOKEN")
+    if not token:
+        return None
+    return {"Authorization": f"Bearer {token}"}
+
 def test_api_calls():
     """测试实际的API调用路径"""
     print("🔍 诊断API调用路径")
     print("=" * 50)
 
     base_url = "http://localhost:8000"
+    auth_headers = get_auth_headers()
+    if auth_headers is None:
+        print("⚠️  受保护报价接口需要认证 token")
+        print("   请先设置环境变量: export CHIP_QUOTE_AUTH_TOKEN=<token>")
+        return
 
     # 1. 检查当前报价单状态
     print("1. 检查报价单状态...")
     try:
-        response = requests.get(f"{base_url}/api/v1/quotes/detail/CIS-KS20250918001")
+        response = requests.get(
+            f"{base_url}/api/v1/quotes/detail/CIS-KS20250918001",
+            headers=auth_headers,
+        )
         if response.status_code == 200:
             quote_data = response.json()
             print(f"📋 报价单: {quote_data.get('quote_number')}")
@@ -68,7 +83,7 @@ def test_api_calls():
             response = requests.post(
                 f"{base_url}/api/v1/wecom-approval/reject/{quote_id}",
                 json=reject_data,
-                headers={"Content-Type": "application/json"}
+                headers={**auth_headers, "Content-Type": "application/json"}
             )
             print(f"V1 拒绝API响应: {response.status_code}")
             if response.status_code == 200:
@@ -88,7 +103,7 @@ def test_api_calls():
             response = requests.post(
                 f"{base_url}/api/v2/approval/{quote_id}/operation",
                 json=reject_data,
-                headers={"Content-Type": "application/json"}
+                headers={**auth_headers, "Content-Type": "application/json"}
             )
             print(f"V2 拒绝API响应: {response.status_code}")
             if response.status_code == 200:
