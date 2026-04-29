@@ -66,12 +66,6 @@ async def test_submit_approval():
     print("\n📋 测试2: 提交审批申请")
     print("-" * 40)
     
-    approval_data = {
-        "approver_userid": TEST_CONFIG["approver_userid"],
-        "urgency": "normal",
-        "notes": "完整流程测试 - 请审批"
-    }
-
     headers = get_auth_headers()
     if headers is None:
         print_auth_required("审批提交接口")
@@ -80,8 +74,7 @@ async def test_submit_approval():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{TEST_CONFIG['api_base']}/quote-approval/submit/{TEST_CONFIG['quote_id']}",
-                json=approval_data,
+                f"{TEST_CONFIG['api_base']}/quotes/{TEST_CONFIG['quote_id']}/submit",
                 headers=headers,
                 timeout=30.0
             )
@@ -92,8 +85,8 @@ async def test_submit_approval():
                 result = response.json()
                 print("✅ 审批提交成功！")
                 print(f"   消息: {result.get('message')}")
-                print(f"   审批ID: {result.get('approval_id')}")
-                print(f"   通知发送: {result.get('notification_sent')}")
+                print(f"   报价单号: {result.get('quote_number')}")
+                print(f"   新审批状态: {result.get('approval_status')}")
                 return True
             else:
                 result = response.json()
@@ -131,12 +124,13 @@ async def test_approval_history():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{TEST_CONFIG['api_base']}/wecom-approval/history/{TEST_CONFIG['quote_id']}",
+                f"{TEST_CONFIG['api_base']}/approval/history/{TEST_CONFIG['quote_id']}",
                 headers=headers,
             )
             
             if response.status_code == 200:
-                history = response.json()
+                payload = response.json()
+                history = payload.get('history', [])
                 print(f"✅ 历史记录获取成功")
                 print(f"   记录数量: {len(history)}")
                 

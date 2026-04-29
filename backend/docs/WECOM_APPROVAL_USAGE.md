@@ -53,10 +53,13 @@ WECOM_CALLBACK_TOKEN=your_callback_token
 ### API调用示例
 ```python
 # 提交审批
-POST /api/v1/quote-approval/submit/{quote_id}
+POST /api/v1/quotes/{quote_id}/submit
 
-# 检查审批状态  
-GET /api/v1/wecom-approval/sync-status/{quote_id}
+# 检查统一审批状态
+GET /api/v1/approval/status/{quote_id}
+
+# 同步企业微信审批状态
+POST /api/v1/wecom-approval/sync-status/{quote_id}
 ```
 
 ## 📁 核心文件结构

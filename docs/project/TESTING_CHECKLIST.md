@@ -39,18 +39,29 @@ http://localhost:3000/quote-detail/31
 ### 3. 完整审批流程测试
 
 ```bash
-# Step 1: 生成审批链接
+# Step 1: 查询统一审批状态
+curl -X GET http://127.0.0.1:8000/api/v1/approval/status/31 \
+  -H "Authorization: Bearer ${CHIP_QUOTE_AUTH_TOKEN}"
+
+# Step 2: 查询统一审批历史
+curl -X GET http://127.0.0.1:8000/api/v1/approval/history/31 \
+  -H "Authorization: Bearer ${CHIP_QUOTE_AUTH_TOKEN}"
+
+# Step 3: 生成审批链接
 curl -X POST http://127.0.0.1:8000/api/v1/wecom-approval/generate-approval-link/31 \
   -H "Authorization: Bearer ${CHIP_QUOTE_AUTH_TOKEN}"
 
-# Step 2: 使用返回的token访问审批信息
+# Step 4: 使用返回的 token 访问审批信息
 curl -X GET http://127.0.0.1:8000/api/v1/wecom-approval/approval-link/{返回的token}
 
-# Step 3: 测试各种审批操作（会因为权限失败，这是正常的）
-curl -X POST http://127.0.0.1:8000/api/v1/wecom-approval/approve/31 \
+# Step 5: 提交审批（若已提交或无权限，返回业务错误属正常）
+curl -X POST http://127.0.0.1:8000/api/v1/quotes/31/submit \
   -H "Authorization: Bearer ${CHIP_QUOTE_AUTH_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"comments": "测试批准操作"}'
+  -H "Content-Type: application/json"
+
+# Step 6: 查询报价单审批记录
+curl -X GET http://127.0.0.1:8000/api/v1/quotes/31/approval-records \
+  -H "Authorization: Bearer ${CHIP_QUOTE_AUTH_TOKEN}"
 ```
 
 ### 4. 数据库一致性测试
@@ -74,9 +85,10 @@ conn.close()
 ### 5. 路由可达性测试
 ```bash
 # 测试所有新增的API端点
-curl -I http://127.0.0.1:8000/api/v1/wecom-approval/status/31
-curl -I http://127.0.0.1:8000/api/v1/wecom-approval/history/31
-# ... 其他端点
+curl -I http://127.0.0.1:8000/api/v1/approval/status/31
+curl -I http://127.0.0.1:8000/api/v1/approval/history/31
+curl -I http://127.0.0.1:8000/api/v1/quotes/31/approval-records
+curl -I http://127.0.0.1:8000/api/v1/wecom-approval/approval-link/{token}
 ```
 
 ## 📱 移动端兼容性测试
@@ -94,7 +106,8 @@ curl -I http://127.0.0.1:8000/api/v1/wecom-approval/history/31
 curl -X GET http://127.0.0.1:8000/api/v1/wecom-approval/approval-link/invalid-token
 
 # 测试过期或不存在的资源
-curl -X GET http://127.0.0.1:8000/api/v1/wecom-approval/status/999999
+curl -X GET http://127.0.0.1:8000/api/v1/approval/status/999999 \
+  -H "Authorization: Bearer ${CHIP_QUOTE_AUTH_TOKEN}"
 ```
 
 ## ❌ 预期的测试结果
@@ -115,6 +128,7 @@ curl -X GET http://127.0.0.1:8000/api/v1/wecom-approval/status/999999
 1. 审批操作需要用户认证（目前会返回权限错误）
 2. 企业微信集成功能需要配置后才能完全测试
 3. 某些高级功能需要实际的企业微信环境
+4. 审批状态/历史接口已统一到 `/api/v1/approval/*`，旧 `wecom-approval/status|history` 路径不再作为测试基准
 
 **测试建议：**
 - 重点测试UI组件渲染和响应式设计
