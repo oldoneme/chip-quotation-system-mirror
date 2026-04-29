@@ -13,8 +13,8 @@
 backend/venv/bin/pip install playwright
 backend/venv/bin/playwright install --with-deps chromium
 
-# 2. 生成调试快照（超时 90s，自动输出 debug_quote.pdf）
-cd backend && timeout 90s sh -c 'PYTHONPATH=. venv/bin/python scripts/debug_snapshot.py CIS-KS20250922003'
+# 2. 使用快照 token 做前端页面自检（自动输出 selfcheck_*.png/pdf）
+SNAP_TOKEN=<snapshot-jwt> timeout 90s sh -c 'backend/venv/bin/python scripts/pw_selfcheck_snapshot.py CIS-KS20250922003'
 ```
 
 ## 输出结果

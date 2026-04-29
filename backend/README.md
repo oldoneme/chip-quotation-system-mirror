@@ -62,17 +62,17 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 python3 sync_approval_daemon.py
 ```
 
-### 6. 安装 Playwright 与生成快照PDF
+### 6. 安装 Playwright 与生成快照 PDF 自检
 ```bash
 # 安装 Playwright 及 Chromium 依赖
 pip install playwright
 playwright install --with-deps chromium
 
-# 生成指定报价单的调试快照
-python3 scripts/debug_snapshot.py CIS-KS20250101001
+# 使用快照 token 自检指定报价单页面
+SNAP_TOKEN=<snapshot-jwt> python3 ../scripts/pw_selfcheck_snapshot.py CIS-KS20250101001
 ```
 
-调试脚本会在当前目录输出 `debug_quote.pdf` 并打印结构化日志，若看到 WeasyPrint 兜底或提示文件过小，请检查前端可访问性（确保页面包含 `#quote-ready` 标识并支持 `__snapshot_token` 鉴权）。
+自检脚本会输出 `selfcheck_<QUOTE_NO>.png/pdf` 并打印结构化结果；它现在支持 `Authorization` / `auth_token` / `jwt` / `session_token` 多来源鉴权，用于验证 `quote-detail` 与 PDF 快照链路是否可达。
 
 ## 🧪 测试
 
