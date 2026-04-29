@@ -61,7 +61,12 @@ const UnifiedApprovalPanel = ({
   // 获取审批状态
   const fetchApprovalStatus = useCallback(async (silent = false) => {
     try {
-      const status = await UnifiedApprovalApiV3.getApprovalStatus(quote.quoteId || quote.id);
+      const [status, historyResponse] = await Promise.all([
+        UnifiedApprovalApiV3.getApprovalStatus(quote.quoteId || quote.id),
+        showHistory
+          ? UnifiedApprovalApiV3.getApprovalHistory(quote.quoteId || quote.id)
+          : Promise.resolve(null)
+      ]);
       setApprovalStatus(status);
       setLastUpdated(new Date());
 
@@ -69,9 +74,8 @@ const UnifiedApprovalPanel = ({
       const newPermissions = UnifiedApprovalApiV3.checkApprovalPermissions(status, currentUser);
       setPermissions(newPermissions);
 
-      // 处理审批历史 - V2 API已包含历史记录在状态响应中
-      if (showHistory && status?.approval_history) {
-        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(status.approval_history);
+      if (showHistory && historyResponse?.history) {
+        const formattedHistory = UnifiedApprovalApiV3.formatApprovalHistory(historyResponse.history);
         setApprovalHistory(formattedHistory);
       }
     } catch (error) {
