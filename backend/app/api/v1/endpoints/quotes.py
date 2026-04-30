@@ -37,11 +37,6 @@ async def create_quote(
 ):
     """创建新报价单并生成快照PDF缓存"""
     logger = logging.getLogger("app.api.quotes")
-    # DEBUG: Log incoming quote_data payload before processing
-    try:
-        logger.info(f"DEBUG: Incoming quote_data for create_quote: {quote_data.model_dump_json(indent=2)}")
-    except Exception as e:
-        logger.error(f"Failed to log incoming quote_data: {e}")
 
     try:
         service = QuoteService(db)
