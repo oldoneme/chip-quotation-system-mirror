@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
+import { PrimaryButton, SecondaryButton } from '../components/CommonComponents';
 import '../App.css';
 
 const QuoteTypeSelection = () => {

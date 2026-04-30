@@ -4,7 +4,7 @@ import { Table, InputNumber, message } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
-import { formatHourlyRate, ceilByCurrency, formatQuotePrice } from '../utils';
+import { ceilByCurrency, formatQuotePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import useQuoteEditMode from '../hooks/useQuoteEditMode';
 import { QuoteApiService } from '../services/quoteApi';
@@ -48,8 +48,6 @@ const InquiryQuote = () => {
   });
 
   const [availableMachines, setAvailableMachines] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [backendMachines, setBackendMachines] = useState([]);
   const [cardTypes, setCardTypes] = useState([]);
   const [persistedCardQuantities, setPersistedCardQuantities] = useState({});
   const [isMounted, setIsMounted] = useState(false);
@@ -65,7 +63,6 @@ const InquiryQuote = () => {
   // 从后端获取机器和板卡数据，然后处理状态恢复
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
       try {
         const [machinesData, cardTypesData, hierarchicalData] = await Promise.all([
           getMachines(),
@@ -73,7 +70,6 @@ const InquiryQuote = () => {
           fetch('/api/v1/hierarchical/machine-types').then(res => res.json())
         ]);
 
-        setBackendMachines(machinesData);
         setCardTypes(cardTypesData);
 
         // 从hierarchical API提取设备类型
@@ -129,8 +125,6 @@ const InquiryQuote = () => {
         
       } catch (error) {
         console.error('获取数据失败:', error);
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -161,7 +155,7 @@ const InquiryQuote = () => {
         }
       }
     }
-  }, [isEditMode, editingQuote, editLoading, isMounted, editMessageShown]);
+  }, [isEditMode, editingQuote, editLoading, isMounted, editMessageShown, convertQuoteToFormData]);
 
   // 重置编辑消息标志
   useEffect(() => {
@@ -332,61 +326,6 @@ const InquiryQuote = () => {
         return machine;
       })
     }));
-  };
-
-  // 计算机器小时费率（基于选中的板卡）- 使用当前状态的数量
-  const calculateMachineHourlyRate = (machineData, selectedCards) => {
-    return calculateMachineHourlyRateForMachine(
-      machineData, 
-      selectedCards, 
-      formData.currency, 
-      formData.exchangeRate, 
-      formData.inquiryFactor, 
-      persistedCardQuantities
-    );
-  };
-
-  // 计算机器小时费率（基于选中的板卡）- 可指定数量状态
-  const calculateMachineHourlyRateWithQuantities = (machineData, selectedCards, quantities) => {
-    if (!machineData || !selectedCards || selectedCards.length === 0) {
-      return 0;
-    }
-
-    const totalCardCost = selectedCards.reduce((sum, card) => {
-      const quantity = quantities[`${machineData.id}_${card.id}`] || 1;
-      let adjustedPrice = card.unit_price / 10000; // 转换为万元
-      
-      // 根据报价币种和机器币种进行转换
-      if (formData.currency === 'USD') {
-        if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
-          // CNY机器转USD：使用报价汇率
-          adjustedPrice = adjustedPrice / formData.exchangeRate;
-        }
-        // USD机器：价格已经是USD，不需要转换
-      } else {
-        // 报价币种是CNY
-        if (machineData.currency === 'USD') {
-          // USD机器转CNY：使用机器的汇率
-          adjustedPrice = adjustedPrice * (machineData.exchange_rate || 7.2);
-        }
-        // CNY机器：价格已经是CNY，不需要转换
-      }
-      
-      // 应用折扣率和数量
-      return sum + (adjustedPrice * (machineData.discount_rate || 1.0) * quantity);
-    }, 0);
-
-    // 应用询价系数（类似工程系数）
-    const finalCost = totalCardCost * formData.inquiryFactor;
-    // 根据货币类型向上取整
-    return ceilByCurrency(finalCost, formData.currency);
-  };
-
-  // 格式化价格显示
-  const formatPrice = (number) => {
-    const formattedNumber = formatQuotePrice(number, formData.currency);
-    const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
-    return `${symbol}${formattedNumber}`;
   };
 
   // 格式化机时价格显示（包含币种符号，根据币种精度）

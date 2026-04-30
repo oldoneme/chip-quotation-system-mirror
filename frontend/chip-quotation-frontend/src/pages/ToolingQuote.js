@@ -145,7 +145,7 @@ const ToolingQuote = () => {
         console.log('开始全新工装夹具报价流程');
       }
     }
-  }, [location.state?.fromResultPage, isEditMode, editingQuote, editLoading, isMounted]);
+  }, [location.state?.fromResultPage, isEditMode, editingQuote, editLoading, isMounted, convertQuoteToFormData, editMessageShown]);
 
   // 重置编辑消息标志当退出编辑模式时
   useEffect(() => {
