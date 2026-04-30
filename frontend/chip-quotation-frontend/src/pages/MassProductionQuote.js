@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Select, Table, Tabs, Spin, Alert, Checkbox, Button, Card, InputNumber, message, Divider } from 'antd';
+import { Select, Table, Alert, Checkbox, Button, Card, InputNumber, message } from 'antd';
 // 移除StepIndicator导入，统一为单页面模式
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
@@ -8,9 +8,6 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   getMachines
 } from '../services/machines';
-import {
-  getConfigurations
-} from '../services/configurations';
 import {
   getCardTypes
 } from '../services/cardTypes';
@@ -28,7 +25,6 @@ const { Option } = Select;
 const MassProductionQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { state } = location;
   const { user } = useAuth();
 
   // 编辑模式相关状态
@@ -40,7 +36,6 @@ const MassProductionQuote = () => {
   // 移除步骤管理，统一为单页面模式
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [isMounted, setIsMounted] = useState(false);
   const [editMessageShown, setEditMessageShown] = useState(false);
   
   // 机器数据
@@ -53,9 +48,6 @@ const MassProductionQuote = () => {
   const [auxMachineTypes, setAuxMachineTypes] = useState([]);      // 辅助设备类型列表
   
   // 选择状态
-  const [selectedMachine, setSelectedMachine] = useState(null);
-  const [selectedConfig, setSelectedConfig] = useState(null);
-  const [selectedCards, setSelectedCards] = useState([]);
   const [selectedAuxDevices, setSelectedAuxDevices] = useState([]);
   const [selectedTypes, setSelectedTypes] = useState(['ft', 'cp']);
   const [quoteCurrency, setQuoteCurrency] = useState('CNY'); // 报价币种，默认人民币
@@ -157,7 +149,7 @@ const MassProductionQuote = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [location.state?.fromResultPage]);
 
   // 编辑模式数据预填充
   useEffect(() => {
@@ -236,7 +228,7 @@ const MassProductionQuote = () => {
         }
       }
     }
-  }, [isEditMode, editingQuote, editLoading, editDataLoaded, cardTypes, machines, handlers, probers, auxDevices, editMessageShown]);
+  }, [isEditMode, editingQuote, editLoading, editDataLoaded, cardTypes, machines, handlers, probers, auxDevices, editMessageShown, convertQuoteToFormData]);
 
   // 重置编辑消息标志
   useEffect(() => {
@@ -1123,10 +1115,6 @@ const MassProductionQuote = () => {
     }
   };
   
-  const handleAuxDeviceSelect = (selectedRowKeys, selectedRows) => {
-    setSelectedAuxDevices(selectedRows);
-  };
-
   // 表格列定义
   const cardColumns = (type, machineType) => {
     const columns = [
@@ -1193,46 +1181,6 @@ const MassProductionQuote = () => {
       return ceilByCurrency(hourlyRate, quoteCurrency);
     }
   };
-
-  // 辅助设备表格列定义
-  const auxDeviceColumns = [
-    { 
-      title: '设备名称', 
-      dataIndex: 'name',
-      render: (name, device) => (
-        <span>
-          {name} ({device.currency || 'CNY'}, 汇率: {device.exchange_rate || 1.0}, 折扣率: {device.discount_rate || 1.0})
-        </span>
-      )
-    },
-    { 
-      title: '类型', 
-      dataIndex: 'supplier',
-      render: (supplier, device) => {
-        if (supplier?.machine_type?.name) {
-          return supplier.machine_type.name;
-        }
-        if (device.machine_type?.name) {
-          return device.machine_type.name;
-        }
-        if (device.type === 'handler') {
-          return '分选机';
-        }
-        if (device.type === 'prober') {
-          return '探针台';
-        }
-        return '辅助设备';
-      }
-    },
-    { 
-      title: '小时费率',
-      render: (_, record) => {
-        const rate = calculateAuxDeviceHourlyRate(record);
-        return `${formatPrice(rate)}/小时`;
-      }
-    }
-  ];
-
 
   if (loading) {
     return <LoadingSpinner tip="正在加载量产报价数据..." />;

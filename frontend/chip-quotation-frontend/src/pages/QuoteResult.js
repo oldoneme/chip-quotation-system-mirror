@@ -22,7 +22,6 @@ const QuoteResult = () => {
   };
   const isBakingProcess = (processName) => processName.includes('烘烤');
   const isTapingProcess = (processName) => processName.includes('编带');
-  const isAOIProcess = (processName) => processName.includes('AOI');
   const isBurnInProcess = (processName) => processName.includes('老化');
 
   // 初始化工程报价和量产报价项目
@@ -500,22 +499,6 @@ const QuoteResult = () => {
     return cardCost;
   };
 
-  // 计算单个工序的双设备板卡总成本（用于工序报价）
-  const calculateProcessCardCost = (process, cardTypes) => {
-    // 计算测试机成本
-    const testMachineCost = calculateProcessCardCostForDevice(process, 'testMachine', cardTypes);
-    
-    // 根据工序类型计算第二台设备成本
-    let secondDeviceCost = 0;
-    if (process.name && process.name.includes('CP')) {
-      secondDeviceCost = calculateProcessCardCostForDevice(process, 'prober', cardTypes);
-    } else if (process.name && process.name.includes('FT')) {
-      secondDeviceCost = calculateProcessCardCostForDevice(process, 'handler', cardTypes);
-    }
-    
-    return testMachineCost + secondDeviceCost;
-  };
-
   // 确认报价，创建数据库记录
   const handleConfirmQuote = async () => {
     if (!quoteData || (!quoteData.quoteCreateData && quoteData.type !== '工序报价' && quoteData.type !== '工程报价' && quoteData.type !== '工程机时报价')) {
@@ -717,85 +700,6 @@ const QuoteResult = () => {
       message.error(errorMessage);
     } finally {
       setConfirmLoading(false);
-    }
-  };
-
-  // 计算辅助设备费用（不乘以工程系数）
-  const calculateAuxDeviceCost = () => {
-    if (!quoteData || !quoteData.selectedAuxDevices || !quoteData.cardTypes) return 0;
-    
-    const quoteCurrency = quoteData.quoteCurrency || 'CNY';
-    const quoteExchangeRate = quoteData.quoteExchangeRate || 7.2;
-    
-    return quoteData.selectedAuxDevices.reduce((total, device) => {
-      // 如果是机器类型的辅助设备，计算板卡费用
-      if (device.supplier || device.machine_type) {
-        // 查找该机器的板卡
-        const machineCards = quoteData.cardTypes.filter(card => card.machine_id === device.id);
-        return total + machineCards.reduce((sum, card) => {
-          let adjustedPrice = card.unit_price / 10000;
-          
-          // 根据报价币种和机器币种进行转换
-          if (quoteCurrency === 'USD') {
-            if (device.currency === 'CNY' || device.currency === 'RMB') {
-              // RMB机器转USD：除以报价汇率
-              adjustedPrice = adjustedPrice / quoteExchangeRate;
-            }
-            // USD机器：不做汇率转换，直接使用unit_price
-          } else {
-            // 报价币种是CNY，保持原逻辑
-            adjustedPrice = adjustedPrice * device.exchange_rate;
-          }
-          
-          const cardCost = adjustedPrice * device.discount_rate * (card.quantity || 1);
-          return sum + cardCost;
-        }, 0);
-      } else {
-        // 如果是原来的辅助设备类型，使用小时费率（默认RMB）
-        let hourlyRate = device.hourly_rate || 0;
-        if (quoteCurrency === 'USD') {
-          hourlyRate = hourlyRate / quoteExchangeRate;
-        }
-        return total + hourlyRate;
-      }
-    }, 0);
-  };
-
-  // 计算单个辅助设备费用
-  const calculateSingleAuxDeviceCost = (device) => {
-    if (!quoteData || !quoteData.cardTypes) return 0;
-    
-    const quoteCurrency = quoteData.quoteCurrency || 'CNY';
-    const quoteExchangeRate = quoteData.quoteExchangeRate || 7.2;
-    
-    // 如果是机器类型的辅助设备，计算板卡费用
-    if (device.supplier || device.machine_type) {
-      // 查找该机器的板卡
-      const machineCards = quoteData.cardTypes.filter(card => card.machine_id === device.id);
-      return machineCards.reduce((sum, card) => {
-        let adjustedPrice = card.unit_price / 10000;
-        
-        // 根据报价币种和机器币种进行转换
-        if (quoteCurrency === 'USD') {
-          if (device.currency === 'CNY' || device.currency === 'RMB') {
-            // RMB机器转USD：除以报价汇率
-            adjustedPrice = adjustedPrice / quoteExchangeRate;
-          }
-          // USD机器：不做汇率转换，直接使用unit_price
-        } else {
-          // 报价币种是CNY，保持原逻辑
-          adjustedPrice = adjustedPrice * device.exchange_rate;
-        }
-        
-        return sum + (adjustedPrice * device.discount_rate * (card.quantity || 1));
-      }, 0);
-    } else {
-      // 如果是原来的辅助设备类型，使用小时费率（默认RMB）
-      let hourlyRate = device.hourly_rate || 0;
-      if (quoteCurrency === 'USD') {
-        hourlyRate = hourlyRate / quoteExchangeRate;
-      }
-      return hourlyRate;
     }
   };
 

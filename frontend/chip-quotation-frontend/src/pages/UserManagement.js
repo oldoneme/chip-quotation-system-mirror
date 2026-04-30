@@ -14,8 +14,7 @@ import {
   Col,
   Typography,
   Tooltip,
-  Divider,
-  Badge
+  Divider
 } from 'antd';
 import {
   UserOutlined,
