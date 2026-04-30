@@ -78,28 +78,21 @@ const QuoteDetail = () => {
       const storedJwt = localStorage.getItem('jwt_token');
       const params = storedJwt ? { jwt: storedJwt } : {};
       
-      console.log('🔄 发起API请求:', { isUUID, isNumericId, id, hasJwtParam: !!params.jwt });
-      
       let quoteData;
       if (isUUID) {
         // UUID格式，调用by-uuid接口（企业微信审批链接场景）
-        console.log('📱 检测到UUID格式，调用by-uuid接口');
         quoteData = await QuoteApiService.getQuoteDetailByUuid(id, params);
       } else if (isNumericId) {
         // 纯数字，调用by-id接口
-        console.log('🔢 检测到数字ID，调用by-id接口');
         quoteData = await QuoteApiService.getQuoteDetailById(id, params);
       } else {
         // 报价单号（如CIS-SH20250907001），调用detail接口
-        console.log('📋 检测到报价单号，调用detail接口');
         quoteData = await QuoteApiService.getQuoteDetailTest(id, params);
       }
       
       if (quoteData.error) {
         throw new Error(quoteData.error);
       }
-      
-      console.log('✅ 报价单详情获取成功:', quoteData.quote_number);
       
       // 格式化数据显示
       const formattedQuote = {
@@ -142,11 +135,9 @@ const QuoteDetail = () => {
       };
 
       setQuote(formattedQuote);
-      console.log("DEBUG: formattedQuote.items:", formattedQuote.items); // ADDED DEBUG LOG
 
       // 设置页面标题为报价单号，便于PDF识别
       const newTitle = `${formattedQuote.id} - ${formattedQuote.title || '报价单'}`;
-      console.log('🏷️ 设置页面标题:', newTitle);
       document.title = newTitle;
     } catch (error) {
       console.error('❌ 获取报价单详情失败:', error);
@@ -170,14 +161,12 @@ const QuoteDetail = () => {
     let urlMutated = false;
 
     if (urlJwt) {
-      console.log('🔑 发现URL中的JWT，正在保存...');
       localStorage.setItem('jwt_token', urlJwt);
       searchParams.delete('jwt');
       urlMutated = true;
     }
 
     if (snapshotToken) {
-      console.log('🪟 发现前端快照token，写入Cookie与请求头');
       document.cookie = `auth_token=${snapshotToken}; path=/; SameSite=Lax`;
       api.defaults.headers.common['Authorization'] = `Bearer ${snapshotToken}`;
       sessionStorage.setItem('__snapshot_token', snapshotToken);
@@ -193,7 +182,6 @@ const QuoteDetail = () => {
     if (urlMutated) {
       const cleanUrl = `${location.pathname}${searchParams.toString() ? `?${searchParams}` : ''}`;
       window.history.replaceState({}, '', cleanUrl);
-      console.log('✅ 鉴权参数已处理，URL已清理');
     }
   }, [location.pathname, location.search, urlJwt, snapshotToken]);
 
@@ -201,14 +189,10 @@ const QuoteDetail = () => {
     (async () => {
       try {
         try {
-          console.log('🔍 检查认证状态...');
           await QuoteApiService.checkAuth();
-          console.log('✅ 认证状态正常');
         } catch (e) {
-          console.log('⚠️ 认证状态检查失败，将使用JWT兜底:', e.message);
         }
 
-        console.log('📋 开始获取报价单详情...');
         await fetchQuoteDetail();
       } catch (error) {
         console.error('❌ 初始化失败:', error);
@@ -218,8 +202,6 @@ const QuoteDetail = () => {
   }, [fetchQuoteDetail]);
 
   const getStatusTag = (status, approvalStatus) => {
-    console.log('getStatusTag called with:', { status, approvalStatus });
-    
     const statusConfig = {
       draft: { color: 'default', text: '草稿', icon: <FileTextOutlined /> },
       pending: { color: 'processing', text: '待审批', icon: <ClockCircleOutlined /> },
@@ -229,7 +211,6 @@ const QuoteDetail = () => {
     
     // 特殊处理：被驳回后重新提交审批的状态
     if (status === 'rejected' && approvalStatus === 'pending') {
-      console.log('显示重新审批中状态');
       return (
         <Tag color="processing" icon={<ClockCircleOutlined />} style={{ fontSize: '14px', padding: '4px 12px' }}>
           重新审批中
@@ -280,8 +261,6 @@ const QuoteDetail = () => {
     const editPath = quoteTypeToPath[quote.type];
     if (editPath) {
       try {
-        console.log('📝 从详情页编辑报价单:', quote.quoteId || quote.id);
-
         // 获取完整的报价单详情数据（包含items字段）
         // 使用原始的API数据，确保包含所有字段
         let fullQuoteData;
@@ -290,8 +269,6 @@ const QuoteDetail = () => {
         } else {
           fullQuoteData = await QuoteApiService.getQuoteDetailById(quote.id);
         }
-        console.log('📝 详情页获取完整报价数据:', fullQuoteData);
-
         // 传递完整的报价单数据到编辑页面
         navigate(editPath, {
           state: {
@@ -353,21 +330,11 @@ const QuoteDetail = () => {
     const timestamp = quote.updatedAt ? new Date(quote.updatedAt).getTime() : Date.now();
     const pdfUrl = `/quotes/${quoteIdentifier}/pdf?download=false&t=${timestamp}`;
 
-    console.log('=== PDF预览调试信息 ===');
-    console.log('quote.id (报价单号):', quote.id);
-    console.log('quote.quoteId (数字ID):', quote.quoteId);
-    console.log('使用的标识符:', quoteIdentifier);
-    console.log('时间戳参数:', timestamp);
-    console.log('API请求URL (会加上baseURL /api/v1):', pdfUrl);
-
     try {
       // 第一步：先发送请求检查状态，不设置responseType
       const checkResponse = await api.get(pdfUrl, {
         validateStatus: (status) => status === 200 || status === 202
       });
-
-      console.log('PDF预览响应状态:', checkResponse.status);
-      console.log('PDF预览响应数据:', checkResponse.data);
 
       if (checkResponse.status === 202) {
         // PDF正在生成，显示弹窗
@@ -1797,7 +1764,6 @@ const QuoteDetail = () => {
           quote={quote}
           currentUser={currentUser}
           onApprovalStatusChange={(result) => {
-            console.log('审批状态变更:', result);
             // 刷新报价详情
             fetchQuoteDetail();
           }}

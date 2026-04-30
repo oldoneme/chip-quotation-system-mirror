@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, 
   Table, 
@@ -6,7 +6,6 @@ import {
   Space, 
   Tag, 
   Modal, 
-  Timeline,
   Descriptions,
   Row,
   Col,
@@ -22,7 +21,6 @@ import {
   HistoryOutlined,
   BranchesOutlined,
   SwapOutlined,
-  RollbackOutlined,
   TagOutlined,
   GitlabOutlined,
   FileTextOutlined,
@@ -39,10 +37,9 @@ const { Search } = Input;
 const { Option } = Select;
 
 const VersionControl = () => {
-  const { user } = useAuth();
+  useAuth();
   const [loading, setLoading] = useState(false);
   const [versions, setVersions] = useState([]);
-  const [selectedQuote, setSelectedQuote] = useState(null);
   const [compareModalVisible, setCompareModalVisible] = useState(false);
   const [versionDetailVisible, setVersionDetailVisible] = useState(false);
   const [selectedVersions, setSelectedVersions] = useState([]);
@@ -59,11 +56,7 @@ const VersionControl = () => {
     todayChanges: 0
   });
 
-  useEffect(() => {
-    loadVersionData();
-  }, [filters]);
-
-  const loadVersionData = () => {
+  const loadVersionData = useCallback(() => {
     setLoading(true);
     
     // 模拟版本数据
@@ -169,7 +162,11 @@ const VersionControl = () => {
 
       setLoading(false);
     }, 800);
-  };
+  }, [filters]);
+
+  useEffect(() => {
+    loadVersionData();
+  }, [loadVersionData]);
 
   const handleViewVersion = (record) => {
     setCurrentVersion(record);

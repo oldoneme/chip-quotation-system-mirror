@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, Table, Button, Space, Tag, Tabs, Modal, message, Badge,
   Row, Col, Statistic, Alert, Descriptions, Empty, Input
@@ -28,12 +28,7 @@ const ApprovalWorkflow = () => {
     total: 0
   });
 
-  useEffect(() => {
-    fetchQuotes();
-    fetchStatistics();
-  }, [activeTab]);
-
-  const fetchQuotes = async () => {
+  const fetchQuotes = useCallback(async () => {
     setLoading(true);
     try {
       let statusFilter = null;
@@ -72,9 +67,9 @@ const ApprovalWorkflow = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
 
-  const fetchStatistics = async () => {
+  const fetchStatistics = useCallback(async () => {
     try {
       const stats = await QuoteApiService.getStatistics();
       setStatistics(stats);
@@ -82,7 +77,12 @@ const ApprovalWorkflow = () => {
       console.error('获取统计信息失败:', error);
       message.error('获取统计信息失败');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchQuotes();
+    fetchStatistics();
+  }, [fetchQuotes, fetchStatistics]);
 
   const getStatusTag = (status) => {
     const statusConfig = {
@@ -227,7 +227,9 @@ const ApprovalWorkflow = () => {
       dataIndex: 'id',
       key: 'id',
       render: (text) => (
-        <a onClick={() => handleViewDetail({ id: text })}>{text}</a>
+        <Button type="link" onClick={() => handleViewDetail({ id: text })} style={{ padding: 0 }}>
+          {text}
+        </Button>
       )
     },
     {
