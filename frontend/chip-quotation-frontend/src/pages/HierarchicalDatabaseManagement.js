@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   message, 
   Card, 
@@ -26,7 +26,6 @@ import {
   CloseOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { formatNumber } from '../utils';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import '../App.css';
@@ -43,31 +42,23 @@ const HierarchicalDatabaseManagement = () => {
   const [dataVersion, setDataVersion] = useState(0); // 用于强制重新渲染的版本号
   
   // Modal states
-  const [machineTypeModalVisible, setMachineTypeModalVisible] = useState(false);
   const [supplierModalVisible, setSupplierModalVisible] = useState(false);
   const [machineModalVisible, setMachineModalVisible] = useState(false);
   const [cardConfigModalVisible, setCardConfigModalVisible] = useState(false);
   const [addMachineTypeModalVisible, setAddMachineTypeModalVisible] = useState(false);
   
   // Editing states
-  const [editingMachineType, setEditingMachineType] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [editingMachine, setEditingMachine] = useState(null);
   const [editingCardConfig, setEditingCardConfig] = useState(null);
   
   // Forms
-  const [machineTypeForm] = Form.useForm();
   const [addMachineTypeForm] = Form.useForm();
   const [supplierForm] = Form.useForm();
   const [machineForm] = Form.useForm();
   const [cardConfigForm] = Form.useForm();
-  
-  // 获取所有数据
-  useEffect(() => {
-    fetchData();
-  }, [dataVersion]); // 依赖于dataVersion，当它变化时重新获取数据
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       // 获取层级数据
       const hierarchicalDataResponse = await api.get('/hierarchical/machine-types');
@@ -122,7 +113,12 @@ const HierarchicalDatabaseManagement = () => {
       console.error('获取层级数据失败:', error);
       message.error('获取数据失败: ' + error.message);
     }
-  };
+  }, [activeMachineTypeId, selectedMachine, selectedSupplier]);
+
+  // 获取所有数据
+  useEffect(() => {
+    fetchData();
+  }, [dataVersion, fetchData]); // 依赖于dataVersion，当它变化时重新获取数据
 
   // 强制刷新数据的函数
   const forceRefreshData = () => {
@@ -144,7 +140,6 @@ const HierarchicalDatabaseManagement = () => {
 
   // 处理添加机器类型
   const handleAddMachineType = () => {
-    setEditingMachineType(null);
     addMachineTypeForm.resetFields();
     setAddMachineTypeModalVisible(true);
   };
@@ -152,7 +147,7 @@ const HierarchicalDatabaseManagement = () => {
   const handleSaveNewMachineType = async () => {
     try {
       const values = await addMachineTypeForm.validateFields();
-      const response = await api.post('/machine-types/', values);
+      await api.post('/machine-types/', values);
       message.success('创建成功');
       setAddMachineTypeModalVisible(false);
       forceRefreshData(); // 使用新的强制刷新机制
@@ -178,16 +173,15 @@ const HierarchicalDatabaseManagement = () => {
   const handleSaveSupplier = async () => {
     try {
       const values = await supplierForm.validateFields();
-      let response;
       if (editingSupplier) {
-        response = await api.put(`/suppliers/${editingSupplier.id}`, values);
+        await api.put(`/suppliers/${editingSupplier.id}`, values);
         message.success('更新成功');
       } else {
         // 如果是在机器类型下添加供应商，自动设置machine_type_id
         if (activeMachineTypeId) {
           values.machine_type_id = activeMachineTypeId;
         }
-        response = await api.post('/suppliers/', values);
+        await api.post('/suppliers/', values);
         message.success('创建成功');
       }
       setSupplierModalVisible(false);
@@ -218,7 +212,6 @@ const HierarchicalDatabaseManagement = () => {
   const handleSaveMachine = async () => {
     try {
       const values = await machineForm.validateFields();
-      let response;
       if (editingMachine) {
         // 编辑机器时，确保汇率值正确设置
         if (values.currency === 'RMB') {
@@ -227,7 +220,7 @@ const HierarchicalDatabaseManagement = () => {
           values.exchange_rate = 7; // USD时如果没有有效汇率，则设为默认值7
         }
         
-        response = await api.put(`/machines/${editingMachine.id}`, values);
+        await api.put(`/machines/${editingMachine.id}`, values);
         message.success('更新成功');
       } else {
         // 添加机器时设置默认汇率
@@ -241,7 +234,7 @@ const HierarchicalDatabaseManagement = () => {
         if (selectedSupplier) {
           values.supplier_id = selectedSupplier.id;
         }
-        response = await api.post('/machines/', values);
+        await api.post('/machines/', values);
         message.success('创建成功');
       }
       setMachineModalVisible(false);
@@ -270,16 +263,15 @@ const HierarchicalDatabaseManagement = () => {
   const handleSaveCardConfig = async () => {
     try {
       const values = await cardConfigForm.validateFields();
-      let response;
       if (editingCardConfig) {
-        response = await api.put(`/card-configs/${editingCardConfig.id}`, values);
+        await api.put(`/card-configs/${editingCardConfig.id}`, values);
         message.success('更新成功');
       } else {
         // 如果是在机器下添加板卡配置，自动设置machine_id
         if (selectedMachine) {
           values.machine_id = selectedMachine.id;
         }
-        response = await api.post('/card-configs/', values);
+        await api.post('/card-configs/', values);
         message.success('创建成功');
       }
       setCardConfigModalVisible(false);
@@ -298,7 +290,7 @@ const HierarchicalDatabaseManagement = () => {
       content: '您确定要删除这个机器类型吗？删除后将同时删除相关的供应商、测试机和板卡配置数据，此操作不可恢复。',
       onOk: async () => {
         try {
-          const response = await api.delete(`/machine-types/${id}`);
+          await api.delete(`/machine-types/${id}`);
           message.success('删除成功');
           
           // 如果删除的是当前选中的机器类型，需要重新设置选中项
@@ -336,7 +328,7 @@ const HierarchicalDatabaseManagement = () => {
       content: '您确定要删除这个供应商吗？删除后将同时删除相关的测试机和板卡配置数据，此操作不可恢复。',
       onOk: async () => {
         try {
-          const response = await api.delete(`/suppliers/${id}`);
+          await api.delete(`/suppliers/${id}`);
           message.success('删除成功');
           forceRefreshData(); // 使用新的强制刷新机制
         } catch (error) {
@@ -356,7 +348,7 @@ const HierarchicalDatabaseManagement = () => {
       content: '您确定要删除这台测试机吗？删除后将同时删除相关的板卡配置数据，此操作不可恢复。',
       onOk: async () => {
         try {
-          const response = await api.delete(`/machines/${id}`);
+          await api.delete(`/machines/${id}`);
           message.success('删除成功');
           forceRefreshData(); // 使用新的强制刷新机制
         } catch (error) {
@@ -376,7 +368,7 @@ const HierarchicalDatabaseManagement = () => {
       content: '您确定要删除这个板卡配置吗？此操作不可恢复。',
       onOk: async () => {
         try {
-          const response = await api.delete(`/card-configs/${id}`);
+          await api.delete(`/card-configs/${id}`);
           message.success('删除成功');
           forceRefreshData(); // 使用新的强制刷新机制
         } catch (error) {

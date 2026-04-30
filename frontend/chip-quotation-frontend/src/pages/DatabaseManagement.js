@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Table, Form, Input, InputNumber, Button, Modal, message, Card, Tabs, Tree } from 'antd';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { EmptyState, LoadingSpinner } from '../components/CommonComponents';
+import { EmptyState } from '../components/CommonComponents';
 import { 
   getMachines, 
   createMachine, 
@@ -40,7 +39,6 @@ import '../App.css';
 
 
 const DatabaseManagement = () => {
-  const navigate = useNavigate();
   const [hierarchicalData, setHierarchicalData] = useState([]);
   const [machines, setMachines] = useState([]);
   const [configurations, setConfigurations] = useState([]);
@@ -76,7 +74,6 @@ const DatabaseManagement = () => {
       // 先获取层级数据
       const hierarchicalDataResponse = await api.get('/hierarchical/suppliers');
       
-      console.log('Hierarchical data:', hierarchicalDataResponse.data);
       setHierarchicalData(hierarchicalDataResponse.data);
       
       // 然后获取其他数据（忽略错误）

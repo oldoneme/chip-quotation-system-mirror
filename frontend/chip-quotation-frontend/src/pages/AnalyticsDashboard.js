@@ -8,16 +8,12 @@ import {
   Select, 
   DatePicker, 
   Space,
-  Divider,
   Progress,
   Tag,
-  Table,
   Avatar,
   List
 } from 'antd';
 import { 
-  Column, 
-  Line, 
   Pie, 
   Area,
   DualAxes 
@@ -27,7 +23,6 @@ import {
   LineChartOutlined,
   PieChartOutlined,
   RiseOutlined,
-  FallOutlined,
   DollarOutlined,
   FileTextOutlined,
   UserOutlined,
@@ -42,8 +37,7 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 const AnalyticsDashboard = () => {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  useAuth();
   const [timeRange, setTimeRange] = useState('month');
   const [metrics, setMetrics] = useState({});
   const [chartData, setChartData] = useState({
@@ -60,8 +54,6 @@ const AnalyticsDashboard = () => {
   }, [timeRange]);
 
   const loadDashboardData = () => {
-    setLoading(true);
-    
     // 模拟数据
     setTimeout(() => {
       setMetrics({
@@ -181,8 +173,6 @@ const AnalyticsDashboard = () => {
         topCustomers: topCustomersData,
         recentActivities: recentActivitiesData
       });
-
-      setLoading(false);
     }, 1000);
   };
 
