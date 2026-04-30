@@ -6,6 +6,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="$HOME/.network-configs"
 CURRENT_ENV_FILE="$CONFIG_DIR/current-env"
+TUNNEL_HELPER="$SCRIPT_DIR/ensure_cloudflare_tunnel.sh"
 
 # 创建配置目录
 mkdir -p "$CONFIG_DIR"
@@ -216,6 +217,17 @@ auto_configure() {
 # 重启开发服务
 restart_dev_services() {
     print_info "重启开发服务..."
+
+    if [[ -x "$TUNNEL_HELPER" ]]; then
+        print_info "检查 Cloudflare Tunnel 状态..."
+        if "$TUNNEL_HELPER" --ensure; then
+            print_success "Cloudflare Tunnel 已就绪"
+        else
+            print_warning "Cloudflare Tunnel 未就绪，继续启动本地服务"
+        fi
+    else
+        print_warning "未找到隧道检查脚本: $TUNNEL_HELPER"
+    fi
     
     # 查找并杀死现有进程
     local pids=$(ps aux | grep -E "(uvicorn|npm.*start)" | grep -v grep | awk '{print $2}')
@@ -265,6 +277,7 @@ show_help() {
     echo "  -H, --home          手动配置为家庭环境"
     echo "  -t, --test          测试网络连通性"
     echo "  -r, --restart       重启开发服务"
+    echo "                      (会先自动检查并启动 Cloudflare Tunnel)"
     echo
     echo "示例:"
     echo "  $0 --auto           # 自动配置"
