@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Select, Table, Alert, InputNumber, Button, Card, Checkbox, Divider, message } from 'antd';
 // 移除StepIndicator导入，统一为单页面模式
 import { LoadingSpinner, EmptyState } from '../components/CommonComponents';
-import { formatHourlyRate, ceilByCurrency, formatQuotePrice, formatIntermediatePrice } from '../utils';
+import { ceilByCurrency, formatQuotePrice, formatIntermediatePrice } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getMachines
@@ -17,7 +17,6 @@ import {
 import {
   getAuxiliaryEquipment
 } from '../services/auxiliaryEquipment';
-import QuoteApiService from '../services/quoteApi';
 import useQuoteEditMode from '../hooks/useQuoteEditMode';
 import '../App.css';
 
@@ -28,6 +27,7 @@ const EngineeringQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const isFromResultPage = Boolean(location.state?.fromResultPage);
 
   // 编辑模式管理
   const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
@@ -74,7 +74,6 @@ const EngineeringQuote = () => {
   const [auxMachinesByType, setAuxMachinesByType] = useState({});  // 按类型分组的辅助设备
   const [auxMachineTypes, setAuxMachineTypes] = useState([]);  // 辅助设备类型列表
   const [cardTypes, setCardTypes] = useState([]);
-  const [auxDevices, setAuxDevices] = useState({ handlers: [], probers: [] });
   const [personnelOptions] = useState([
     { type: '工程师', rate: 350 },
     { type: '技术员', rate: 200 }
@@ -112,6 +111,8 @@ const EngineeringQuote = () => {
         if (isMounted) {
           setCardTypes(cardTypesData);
         }
+
+        void configurationsData;
 
         // 从机器中筛选出不同类型的机器
         
@@ -209,12 +210,8 @@ const EngineeringQuote = () => {
           
         }
 
-        // 处理辅助设备数据，分为handlers和probers
-        const handlers = auxEquipmentData.filter(item => item.name.includes('分选机') || item.name.includes('Handler'));
-        const probers = auxEquipmentData.filter(item => item.name.includes('探针台') || item.name.includes('Prober'));
-        if (isMounted) {
-          setAuxDevices({ handlers, probers });
-        }
+        // 保留辅助设备请求以兼容现有数据加载路径
+        void auxEquipmentData;
       } catch (err) {
         console.error('详细错误信息:', err);
         console.error('错误响应:', err.response);
@@ -239,8 +236,6 @@ const EngineeringQuote = () => {
     };
 
     // 检查是否从结果页或其他页面返回
-    const isFromResultPage = location.state?.fromResultPage;
-    
     if (isFromResultPage && isMounted) {
       // 只有从结果页返回时才恢复状态
       const storedQuoteData = sessionStorage.getItem('quoteData');
@@ -277,12 +272,12 @@ const EngineeringQuote = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isFromResultPage]);
 
   // 编辑模式数据加载（只执行一次）
   useEffect(() => {
     // 如果是从结果页返回，跳过这个数据加载（数据已经在sessionStorage中）
-    if (location.state?.fromResultPage) {
+    if (isFromResultPage) {
       return;
     }
 
@@ -346,20 +341,9 @@ const EngineeringQuote = () => {
         setEditDataLoaded(true);
       }
     }
-  }, [isEditMode, editingQuote, editLoading, editDataLoaded, cardTypes, machines, handlers, probers, auxMachines]);
+  }, [isFromResultPage, isEditMode, editingQuote, editLoading, editDataLoaded, cardTypes, machines, handlers, probers, auxMachines, convertQuoteToFormData]);
 
   // 移除步骤定义，统一为单页面模式
-
-  // 格式化价格显示（包含币种符号）
-  // 格式化最终价格（向上取整）
-  const formatPrice = (number) => {
-    const formattedNumber = formatQuotePrice(number, quoteCurrency);
-    if (quoteCurrency === 'USD') {
-      return `$${formattedNumber}`;
-    } else {
-      return `¥${formattedNumber}`;
-    }
-  };
 
   // 格式化中间价格（CNY四舍五入显示两位小数，USD向上取整显示两位小数）
   const formatMiddlePrice = (number) => {
@@ -374,24 +358,6 @@ const EngineeringQuote = () => {
   // 格式化机时价格显示（中间价格，使用formatMiddlePrice）
   const formatHourlyPrice = (number) => {
     return formatMiddlePrice(number);
-  };
-
-  // 统一的价格转换函数
-  const convertPrice = (price, deviceCurrency, deviceExchangeRate = 1) => {
-    let adjustedPrice = price;
-    
-    if (quoteCurrency === 'USD') {
-      if (deviceCurrency === 'CNY' || deviceCurrency === 'RMB') {
-        // RMB设备转USD：除以报价汇率
-        adjustedPrice = adjustedPrice / quoteExchangeRate;
-      }
-      // USD设备：不做汇率转换，直接使用原价格
-    } else {
-      // 报价币种是CNY，保持原逻辑
-      adjustedPrice = adjustedPrice * deviceExchangeRate;
-    }
-    
-    return adjustedPrice;
   };
 
   // nextStep函数已移除 - 使用统一的单页面模式
@@ -646,63 +612,6 @@ const EngineeringQuote = () => {
     navigate('/quote-result');
   };
 
-  // 提交工程机时报价到数据库
-  const handleSubmit = async () => {
-    try {
-      // 从sessionStorage获取报价数据
-      const storedQuoteData = sessionStorage.getItem('quoteData');
-      if (!storedQuoteData) {
-        message.error('报价数据丢失，请重新生成报价');
-        return;
-      }
-      
-      const quoteData = JSON.parse(storedQuoteData);
-      const { quoteItems, totalAmount } = quoteData;
-      
-      const title = `${projectInfo.projectName || '工程机时报价'} - ${customerInfo.companyName}`;
-      
-      // 构建API数据格式
-      const quoteCreateData = { // 显式定义 quoteCreateData 局部变量
-        title,
-        quote_type: 'engineering',
-        customer_name: customerInfo.companyName,
-        customer_contact: customerInfo.contactPerson,
-        customer_phone: customerInfo.phone,
-        customer_email: customerInfo.email,
-        quote_unit: projectInfo.quoteUnit,
-        currency: quoteCurrency,
-        subtotal: totalAmount,
-        total_amount: totalAmount,
-        payment_terms: '30_days',
-        description: `项目：${projectInfo.projectName}，芯片封装：${projectInfo.chipPackage}，测试类型：工程机时测试，工程系数：${engineeringRate}，报价单位：${projectInfo.quoteUnit}`,
-        notes: `汇率：${quoteExchangeRate}，紧急程度：${projectInfo.urgency === 'urgent' ? '紧急' : '正常'}`,
-        items: quoteItems
-      };
-      
-      // 调用API创建报价单
-      const createdQuote = await QuoteApiService.createQuote(quoteCreateData);
-      
-      message.success('工程机时报价创建成功！');
-      
-      // 更新sessionStorage中的数据，添加数据库返回的信息
-      const updatedQuoteData = {
-        ...quoteData,
-        quoteNumber: createdQuote.quote_number,
-        createdAt: createdQuote.created_at,
-        isSubmitted: true
-      };
-      
-      sessionStorage.setItem('quoteData', JSON.stringify(updatedQuoteData));
-      
-      // 刷新当前页面以显示已提交状态
-      window.location.reload();
-      
-    } catch (error) {
-      console.error('创建工程机时报价失败:', error);
-      message.error('创建报价单失败，请重试');
-    }
-  };
-
   // prevStep函数已移除 - 使用统一的单页面模式
 
   const resetQuote = () => {
@@ -809,12 +718,6 @@ const EngineeringQuote = () => {
     return totalCost;
   };
   
-  // 计算人员费用（用于明细显示，固定RMB）
-  const calculatePersonnelFee = (personType) => {
-    const person = personnelOptions.find(p => p.type === personType);
-    return person ? person.rate : 0;
-  };
-
   // 计算人员费用（用于最终报价，根据币种转换）
   const calculatePersonnelFeeForQuote = (personType) => {
     const person = personnelOptions.find(p => p.type === personType);
@@ -884,31 +787,7 @@ const EngineeringQuote = () => {
     return totalWithRate;
   };
   
-  // 计算不应用工程系数的其他费用
-  const calculateOtherFees = () => {
-    let total = 0;
-    
-    // 人员费用
-    selectedPersonnel.forEach(personType => {
-      total += calculatePersonnelFeeForQuote(personType);
-    });
-
-    total += calculateAuxDeviceFee();
-
-    // 返回原始计算结果，不向上取整
-    return total;
-  };
-  
-  // 计算总费用
-  const calculateTotal = () => {
-    const machineTotal = calculateMachineTotalWithEngineeringRate();
-    const otherTotal = calculateOtherFees();
-    const grandTotal = machineTotal + otherTotal;
-    // 根据货币类型向上取整
-    return ceilByCurrency(grandTotal, quoteCurrency);
-  };
-
-  const handleCardSelection = (machineType, selectedRowKeys, selectedRows) => {
+  const handleCardSelection = (machineType, selectedRows) => {
     
     // 为新选择的行添加数量属性，优先使用持久化存储的数量
     const rowsWithQuantity = selectedRows.map(row => {
@@ -1036,39 +915,9 @@ const EngineeringQuote = () => {
     }
   };
 
-  // 辅助设备表格列定义
-  const auxMachineColumns = [
-    { 
-      title: '设备名称', 
-      dataIndex: 'name',
-      render: (name, device) => (
-        <span>
-          {name} ({device.currency || 'CNY'}, 汇率: {device.exchange_rate || 1.0}, 折扣率: {device.discount_rate || 1.0})
-        </span>
-      )
-    },
-    { 
-      title: '类型', 
-      dataIndex: 'supplier',
-      render: (supplier) => supplier?.machine_type?.name || '辅助设备'
-    },
-    {
-      title: '小时费率',
-      render: (_, record) => {
-        const rate = calculateAuxDeviceHourlyRate(record);
-        return rate > 0 ? `${formatHourlyPrice(rate)}/小时` : 'N/A';
-      }
-    }
-  ];
-
   // 人员选择变化处理
   const handlePersonnelChange = (checkedValues) => {
     setSelectedPersonnel(checkedValues);
-  };
-
-  // 辅助设备选择处理
-  const handleAuxDeviceSelect = (selectedRowKeys, selectedRows) => {
-    setSelectedAuxDevices(selectedRows);
   };
 
   // 步骤0: 基本信息收集
@@ -1292,8 +1141,8 @@ const EngineeringQuote = () => {
                 rowKey="id"
                 rowSelection={{
                   type: 'checkbox',
-                  onChange: (selectedRowKeys, selectedRows) =>
-                    handleCardSelection('testMachine', selectedRowKeys, selectedRows),
+                  onChange: (_, selectedRows) =>
+                    handleCardSelection('testMachine', selectedRows),
                   selectedRowKeys: testMachineCards.map(card => card.id)
                 }}
                 columns={cardColumns('testMachine')}
@@ -1343,8 +1192,8 @@ const EngineeringQuote = () => {
               rowKey="id"
               rowSelection={{
                 type: 'checkbox',
-                onChange: (selectedRowKeys, selectedRows) => 
-                  handleCardSelection('handler', selectedRowKeys, selectedRows),
+                onChange: (_, selectedRows) => 
+                  handleCardSelection('handler', selectedRows),
                 selectedRowKeys: handlerCards.map(card => card.id)
               }}
               columns={cardColumns('handler')}
@@ -1388,8 +1237,8 @@ const EngineeringQuote = () => {
               rowKey="id"
               rowSelection={{
                 type: 'checkbox',
-                onChange: (selectedRowKeys, selectedRows) => 
-                  handleCardSelection('prober', selectedRowKeys, selectedRows),
+                onChange: (_, selectedRows) => 
+                  handleCardSelection('prober', selectedRows),
                 selectedRowKeys: proberCards.map(card => card.id)
               }}
               columns={cardColumns('prober')}
