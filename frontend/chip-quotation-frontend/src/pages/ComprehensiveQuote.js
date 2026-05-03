@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { message } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { formatQuotePrice } from '../utils';
+import useQuoteEditMode from '../hooks/useQuoteEditMode';
+import { QuoteApiService } from '../services/quoteApi';
 import '../App.css';
 
 const ComprehensiveQuote = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
   const [isMounted, setIsMounted] = useState(false);
+  const [editDataLoaded, setEditDataLoaded] = useState(false);
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -146,6 +151,27 @@ const ComprehensiveQuote = () => {
       sessionStorage.setItem('comprehensiveQuoteState', JSON.stringify(formData));
     }
   }, [formData, isMounted, location.state?.fromResultPage]);
+
+  useEffect(() => {
+    if (isEditMode && editingQuote && !editLoading && !editDataLoaded) {
+      const convertedFormData = convertQuoteToFormData(editingQuote, 'comprehensive');
+      if (convertedFormData) {
+        setFormData(prev => ({
+          ...prev,
+          ...convertedFormData,
+          customerInfo: {
+            ...prev.customerInfo,
+            ...convertedFormData.customerInfo
+          },
+          projectInfo: {
+            ...prev.projectInfo,
+            ...convertedFormData.projectInfo
+          }
+        }));
+        setEditDataLoaded(true);
+      }
+    }
+  }, [isEditMode, editingQuote, editLoading, editDataLoaded, convertQuoteToFormData]);
 
   const handleInputChange = (section, field, value) => {
     setFormData(prev => ({
@@ -304,20 +330,197 @@ const ComprehensiveQuote = () => {
     return baseTotal * multiplier * (1 - discount);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    const symbol = currencies.find(c => c.value === formData.currency)?.symbol || '￥';
+
+    const buildPackageItems = () => {
+      const discountFactor = 1 - formData.packageQuote.packageDiscount / 100;
+      const selectedItems = [];
+
+      Object.entries(availableServices).forEach(([serviceType, services]) => {
+        services.forEach(service => {
+          if (formData.packageQuote[serviceType].includes(service.id)) {
+            const discountedPrice = service.basePrice * discountFactor;
+            selectedItems.push({
+              item_name: service.name,
+              item_description: `${serviceType} - ${service.unit}`,
+              machine_type: '综合报价',
+              machine_model: service.name,
+              supplier: '',
+              configuration: JSON.stringify({
+                quote_type: 'package',
+                service_type: serviceType,
+                service_id: service.id,
+                package_discount: formData.packageQuote.packageDiscount,
+              }),
+              quantity: 1,
+              unit: service.unit,
+              unit_price: discountedPrice,
+              total_price: discountedPrice,
+            });
+          }
+        });
+      });
+
+      return selectedItems;
+    };
+
+    const buildVolumeItems = () => {
+      const finalTotal = calculateFinalTotal();
+      return [{
+        item_name: '数量分级报价',
+        item_description: `预期数量: ${formData.projectInfo.expectedVolume}`,
+        machine_type: '综合报价',
+        machine_model: '数量分级',
+        supplier: '',
+        configuration: JSON.stringify({
+          quote_type: 'volume',
+          volume_tiers: formData.volumeQuote.volumeTiers,
+          expected_volume: formData.projectInfo.expectedVolume,
+        }),
+        quantity: 1,
+        unit: '项目',
+        unit_price: finalTotal,
+        total_price: finalTotal,
+      }];
+    };
+
+    const buildTimeItems = () => {
+      const finalTotal = calculateFinalTotal();
+      return [{
+        item_name: '时间合约报价',
+        item_description: `${formData.timeQuote.contractDuration}个月合约`,
+        machine_type: '综合报价',
+        machine_model: '时间合约',
+        supplier: '',
+        configuration: JSON.stringify({
+          quote_type: 'time',
+          contract_duration: formData.timeQuote.contractDuration,
+          monthly_commitment: formData.timeQuote.monthlyCommitment,
+          time_discount: formData.timeQuote.timeDiscount,
+          escalation_rate: formData.timeQuote.escalationRate,
+        }),
+        quantity: 1,
+        unit: '项目',
+        unit_price: finalTotal,
+        total_price: finalTotal,
+      }];
+    };
+
+    const buildCustomItems = () => {
+      return formData.customQuote.customItems.map(item => ({
+        item_name: item.description || item.category || `自定义项目${item.id}`,
+        item_description: `${item.category || 'custom'} - 自定义报价`,
+        machine_type: '综合报价',
+        machine_model: item.category || '自定义项目',
+        supplier: '',
+        configuration: JSON.stringify({
+          quote_type: 'custom',
+          category: item.category,
+          discount: item.discount,
+        }),
+        quantity: item.quantity,
+        unit: '项目',
+        unit_price: item.unitPrice,
+        total_price: item.totalPrice,
+      }));
+    };
+
+    const buildQuoteItems = () => {
+      switch (formData.quoteType) {
+        case 'package':
+          return buildPackageItems();
+        case 'volume':
+          return buildVolumeItems();
+        case 'time':
+          return buildTimeItems();
+        case 'custom':
+          return buildCustomItems();
+        default:
+          return [];
+      }
+    };
+
+    const quoteItems = buildQuoteItems();
+    const finalTotal = calculateFinalTotal();
+
+    const quoteCreateData = {
+      title: `${formData.projectInfo.projectName} - ${formData.customerInfo.companyName}`,
+      quote_type: 'comprehensive',
+      customer_name: formData.customerInfo.companyName,
+      customer_contact: formData.customerInfo.contactPerson,
+      customer_phone: formData.customerInfo.phone,
+      customer_email: formData.customerInfo.email,
+      quote_unit: '昆山芯信安',
+      currency: formData.currency,
+      subtotal: finalTotal,
+      total_amount: finalTotal,
+      payment_terms: formData.agreementTerms.paymentTerms,
+      description: `综合报价(${formData.quoteType}) - 项目周期: ${formData.projectInfo.projectDuration || '-'}，芯片封装: ${formData.projectInfo.chipPackage || '-'}，客户等级: ${formData.customerInfo.customerLevel}`,
+      notes: `${formData.remarks || ''}`.trim() || `最终报价：${symbol}${formatQuotePrice(finalTotal, formData.currency)}`,
+      items: quoteItems,
+    };
+
+    if (isEditMode && editingQuote) {
+      try {
+        const updatedQuote = await QuoteApiService.updateQuote(editingQuote.id, quoteCreateData);
+        message.success('综合报价更新成功！');
+        navigate(`/quote-detail/${editingQuote.quote_number}`, {
+          state: {
+            message: '报价单更新成功',
+            updatedQuote
+          }
+        });
+      } catch (error) {
+        console.error('更新综合报价失败:', error);
+        message.error('更新报价单失败，请重试');
+      }
+      return;
+    }
+
     const quoteData = {
       type: '综合报价',
       number: `CQ-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`,
       date: new Date().toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       ...formData,
+      packages: formData.quoteType === 'package'
+        ? buildPackageItems().map(item => ({
+            name: item.item_name,
+            description: item.item_description,
+            services: [item.item_name],
+            price: formatQuotePrice(item.total_price, formData.currency),
+          }))
+        : undefined,
+      volumeTiers: formData.quoteType === 'volume'
+        ? formData.volumeQuote.volumeTiers.map(tier => ({
+            minQty: tier.min,
+            maxQty: tier.max === 999999999 ? null : tier.max,
+            unitPrice: formatQuotePrice(tier.unitPrice, formData.currency),
+          }))
+        : undefined,
+      timeContracts: formData.quoteType === 'time'
+        ? [{
+            duration: formData.timeQuote.contractDuration,
+            discount: formData.timeQuote.timeDiscount,
+            monthlyRate: formatQuotePrice(formData.timeQuote.monthlyCommitment, formData.currency),
+          }]
+        : undefined,
+      customTerms: formData.quoteType === 'custom'
+        ? formData.customQuote.customItems.map(item => ({
+            name: item.category || `自定义项目${item.id}`,
+            description: item.description || '自定义项目',
+            value: formatQuotePrice(item.totalPrice, formData.currency),
+          }))
+        : undefined,
       calculatedTotals: {
         packageTotal: calculatePackageTotal(),
         volumeTotal: calculateVolumeQuoteTotal(),
         timeTotal: calculateTimeQuoteTotal(),
         customTotal: calculateCustomQuoteTotal(),
-        finalTotal: calculateFinalTotal()
+        finalTotal
       },
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
+      quoteCreateData
     };
 
     navigate('/quote-result', { state: quoteData });
@@ -336,8 +539,8 @@ const ComprehensiveQuote = () => {
   return (
     <div className="quote-container">
       <PageTitle 
-        title="综合报价方案" 
-        subtitle="灵活的协议式报价框架" 
+        title={isEditMode ? "编辑综合报价" : "综合报价方案"}
+        subtitle={isEditMode ? `编辑报价单 ${editingQuote?.quote_number || editingQuote?.id || ''}` : "灵活的协议式报价框架"}
       />
 
       <div className="form-section">
@@ -906,7 +1109,7 @@ const ComprehensiveQuote = () => {
           返回
         </SecondaryButton>
         <PrimaryButton onClick={handleSubmit}>
-          完成报价
+          {isEditMode ? '更新报价单' : '完成报价'}
         </PrimaryButton>
       </div>
     </div>
