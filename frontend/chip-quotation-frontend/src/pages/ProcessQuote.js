@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Checkbox, Card, Button, Table, InputNumber } from 'antd';
+import { Checkbox, Card, Button, Table, InputNumber, message } from 'antd';
 import { PrimaryButton, SecondaryButton, PageTitle } from '../components/CommonComponents';
 import { getMachines } from '../services/machines';
 import { getCardTypes } from '../services/cardTypes';
@@ -844,10 +844,73 @@ const ProcessQuote = () => {
     return items;
   };
 
+  const getIncompleteTestProcessItems = (items) => {
+    return items.filter(item => {
+      if (!item.item_name || (!item.item_name.startsWith('CP工序') && !item.item_name.startsWith('FT工序'))) {
+        return false;
+      }
+
+      let configuration = {};
+      try {
+        configuration = JSON.parse(item.configuration || '{}');
+      } catch (error) {
+        return true;
+      }
+
+      const processType = configuration.process_type || '';
+      if (!isTestProcess(processType)) {
+        return false;
+      }
+
+      const hasTestMachine = Boolean(configuration.test_machine?.id);
+      const hasTestMachineCards = (configuration.test_machine?.cards?.length || 0) > 0;
+      const hasProber = Boolean(configuration.prober?.id);
+      const hasProberCards = (configuration.prober?.cards?.length || 0) > 0;
+      const hasHandler = Boolean(configuration.handler?.id);
+      const hasHandlerCards = (configuration.handler?.cards?.length || 0) > 0;
+
+      if (item.item_name.startsWith('CP工序')) {
+        return !(hasTestMachine && hasTestMachineCards && hasProber && hasProberCards);
+      }
+
+      if (item.item_name.startsWith('FT工序')) {
+        return !(hasTestMachine && hasTestMachineCards && hasHandler && hasHandlerCards);
+      }
+
+      return false;
+    });
+  };
+
+  const getZeroPricedProcessItems = (items) => {
+    return items.filter(item => {
+      const unitPrice = Number(item.unit_price) || 0;
+      return unitPrice <= 0;
+    });
+  };
+
   // 提交处理
   const handleSubmit = async () => {
     // 生成报价项（包含JSON序列化的工序配置）
     const quoteItems = generateProcessQuoteItems();
+
+    if (quoteItems.length === 0) {
+      message.error('请先完成工序、设备和板卡配置后再生成报价');
+      return;
+    }
+
+    const incompleteTestProcessItems = getIncompleteTestProcessItems(quoteItems);
+    if (incompleteTestProcessItems.length > 0) {
+      const firstInvalidItem = incompleteTestProcessItems[0];
+      message.error(`${firstInvalidItem.item_name} 必须同时完成测试机和${firstInvalidItem.item_name.startsWith('CP工序') ? '探针台' : '分选机'}的板卡选择后才能生成报价`);
+      return;
+    }
+
+    const zeroPricedItems = getZeroPricedProcessItems(quoteItems);
+    if (zeroPricedItems.length > 0) {
+      const firstInvalidItem = zeroPricedItems[0];
+      message.error(`${firstInvalidItem.item_name} 的单价仍为0，请检查板卡选择、机时和UPH设置`);
+      return;
+    }
 
     // 构建报价标题
     const title = `${formData.projectInfo.projectName || '工序报价'} - ${formData.customerInfo.companyName}`;
