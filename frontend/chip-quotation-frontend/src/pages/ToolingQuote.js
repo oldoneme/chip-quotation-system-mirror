@@ -16,6 +16,7 @@ const ToolingQuote = () => {
   const { isEditMode, editingQuote, loading: editLoading, convertQuoteToFormData } = useQuoteEditMode();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMessageShown, setEditMessageShown] = useState(false);
+  const [editDataLoaded, setEditDataLoaded] = useState(false);
   const [formData, setFormData] = useState({
     customerInfo: {
       companyName: '',
@@ -108,13 +109,14 @@ const ToolingQuote = () => {
     }
 
     // 编辑模式优先级最高
-    if (isEditMode && editingQuote && !editLoading && isMounted) {
+    if (isEditMode && editingQuote && !editLoading && isMounted && !editDataLoaded) {
       console.log('编辑模式: 预填充报价数据', editingQuote);
       console.log('编辑模式: 报价项目数据', editingQuote.items);
       const convertedFormData = convertQuoteToFormData(editingQuote, 'tooling');
       console.log('编辑模式: 转换后的表单数据', convertedFormData);
       if (convertedFormData) {
         setFormData(convertedFormData);
+        setEditDataLoaded(true);
         // 只在第一次显示消息
         if (!editMessageShown) {
           message.info(`正在编辑报价单: ${editingQuote.quote_number || editingQuote.id || '未知'}`);
@@ -145,12 +147,13 @@ const ToolingQuote = () => {
         console.log('开始全新工装夹具报价流程');
       }
     }
-  }, [location.state?.fromResultPage, isEditMode, editingQuote, editLoading, isMounted, convertQuoteToFormData, editMessageShown]);
+  }, [location.state?.fromResultPage, isEditMode, editingQuote, editLoading, isMounted, convertQuoteToFormData, editMessageShown, editDataLoaded]);
 
   // 重置编辑消息标志当退出编辑模式时
   useEffect(() => {
     if (!isEditMode) {
       setEditMessageShown(false);
+      setEditDataLoaded(false);
     }
   }, [isEditMode]);
 

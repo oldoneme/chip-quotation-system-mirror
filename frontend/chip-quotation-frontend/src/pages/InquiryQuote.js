@@ -53,6 +53,7 @@ const InquiryQuote = () => {
   const [isMounted, setIsMounted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editMessageShown, setEditMessageShown] = useState(false);
+  const [editDataLoaded, setEditDataLoaded] = useState(false);
   const [machineTypes, setMachineTypes] = useState([]);
 
   const currencies = [
@@ -144,10 +145,11 @@ const InquiryQuote = () => {
 
   // 编辑模式数据预填充
   useEffect(() => {
-    if (isEditMode && editingQuote && !editLoading && isMounted) {
+    if (isEditMode && editingQuote && !editLoading && isMounted && !editDataLoaded) {
       const convertedFormData = convertQuoteToFormData(editingQuote, 'inquiry');
       if (convertedFormData) {
         setFormData(convertedFormData);
+        setEditDataLoaded(true);
         // 只在第一次显示消息
         if (!editMessageShown) {
           message.info(`正在编辑报价单: ${editingQuote.quote_number || editingQuote.id || '未知'}`);
@@ -155,12 +157,13 @@ const InquiryQuote = () => {
         }
       }
     }
-  }, [isEditMode, editingQuote, editLoading, isMounted, editMessageShown, convertQuoteToFormData]);
+  }, [isEditMode, editingQuote, editLoading, isMounted, editMessageShown, convertQuoteToFormData, editDataLoaded]);
 
   // 重置编辑消息标志
   useEffect(() => {
     if (!isEditMode) {
       setEditMessageShown(false);
+      setEditDataLoaded(false);
     }
   }, [isEditMode]);
 
