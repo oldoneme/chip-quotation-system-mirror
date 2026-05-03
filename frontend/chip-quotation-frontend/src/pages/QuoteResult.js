@@ -24,6 +24,31 @@ const QuoteResult = () => {
   const isTapingProcess = (processName) => processName.includes('编带');
   const isBurnInProcess = (processName) => processName.includes('老化');
 
+  const deriveProcessCalculatedUnitPrice = (item, config) => {
+    const persistedUnitPrice = Number(item.unit_price) || 0;
+    if (persistedUnitPrice > 0) {
+      return persistedUnitPrice;
+    }
+
+    const adjustedUnitPrice = Number(config.adjusted_unit_price) || 0;
+    if (adjustedUnitPrice > 0) {
+      return adjustedUnitPrice;
+    }
+
+    const processName = config.process_type || item.item_name || '';
+    if (isTestProcess(processName)) {
+      const effectiveMachineRate = (Number(config.adjusted_machine_rate) || 0) > 0
+        ? Number(config.adjusted_machine_rate)
+        : (Number(config.system_machine_rate) || 0);
+      const uph = Number(config.uph) || 0;
+      if (effectiveMachineRate > 0 && uph > 0) {
+        return parseFloat((effectiveMachineRate / uph).toFixed(4));
+      }
+    }
+
+    return 0;
+  };
+
   // 初始化工程报价和量产报价项目
   useEffect(() => {
     if (!quoteData) return;
@@ -113,12 +138,14 @@ const QuoteResult = () => {
         } catch (e) {
           console.error("Failed to parse configuration", e);
         }
+        const calculatedUnitPrice = deriveProcessCalculatedUnitPrice(item, config);
+        const adjustedUnitPrice = Number(config.adjusted_unit_price) || 0;
         return {
           ...item,
           key: `process_${index}`,
           config: config, // Store parsed config for easier access
-          calculatedUnitPrice: item.unit_price, // Initial calculated price
-          finalUnitPrice: config.adjusted_unit_price > 0 ? config.adjusted_unit_price : item.unit_price // Display price
+          calculatedUnitPrice,
+          finalUnitPrice: adjustedUnitPrice > 0 ? adjustedUnitPrice : calculatedUnitPrice
         };
       });
       setProcessItems(items);
@@ -239,6 +266,10 @@ const QuoteResult = () => {
   // Calculate Process Quote Total
   const calculateProcessTotal = () => {
     return processItems.reduce((sum, item) => sum + (Number(item.finalUnitPrice) || 0), 0);
+  };
+
+  const getInvalidProcessItems = () => {
+    return processItems.filter(item => (Number(item.finalUnitPrice) || 0) <= 0);
   };
 
   // 计算FT小时费总计（使用调整后的价格）
@@ -385,120 +416,6 @@ const QuoteResult = () => {
     setQuoteData(newData);
   }, [location]);
 
-  // 计算设备费用（乘以工程系数）
-  const calculateEquipmentCost = (equipmentType) => {
-    if (!quoteData || !quoteData[equipmentType] || !quoteData[`${equipmentType}Cards`]) return 0;
-    
-    const equipment = quoteData[equipmentType];
-    const cards = quoteData[`${equipmentType}Cards`];
-    const quoteCurrency = quoteData.quoteCurrency || 'CNY';
-    const quoteExchangeRate = quoteData.quoteExchangeRate || 7.2;
-    
-    const baseCost = cards.reduce((total, card) => {
-      let adjustedPrice = card.unit_price / 10000;
-      
-      // 根据报价币种和机器币种进行转换
-      if (quoteCurrency === 'USD') {
-        if (equipment.currency === 'CNY' || equipment.currency === 'RMB') {
-          // RMB机器转USD：除以报价汇率
-          adjustedPrice = adjustedPrice / quoteExchangeRate;
-        }
-        // USD机器：不做汇率转换，直接使用unit_price
-      } else {
-        // 报价币种是CNY，保持原逻辑
-        adjustedPrice = adjustedPrice * equipment.exchange_rate;
-      }
-      
-      return total + (adjustedPrice * equipment.discount_rate * (card.quantity || 1));
-    }, 0);
-    
-    return baseCost * (quoteData.engineeringRate || 1.2);
-  };
-  
-  // 计算测试机费用（乘以工程系数）
-  const calculateTestMachineCost = () => {
-    return calculateEquipmentCost('testMachine');
-  };
-  
-  // 计算分选机费用（乘以工程系数）
-  const calculateHandlerCost = () => {
-    return calculateEquipmentCost('handler');
-  };
-  
-  // 计算探针台费用（乘以工程系数）
-  const calculateProberCost = () => {
-    return calculateEquipmentCost('prober');
-  };
-  
-  // 计算工程师费用（不乘以工程系数）
-  const calculateEngineerCost = () => {
-    if (!quoteData || !quoteData.selectedPersonnel || !quoteData.selectedPersonnel.includes('工程师')) return 0;
-    
-    let rate = 350; // 工程师费用固定为350元/小时
-    const quoteCurrency = quoteData.quoteCurrency || 'CNY';
-    const quoteExchangeRate = quoteData.quoteExchangeRate || 7.2;
-    
-    if (quoteCurrency === 'USD') {
-      rate = rate / quoteExchangeRate;
-    }
-    return rate;
-  };
-  
-  // 计算技术员费用（不乘以工程系数）
-  const calculateTechnicianCost = () => {
-    if (!quoteData || !quoteData.selectedPersonnel || !quoteData.selectedPersonnel.includes('技术员')) return 0;
-    
-    let rate = 200; // 技术员费用固定为200元/小时
-    const quoteCurrency = quoteData.quoteCurrency || 'CNY';
-    const quoteExchangeRate = quoteData.quoteExchangeRate || 7.2;
-    
-    if (quoteCurrency === 'USD') {
-      rate = rate / quoteExchangeRate;
-    }
-    return rate;
-  };
-  
-  // 计算单个设备的板卡成本（用于工序报价） - 支持双设备
-  const calculateProcessCardCostForDevice = (process, deviceName, cardTypes) => {
-    const machineDataKey = `${deviceName}Data`;
-    const cardQuantitiesKey = `${deviceName}CardQuantities`;
-    
-    const machineData = process[machineDataKey];
-    const cardQuantities = process[cardQuantitiesKey];
-    
-    if (!machineData || !cardQuantities || !cardTypes) return 0;
-    
-    const quoteCurrency = quoteData.currency || 'CNY';
-    const quoteExchangeRate = quoteData.exchangeRate || 7.2;
-    
-    let cardCost = 0;
-    Object.entries(cardQuantities).forEach(([cardId, quantity]) => {
-      const card = cardTypes.find(c => c.id === parseInt(cardId));
-      if (card && quantity > 0) {
-        // 板卡单价除以10000，然后按照工程机时的逻辑进行币种转换
-        let adjustedPrice = (card.unit_price || 0) / 10000;
-        
-        // 根据报价币种和机器币种进行转换（参考EngineeringQuote.js逻辑）
-        if (quoteCurrency === 'USD') {
-          if (machineData.currency === 'CNY' || machineData.currency === 'RMB') {
-            // RMB机器转USD：除以报价汇率
-            adjustedPrice = adjustedPrice / quoteExchangeRate;
-          }
-          // USD机器：不做汇率转换，直接使用unit_price
-        } else {
-          // 报价币种是CNY，保持原逻辑
-          adjustedPrice = adjustedPrice * (machineData.exchange_rate || 1.0);
-        }
-        
-        const cardHourlyCost = adjustedPrice * (machineData.discount_rate || 1.0) * quantity;
-        const cardUnitCost = process.uph > 0 ? cardHourlyCost / process.uph : 0;
-        cardCost += cardUnitCost;
-      }
-    });
-    
-    return cardCost;
-  };
-
   // 确认报价，创建数据库记录
   const handleConfirmQuote = async () => {
     if (!quoteData || (!quoteData.quoteCreateData && quoteData.type !== '工序报价' && quoteData.type !== '工程报价' && quoteData.type !== '工程机时报价')) {
@@ -571,6 +488,12 @@ const QuoteResult = () => {
     
     // 对于工序报价，使用 processItems 重新构建数据
     if (quoteData.type === '工序报价') {
+      const invalidProcessItems = getInvalidProcessItems();
+      if (invalidProcessItems.length > 0) {
+        message.error(`${invalidProcessItems[0].item_name || '工序项目'} 的最终单价必须大于0`);
+        return;
+      }
+
       if (!finalQuoteData) {
         // Should exist if we came from ProcessQuote, but safety check
         finalQuoteData = {
@@ -924,8 +847,8 @@ const QuoteResult = () => {
                 const engineeringItems = quoteData.items ? quoteData.items.filter(item => 
                   item.category_type === 'engineering_fee' || 
                   (item.item_description && item.item_description.includes('工程')) ||
-                  item.unit === '项' && (item.item_name?.includes('测试程序') || item.item_name?.includes('夹具设计') || 
-                                         item.item_name?.includes('测试验证') || item.item_name?.includes('文档'))
+                  (item.unit === '项' && (item.item_name?.includes('测试程序') || item.item_name?.includes('夹具设计') || 
+                                         item.item_name?.includes('测试验证') || item.item_name?.includes('文档')))
                 ) : [];
                 
                 // 如果没有数据库items，尝试从原始engineeringFees获取
@@ -973,7 +896,7 @@ const QuoteResult = () => {
                 const productionItems = quoteData.items ? quoteData.items.filter(item => 
                   item.category_type === 'production_setup' || 
                   (item.item_description && item.item_description.includes('准备')) ||
-                  item.unit === '项' && (item.item_name?.includes('调试') || item.item_name?.includes('校准') || item.item_name?.includes('检验'))
+                  (item.unit === '项' && (item.item_name?.includes('调试') || item.item_name?.includes('校准') || item.item_name?.includes('检验')))
                 ) : [];
                 
                 // 如果没有数据库items，尝试从原始productionSetup获取
