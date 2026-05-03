@@ -337,14 +337,111 @@ const useQuoteEditMode = () => {
    * 综合报价数据转换
    */
   const convertComprehensiveQuoteToFormData = (quote, baseFormData, availableCardTypes = []) => {
+    const titleProjectName = quote.title?.split(' - ')[0]?.trim() || '';
+    const customItems = [];
+    const packageQuote = {
+      testServices: [],
+      engineeringServices: [],
+      supportServices: [],
+      packageDiscount: 0
+    };
+    let volumeQuote = {
+      volumeTiers: [
+        { min: 0, max: 10000, unitPrice: 0, discount: 0 },
+        { min: 10001, max: 50000, unitPrice: 0, discount: 0.05 },
+        { min: 50001, max: 100000, unitPrice: 0, discount: 0.1 },
+        { min: 100001, max: 999999999, unitPrice: 0, discount: 0.15 }
+      ]
+    };
+    let timeQuote = {
+      contractDuration: 12,
+      monthlyCommitment: 0,
+      timeDiscount: 0,
+      escalationRate: 0.03
+    };
+    let quoteType = 'package';
+
+    quote.items?.forEach((item, index) => {
+      let config = {};
+      try {
+        config = JSON.parse(item.configuration || '{}');
+      } catch (error) {
+        config = {};
+      }
+
+      const itemQuoteType = config.quote_type;
+      if (itemQuoteType) {
+        quoteType = itemQuoteType;
+      }
+
+      if (itemQuoteType === 'package') {
+        if (config.service_type && config.service_id) {
+          packageQuote[config.service_type] = [...(packageQuote[config.service_type] || []), config.service_id];
+        }
+        if (config.package_discount !== undefined) {
+          packageQuote.packageDiscount = config.package_discount;
+        }
+      }
+
+      if (itemQuoteType === 'volume') {
+        volumeQuote = {
+          volumeTiers: config.volume_tiers || volumeQuote.volumeTiers
+        };
+      }
+
+      if (itemQuoteType === 'time') {
+        timeQuote = {
+          contractDuration: config.contract_duration || timeQuote.contractDuration,
+          monthlyCommitment: config.monthly_commitment || timeQuote.monthlyCommitment,
+          timeDiscount: config.time_discount || timeQuote.timeDiscount,
+          escalationRate: config.escalation_rate || timeQuote.escalationRate
+        };
+      }
+
+      if (itemQuoteType === 'custom') {
+        customItems.push({
+          id: index + 1,
+          category: config.category || '',
+          description: item.item_name || '',
+          quantity: item.quantity || 1,
+          unitPrice: item.unit_price || 0,
+          discount: config.discount || 0,
+          totalPrice: item.total_price || 0
+        });
+      }
+    });
 
     return {
       ...baseFormData,
+      customerInfo: {
+        ...baseFormData.customerInfo,
+        customerLevel: extractCustomerLevelFromDescription(quote.description)
+      },
       projectInfo: {
         ...baseFormData.projectInfo,
+        projectName: titleProjectName || baseFormData.projectInfo.projectName,
         chipPackage: extractChipPackageFromDescription(quote.description),
-        testType: 'comprehensive',
-        urgency: extractUrgencyFromNotes(quote.notes)
+        projectDuration: extractProjectDurationFromDescription(quote.description)
+      },
+      quoteType,
+      packageQuote,
+      volumeQuote,
+      timeQuote,
+      customQuote: {
+        customItems: customItems.length > 0 ? customItems : [
+          {
+            id: 1,
+            category: '',
+            description: '',
+            quantity: 1,
+            unitPrice: 0,
+            discount: 0,
+            totalPrice: 0
+          }
+        ]
+      },
+      agreementTerms: {
+        paymentTerms: quote.payment_terms || '30_days'
       },
       remarks: extractRemarksFromNotes(quote.notes)
     };
@@ -419,12 +516,25 @@ const useQuoteEditMode = () => {
       const itemName = item.item_name || '';
       const itemDesc = item.item_description || '';
 
+      const fixtureItemNames = ['load_board', 'loadboard', 'contactor', 'socket', 'probe_needles', 'probe needles', 'probe card'];
+      const consumableItemNames = ['connector', 'cable', 'spare parts', 'spare_parts'];
+      const hardwareItemNames = ['change kit', 'change_kit', 'test head', 'test_head', 'interface board', 'interface_board', 'calibration kit', 'calibration_kit'];
+
       // 工装硬件项目（fixture, consumables等）
-      if (itemDesc.includes('fixture') || itemDesc.includes('consumables') ||
-          ['load_board', 'contactor', 'socket', 'probe_needles'].includes(itemName)) {
+      if (itemDesc.includes('fixture') || itemDesc.includes('consumables') || itemDesc.includes('夹具') || itemDesc.includes('耗材') ||
+          fixtureItemNames.includes(itemName) || consumableItemNames.includes(itemName) || hardwareItemNames.includes(itemName)) {
+        let category = '';
+        if (itemDesc.includes('fixture') || itemDesc.includes('夹具') || fixtureItemNames.includes(itemName)) {
+          category = 'fixture';
+        } else if (itemDesc.includes('consumables') || itemDesc.includes('耗材') || consumableItemNames.includes(itemName)) {
+          category = 'consumables';
+        } else if (hardwareItemNames.includes(itemName)) {
+          category = 'hardware';
+        }
+
         toolingItems.push({
           id: toolingItems.length + 1,
-          category: itemDesc.includes('fixture') ? '夹具' : '耗材',
+          category,
           type: itemName || '',
           specification: extractSpecFromDescription(itemDesc),
           quantity: item.quantity || 1,
@@ -562,6 +672,18 @@ const useQuoteEditMode = () => {
     if (!description) return '';
     const parts = description.split(' - ');
     return parts.length > 1 ? parts[1] : '';
+  };
+
+  const extractCustomerLevelFromDescription = (description) => {
+    if (!description) return 'standard';
+    const match = description.match(/客户等级[：:]\s*([^;；，,]+)/);
+    return match ? match[1].trim() : 'standard';
+  };
+
+  const extractProjectDurationFromDescription = (description) => {
+    if (!description) return '';
+    const match = description.match(/项目周期[：:]\s*([^;；，,]+)/);
+    return match ? match[1].trim() : '';
   };
 
   /**
