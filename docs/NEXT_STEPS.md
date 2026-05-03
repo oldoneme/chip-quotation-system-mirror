@@ -1,9 +1,9 @@
 # 芯片报价系统 - 下一步工作计划
 
 ## 📅 更新时间
-**日期**: 2025-10-09
+**日期**: 2026-05-04
 **当前分支**: `quote-detail-editable-claude`
-**最新提交**: `adf1acd` - 工序报价编辑模式修复
+**最新状态**: 报价 create / modify / logic 覆盖已完成，进入交付整理阶段
 
 ---
 
@@ -18,13 +18,12 @@
 | 3 | 工序报价 (ProcessQuote) | ✅ | ✅ | ✅ **已完成** |
 | 4 | 工程报价 (EngineeringQuote) | ✅ | ✅ | ✅ **已完成** |
 | 5 | 量产报价 (MassProductionQuote) | ✅ | ✅ | ✅ **已完成** |
-| 6 | 综合报价 (ComprehensiveQuote) | ✅ | ❌ | 🔧 **待实现** |
+| 6 | 综合报价 (ComprehensiveQuote) | ✅ | ✅ | ✅ **已完成** |
 
 ### 完成情况统计
 
-- ✅ **已完成**: 5/6 (询价、工装、工序、工程、量产报价)
-- 🔧 **待实现**: 1/6 (综合报价编辑功能)
-- **完成度**: 约83%
+- ✅ **已完成**: 6/6
+- **完成度**: 100%
 
 ---
 
@@ -48,27 +47,19 @@
 
 ## 🚀 下一步工作
 
-### 🎯 唯一剩余任务: 综合报价编辑功能
+### 当前阶段：交付整理与持续回归
 
-**目标**: 为综合报价（ComprehensiveQuote）添加编辑功能
+**已完成的关键事项**:
+1. 所有主要报价类型 create / update / logic 覆盖已补齐
+2. 真实浏览器创建链已覆盖 inquiry / tooling / engineering / process / mass production / comprehensive
+3. 可编辑报价类型的真实修改链已验证 tooling / mass production / comprehensive
+4. 后端 QuoteService create/update payload 回归已补齐
 
-**当前状态**:
-- ✅ 新建功能已完成
-- ❌ 编辑功能未实现
-
-**需要实现的功能**:
-1. 引入`useQuoteEditMode` Hook
-2. 实现`convertComprehensiveQuoteToFormData`函数
-3. 编辑模式数据预填充
-4. 编辑成功后跳转到详情页
-5. 禁止修改关键字段（报价单位等）
-
-**参考代码**:
-- `/frontend/chip-quotation-frontend/src/pages/EngineeringQuote.js`
-- `/frontend/chip-quotation-frontend/src/pages/ProcessQuote.js`
-- `/frontend/chip-quotation-frontend/src/hooks/useQuoteEditMode.js`
-
-**预计工作量**: 6-8小时
+### 下一步建议
+1. 整理交付说明 / PR 描述
+2. 保留并维护覆盖矩阵文档：`/docs/reports/QUOTE_COVERAGE_VALIDATION_MATRIX.md`
+3. 如继续增强，优先补更多后端业务场景回归
+4. 如继续优化，处理环境类提示与 bundle 体积
 
 ---
 
@@ -76,8 +67,8 @@
 
 ### 最近完成工作
 
+- **报价覆盖验证矩阵**: `/docs/reports/QUOTE_COVERAGE_VALIDATION_MATRIX.md`
 - **工序报价修复**: `/docs/reports/PROCESS_QUOTE_EDIT_MODE_FIX_REPORT.md`
-- **工序报价优化计划**: `/docs/reports/PROCESS_QUOTE_OPTIMIZATION_PLAN.md` (可选优化项)
 
 ### 编辑模式实现参考
 
@@ -94,31 +85,21 @@
 
 ---
 
-## 🎯 实施建议
+## 🎯 当前判断
 
-**为综合报价添加编辑功能的步骤**:
+当前主线目标已经完成。
 
-1. 在ComprehensiveQuote.js引入useQuoteEditMode Hook
-2. 在useQuoteEditMode.js中实现convertComprehensiveQuoteToFormData函数
-3. 实现编辑模式数据预填充逻辑
-4. 添加编辑模式UI提示和禁用字段
-5. 修改提交逻辑支持编辑模式（创建/更新分支）
-6. 测试验证
-
-**预计时间**: 6-8小时
-
-**成功标准**:
-- [ ] 可以从报价管理页面点击编辑进入综合报价页面
-- [ ] 所有表单数据正确预填充
-- [ ] 编辑后保存成功并跳转到详情页
-- [ ] 关键字段（报价单位）禁止修改
-- [ ] 新建和编辑功能共用一个页面
+后续不再是“补齐基础编辑功能”，而是：
+- 持续回归
+- 文档整理
+- 交付说明
+- 进一步后端/API 深化覆盖
 
 ---
 
 **文档维护者**: Claude Code
-**最后更新**: 2025-10-09
-**下次更新**: 完成综合报价编辑功能后
+**最后更新**: 2026-05-04
+**下次更新**: 进入交付整理或新增更深层回归后
 
 ---
 

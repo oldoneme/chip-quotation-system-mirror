@@ -69,6 +69,19 @@
 
 ---
 
+### 🎯 报价覆盖验证矩阵（已完成 ✅）
+
+**文件**: [`QUOTE_COVERAGE_VALIDATION_MATRIX.md`](./QUOTE_COVERAGE_VALIDATION_MATRIX.md)
+
+**完成时间**: 2026-05-04
+**总结**:
+- 覆盖 create / update / logic / result-page / browser proof / DB proof
+- 汇总前端 11 suites / 36 tests 全通过
+- 汇总后端 payload/regression 23 tests 全通过
+- 记录 inquiry / tooling / engineering / process / mass production / comprehensive 的真实浏览器验证结果
+
+---
+
 ### 🎯 量产工序报价（已完成 ✅）
 
 **计划文档**: [`PROCESS_QUOTE_OPTIMIZATION_PLAN.md`](./PROCESS_QUOTE_OPTIMIZATION_PLAN.md)
@@ -120,9 +133,9 @@
 | **工装夹具报价** | ✅ 完成 | - | - | - | 基础编辑 |
 | **询价报价** | ✅ 完成 | - | - | - | 基础编辑 |
 | **量产工序报价** | ✅ 完成 | 2个文档 | 4次 | ~420行 | 10大优化 |
-| **综合报价** | ⏳ 待实现 | - | - | - | - |
+| **综合报价** | ✅ 完成 | 1个覆盖矩阵 + 相关修复 | - | - | create/edit 已验证 |
 
-**总体进度**: 5/6 报价类型完成（83% 完成）
+**总体进度**: 6/6 报价类型完成（100% 完成）
 
 ---
 
@@ -265,19 +278,10 @@ parseXXXDevicesFromItems(items, cardTypes, machines)
 
 ## 📚 下一步工作
 
-### 剩余报价类型
-1. **ProcessQuote（量产工序报价）**
-   - 参考量产机时报价模式
-   - 预计工作量：类似规模
-
-2. **ComprehensiveQuote（综合报价）**
-   - 最复杂的报价类型
-   - 可能需要额外的数据结构设计
-
-### 优化建议
-- [ ] 考虑抽取更多通用函数到 Hook
-- [ ] 评估性能优化空间
-- [ ] 添加自动化测试
+### 后续优化建议
+- [ ] 继续扩充后端/API 场景回归
+- [ ] 清理浏览器验证痕迹并整理交付说明
+- [ ] 如需继续优化，优先处理构建环境数据提示与 bundle 体积
 
 ---
 
