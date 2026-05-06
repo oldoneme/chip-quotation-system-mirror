@@ -12,6 +12,7 @@ CLOUDFLARED_PROTOCOL="${CLOUDFLARED_PROTOCOL:-http2}"
 CLOUDFLARED_LOG="${CLOUDFLARED_LOG:-$REPO_ROOT/.cloudflared-tunnel.log}"
 CLOUDFLARED_PID_FILE="${CLOUDFLARED_PID_FILE:-$REPO_ROOT/.cloudflared-tunnel.pid}"
 TUNNEL_START_TIMEOUT="${TUNNEL_START_TIMEOUT:-20}"
+VALID_HTTP_PATTERN="${VALID_HTTP_PATTERN:-^(2|3)[0-9][0-9]$}"
 
 extract_hostname() {
   if [[ -f "$CLOUDFLARED_CONFIG" ]]; then
@@ -29,16 +30,30 @@ is_process_running() {
   pgrep -af "cloudflared.*tunnel.*run ${CLOUDFLARED_TUNNEL_NAME}" >/dev/null 2>&1
 }
 
+has_active_connector() {
+  "$CLOUDFLARED_BIN" tunnel info "$CLOUDFLARED_TUNNEL_NAME" 2>/dev/null | grep -q "CONNECTOR ID"
+}
+
+get_http_status_code() {
+  if [[ -z "$TUNNEL_HOSTNAME" ]]; then
+    return 1
+  fi
+
+  curl -I -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 8 "https://${TUNNEL_HOSTNAME}" || true
+}
+
 is_hostname_reachable() {
   if [[ -z "$TUNNEL_HOSTNAME" ]]; then
     return 1
   fi
 
-  curl -I -s --connect-timeout 3 --max-time 8 "https://${TUNNEL_HOSTNAME}" >/dev/null 2>&1
+  local status_code
+  status_code="$(get_http_status_code)"
+  [[ "$status_code" =~ $VALID_HTTP_PATTERN ]]
 }
 
 is_tunnel_ready() {
-  is_hostname_reachable || is_process_running
+  is_process_running && has_active_connector && is_hostname_reachable
 }
 
 start_tunnel() {
@@ -62,12 +77,18 @@ wait_for_tunnel() {
 show_status() {
   print_info "config=${CLOUDFLARED_CONFIG}"
   print_info "hostname=${TUNNEL_HOSTNAME:-<unknown>}"
-  if is_hostname_reachable; then
+  local status_code="$(get_http_status_code || true)"
+  print_info "http_status=${status_code:-<unknown>}"
+  if is_tunnel_ready; then
     print_info "status=reachable"
     return 0
   fi
   if is_process_running; then
-    print_info "status=process-running-but-host-unreachable"
+    if has_active_connector; then
+      print_info "status=process-running-but-http-unhealthy"
+    else
+      print_info "status=process-running-without-active-connector"
+    fi
     return 0
   fi
   print_info "status=stopped"
@@ -75,18 +96,18 @@ show_status() {
 }
 
 ensure_tunnel() {
-  if is_hostname_reachable; then
+  if is_tunnel_ready; then
     print_info "Tunnel already reachable at https://${TUNNEL_HOSTNAME}"
     return 0
   fi
 
   if is_process_running; then
-    print_info "Tunnel process already running; waiting for public hostname to become reachable..."
+    print_info "Tunnel process already running; waiting for active connector and healthy public response..."
     if wait_for_tunnel; then
       print_info "Tunnel became reachable at https://${TUNNEL_HOSTNAME}"
       return 0
     fi
-    print_info "Tunnel process is running, but hostname is still unreachable. Check ${CLOUDFLARED_LOG}"
+    print_info "Tunnel process is running, but the tunnel is not healthy. Check ${CLOUDFLARED_LOG} and cloudflared tunnel info ${CLOUDFLARED_TUNNEL_NAME}"
     return 1
   fi
 
@@ -96,7 +117,7 @@ ensure_tunnel() {
     return 0
   fi
 
-  print_info "Tunnel failed to become reachable within ${TUNNEL_START_TIMEOUT}s. Check ${CLOUDFLARED_LOG}"
+  print_info "Tunnel failed to become healthy within ${TUNNEL_START_TIMEOUT}s. Check ${CLOUDFLARED_LOG} and cloudflared tunnel info ${CLOUDFLARED_TUNNEL_NAME}"
   return 1
 }
 

@@ -223,7 +223,8 @@ restart_dev_services() {
         if "$TUNNEL_HELPER" --ensure; then
             print_success "Cloudflare Tunnel 已就绪"
         else
-            print_warning "Cloudflare Tunnel 未就绪，继续启动本地服务"
+            print_error "Cloudflare Tunnel 未就绪，停止重启开发服务"
+            return 1
         fi
     else
         print_warning "未找到隧道检查脚本: $TUNNEL_HELPER"
