@@ -141,7 +141,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=core_settings.BACKEND_CORS_ORIGINS,
+    allow_origins=runtime_settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

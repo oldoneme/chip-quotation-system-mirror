@@ -6,6 +6,7 @@
 import os
 from pydantic_settings import BaseSettings
 from typing import Optional, List
+from urllib.parse import urlparse
 
 
 def get_environment() -> str:
@@ -39,27 +40,45 @@ def get_cors_origins() -> List[str]:
     origins_env = os.getenv("CORS_ORIGINS", "")
     if origins_env:
         return [origin.strip() for origin in origins_env.split(",") if origin.strip()]
-    
-    # 根据环境返回默认值
+
     env = get_environment()
+    origins = set()
+
+    if env not in {"production", "staging"}:
+        origins.update({
+            "http://localhost:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8000",
+        })
+
+    def add_origin_from_env(env_name: str) -> None:
+        value = os.getenv(env_name, "").strip()
+        if not value:
+            return
+
+        parsed = urlparse(value)
+        if parsed.scheme and parsed.netloc:
+            origins.add(f"{parsed.scheme}://{parsed.netloc}")
+    
     if env == "production":
-        return [
+        origins.update([
             "https://wecom.chipinfos.com.cn",
             "https://app.chipinfos.com.cn"
-        ]
+        ])
     elif env == "staging":
-        return [
+        origins.update([
             "https://wecom-staging.chipinfos.com.cn",
             "https://app-staging.chipinfos.com.cn"
-        ]
-    
-    # 开发环境默认值
-    return [
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8000",
-    ]
+        ])
+    else:
+        origins.add(get_default_frontend_url())
+
+    add_origin_from_env("FRONTEND_BASE_URL")
+    add_origin_from_env("WECOM_BASE_URL")
+    add_origin_from_env("API_BASE_URL")
+
+    return sorted(origins)
 
 
 class Settings(BaseSettings):
